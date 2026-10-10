@@ -37,7 +37,6 @@ cmake_policy(SET CMP0057 NEW)
 include(px4_list_make_absolute)
 
 set(msg_files
-	SerialProbe.msg
 	ActionRequest.msg
 	ActuatorArmed.msg
 	ActuatorControlsStatus.msg
@@ -68,6 +67,9 @@ set(msg_files
 	DistanceSensor.msg
 	DistanceSensorModeChangeRequest.msg
 	DronecanNodeStatus.msg
+	DytAishengTelemetry.msg
+	DytTraceCommand.msg
+	DytZhongkeTelemetry.msg
 	Ekf2Timestamps.msg
 	EscReport.msg
 	EscStatus.msg

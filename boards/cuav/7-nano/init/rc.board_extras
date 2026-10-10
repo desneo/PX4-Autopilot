@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start the independent uORB consumer before accepting serial requests.
-serial_probe_processor start
-# TELEM2 is reserved for the custom validation protocol in this test firmware.
+# TELEM2 is reserved for the custom DYT telemetry parser in this test firmware.
+# It publishes dyt_zhongke_telemetry / dyt_aisheng_telemetry according to the
+# frame header. DYT_BRAND selects the vendor (and therefore the baud rate).
 serial_probe start

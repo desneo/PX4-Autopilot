@@ -2,4 +2,4 @@ menuconfig EXAMPLES_SERIAL_PROBE
     bool "serial_probe"
     default n
     ---help---
-        Simple TELEM2 to uORB round trip validation.
+        Parse zhongkeyoucheng / aisheng DYT telemetry on TELEM2 into uORB.

@@ -1,5 +1,0 @@
-menuconfig EXAMPLES_SERIAL_PROBE_PROCESSOR
-    bool "serial_probe_processor"
-    default n
-    ---help---
-        Independently subscribe to serial_probe_request and publish value+1 responses.
