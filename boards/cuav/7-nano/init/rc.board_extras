@@ -1,0 +1,5 @@
+#!/bin/sh
+# Start the independent uORB consumer before accepting serial requests.
+serial_probe_processor start
+# TELEM2 is reserved for the custom validation protocol in this test firmware.
+serial_probe start
