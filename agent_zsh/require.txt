@@ -1,0 +1,123 @@
+需求背景：
+1.此文件用于描述基于px4 v1.17.0做的自定义修改需求，如果需求不明确，则跟我讨论，并将确认结果补充到该文件中
+2.我在本机一个usb上连接了一个雷迅v7nano飞控的供电口，一个usb转串口工具连接到了nano的TELEM2口上
+
+要求：
+1.修改px4源码，收到串口消息，内部转成自定义个urob，处理一番再写出，验证通过串口与飞控进行读写通信的能力
+2.测试工具中，要将发给飞控和飞控返回的数据都打印出来加以区分
+
+其他：
+1.我已经下载了一份Px4代码
+2.如果要下载代码，可以下载到当前目录下
+
+
+已确认（2026-10-10）：
+1.使用 PX4 v1.17.0，目标 cuav_7-nano_default。
+2.TELEM2 使用简单自定义 ASCII 行协议，115200 波特率、8N1，无流控。
+3.电脑发送 PING,<序号>,<整数>\n，飞控经自定义 uORB 发布/订阅后将整数加 1，返回 PONG,<序号>,<结果>\n。
+4.序号为 uint32；输入整数为 int32，但不接受 2147483647，避免加 1 溢出。非法帧返回 ERR,FORMAT\n，超长帧返回 ERR,LENGTH\n。
+5.测试工具区分 TX/RX，记录时间，验证序号、结果和超时；覆盖连续请求、分段、粘包和异常输入。
+6.授权自动执行源码修改、编译、刷机和实机测试，飞控现有固件无须保留。测试不涉及解锁或驱动电机。
+7.验证固件开机自动运行串口模块，TELEM2 专用于该协议，需要禁用占用该口的 MAVLink/DDS 等服务。
+
+接线纠正（2026-10-10）：
+- 用户确认之前误接 TELEM1，现已移回 TELEM2；此前 /dev/ttyS5 的测试仅作为历史记录。
+- 撤回 TELEM1 专用启动与占用改动，恢复其原有 MAVLink 服务。
+- 自定义协议固定使用 TELEM2 /dev/ttyS3，开机自动启动，115200、8N1、无流控。
+- 保留全板 UART 时钟源修复，该修复确保串口实际波特率与配置值一致。
+- 重新验证 TELEM2 收发、uORB 处理和自动启动，并记录 RTT 分位数及顺序请求吞吐率。
+- 本次验收报告见 artifacts/RESULTS.md，此前 TELEM1 报告保存在 artifacts/RESULTS-TELEM1-history.md。
+
+TELEM2 验收结果（2026-10-10）：
+- 新固件编译、刷写、校验并自动重启成功；serial_probe 固定运行在 /dev/ttyS3、115200。
+- TELEM1 的 MAVLink 已恢复到 /dev/ttyS5、57600，MAV_0_CONFIG=101。
+- PASS: 2021 replies checked; 1006 timed round trips; mean=15.96 ms max=18.16 ms
+RTT: min=4.03 ms p50=15.97 ms p95=16.16 ms p99=16.34 ms
+Sequential throughput: 62.58 requests/s; TX=1314.60 B/s; RX=1314.60 B/s; 1000 random requests in 15.980 s
+Batch throughput (window=8): 258.96 requests/s; TX=5951.27 B/s; RX=5951.27 B/s; 1000 requests in 3.862 s
+- uORB 最后一条请求/响应序号均为 100999，输入 -2040239，输出 -2040238。
+- 性能为本机 FTDI/USB 与主机打印开启时的端到端实测值；详见 artifacts/RESULTS.md。
+
+异步模块拆分要求（2026-10-10）：
+- 新增独立 serial_probe_processor 模块，在独立任务中等待 uORB 请求，执行 value+1 并发布响应。
+- serial_probe 只负责 TELEM2 收发与协议解析；发布请求后不再直接调用处理函数，通过 poll 等待 uORB 响应事件。
+- 请求/响应话题设置 32 条消息队列，支持本测试的批量请求，消费者依次排空队列。
+- 验证正常与批量收发，并停止/恢复处理模块，确认串口任务与计算任务相互独立。
+
+异步双模块验收结果（2026-10-10）：
+- 双模块固件已完整编译、刷入、校验并自动启动。
+- PASS: 2021 replies checked; 1006 timed round trips; mean=15.97 ms max=16.40 ms
+RTT: min=13.42 ms p50=15.97 ms p95=16.14 ms p99=16.25 ms
+Sequential throughput: 62.58 requests/s; TX=1314.60 B/s; RX=1314.60 B/s; 1000 random requests in 15.980 s
+Batch throughput (window=8): 258.11 requests/s; TX=5931.51 B/s; RX=5931.51 B/s; 1000 requests in 3.874 s
+- 停止处理模块时，串口仍发布序号 300000、值 41 的请求，但没有计算回复；恢复后返回 42。新请求 42 正确返回 43。
+- ps 确认 serial_probe 与 serial_proc 为独立任务，TELEM1 MAVLink 继续运行。
+- 最终报告 artifacts/RESULTS.md；异步独立性验证日志 artifacts/async-isolation.log。
+
+
+20201010-周少补充需求
+1.我的串口现在可能接两类设备，分辨对应两个docx文件，aisheng和zhongkeyoucheng
+2.zhongke读取数据的协议见文档中“周期性遥测信息”表格
+ aisheng串口数据格式见文档中“DYT到无人机的通信协议表”表格
+3.将原来测试用的uorb修改成两类orb消息（自动根据报文头进行识别转换），orb名字中带厂家名称
+4.如果有需求不明确的地方找我讨论后记入这个文件
+
+补充需求讨论确认（2026-10-10）：
+1.飞控只接收解析两类设备遥测帧并发布uORB，不向串口回写数据；原 PING/PONG 测试协议与
+  serial_probe_processor（加1回显）模块删除。
+2.uORB 消息命名：dyt_zhongke_telemetry（中科友成）、dyt_aisheng_telemetry（艾盛），
+  由串口模块根据报文头自动识别转换：
+  - 中科：同步头 0xEE 0x16，32 字节定长帧，小端，校验=字节0~30求和低8位（文档“周期性遥测信息”）。
+  - 艾盛：同步头 0x55 0xAA，长度字节 0x68（整帧104字节），小端，
+    校验=字节4~103求和低8位（文档“DYT到无人机的通信协议表”）。
+3.串口参数直接选DYT品牌：新增参数 DYT_BRAND，展示值 0=zhongkeyoucheng(115200)、
+  1=aisheng(230400)。改参数后 stop/start 模块即可切换波特率，无需重编译固件；
+  报文头识别与品牌无关，两类帧在任一波特率下都按头识别。
+4.验证方式：测试工具模拟两类设备帧（含合法值、分段、粘包、噪声、错误校验和、恢复），
+  打印 TX 帧与解析结果；通过 USB MAVLink 读取 uORB 话题内容并与发送值核对。
+5.遗留 PING/PONG 工具 serial_test.py 与 async_isolation_test.py 移入 artifacts/ 作为历史记录。
+
+补充需求验收结果（2026-10-10）：
+1.两类 uORB 消息 dyt_zhongke_telemetry / dyt_aisheng_telemetry 已实现，串口模块按报文头
+  0xEE16 / 0x55AA 自动识别解析；字段与厂家文档逐项对应（状态位保持原始，物理量按比例尺换算，
+  经纬度保留 1e-7° 原始整数）。滑动缓冲解析在校验/长度失败时仅丢首字节，可从假报文头中恢复。
+2.参数 DYT_BRAND=0 zhongkeyoucheng(115200) / 1 aisheng(230400) 已实现，QGC 可显示品牌名称；
+  param set 后 stop/start 模块即切换，无需重编固件。
+3.原 serial_probe_processor、SerialProbe.msg、PING/PONG 回写逻辑已删除；固件只接收解析，
+  TELEM2 无任何回写字节。
+4.固件重新编译、刷写并自动重启；115200 与 230400 各完成 482 项 uORB 字段核对、
+  20+20 与 200+200 帧零丢失、分段/粘包/噪声/错误校验和/错误长度/计数器全部通过。
+5.TELEM2 空闲无噪声，serial_probe 空闲 CPU 0.012%，TELEM1 MAVLink(MAV_0_CONFIG=101, 57600) 正常。
+6.本次报告 artifacts/RESULTS-dyt.md；测试日志 artifacts/dyt-sim-*.log、final-check-dyt.log。
+7.待实机确认：文档同步头按字节顺序 0x55,0xAA / 0xEE,0x16 匹配；艾盛文档为 RS422，TELEM2 为
+  TTL UART，如接实机需确认电平/收发器。
+
+补充需求（2026-10-10）：飞控下发跟踪控制指令
+原始需求：补充一种uorb消息，内含starttrace/stoptrace标识；probe模块收到后按品牌向串口设备发指令：
+- start 艾盛：0x3F 自动识别打开 + 0x5F 识别后自动锁定；stop 艾盛：0x8E 取消目标锁定
+- start 中科：0x0F 发现目标自动锁定；stop 中科：0x0E 停止跟踪
+
+讨论确认（2026-10-10）：
+1.uORB 消息命名 dyt_trace_command，字段 bool starttrace / bool stoptrace。
+2.触发语义：starttrace=true 发 start 指令；stoptrace=true 发 stop 指令；两标志都 false 忽略；
+  都 true 视为无效，告警忽略。按发布动作，每次收到有效指令即发送。
+3.艾盛指令按文档表1完整45字节控制帧发送：信息头 0xAA55、长度 0x2D、命令字节位于字节4，
+  其余参数/姿态/位置/状态填0，时标（字节41~44）填飞控上电ms，校验=字节4~44求和低8位；
+  按文档“指令推荐连发三帧”，每条命令连发3帧。start顺序：0x3F×3 再 0x5F×3；stop：0x8E×3。
+4.中科指令按更新后的文档表1“控制指令数据”16字节帧发送：同步 0xEB 0x90，控制信息位于字节2，
+  参数X/Y(S16)、参数3(U8)、变焦速率(S8)默认0，保留6字节0，校验=字节0~14求和低8位；
+  文档为触发发送，start发 0x0F 一帧，stop发 0x0E 一帧。
+5.验证：serial_probe 增加 trace start/stop 子命令发布该 uORB；测试工具从 TELEM2 抓取飞控
+  实际的指令字节并逐字段校验（含连发帧数、校验和、命令码、参数为0），并核对 status 计数。
+6.艾盛控制帧信息头按文档字节顺序 0xAA,0x55 发送；若实机无响应需改为 0x55,0xAA（待实机确认）。
+
+跟踪指令下发验收结果（2026-10-10）：
+1.新增 dyt_trace_command（starttrace/stoptrace，队列4）已实现；serial_probe 订阅并按下发：
+  中科 0x0F/0x0E（16字节帧 EB90，校验=字节0~14和低8位，一帧）；艾盛 0x3F×3→0x5F×3 / 0x8E×3
+  （45字节表1帧，头AA55、长度2D、参数/姿态/位置0、时标=上电ms、校验=字节4~44和低8位）。
+2.新增 serial_probe trace start|stop 子命令用于发布；status 增加 trace 计数。
+3.已修复 uORB 新订阅重放旧样本导致模块重启误发指令的问题：只处理模块启动后发布的指令。
+4.固件已重编译、刷写并自动重启；115200 与 230400 实测抓到全部指令帧并逐字段校验通过
+  （帧头/命令码/参数0/时标/校验和/连发帧数，计数各+1），遥测回归测试同时通过。
+5.日志 artifacts/dyt-trace-115200.log、dyt-trace-230400.log；报告 artifacts/RESULTS-dyt.md；
+  飞控最终恢复 DYT_BRAND=0（zhongkeyoucheng，115200）。
