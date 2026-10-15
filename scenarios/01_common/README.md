@@ -1,7 +1,8 @@
 # 场景 01：通用多机环境
 
 在一个 Gazebo `default` world 中运行多架 `gz_x500`。默认启动 4 架，
-飞机间距 5 米，默认不开启 GUI。
+飞机间距 5 米，默认不开启 GUI。Gazebo Transport 固定使用
+`GZ_IP=127.0.0.1`，其发现和仿真消息不会进入局域网；MAVLink UDP 不受影响。
 
 ## 启动
 

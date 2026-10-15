@@ -108,6 +108,7 @@ for ((i = 0; i < COUNT; i++)); do
 
 	env_args=(
 		"GZ_PARTITION=${PARTITION}"
+		"GZ_IP=127.0.0.1"
 		"PX4_SIM_MODEL=gz_x500"
 		"PX4_GZ_WORLD=${WORLD}"
 		"PX4_GZ_MODEL_POSE=${x},${y},0,0,0,0"
