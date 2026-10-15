@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PX4_DIR=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
+PX4_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4"
+PX4_ETC="${PX4_DIR}/build/px4_sitl_default/etc"
+RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
+ASSETS_ROOT="${PX4_GAZEBO_ASSETS_ROOT:-${PX4_DIR}/../px4-gazebo-assets}"
+ASSETS_URL="${PX4_GAZEBO_ASSETS_URL:-https://github.com/desneo/px4-gazebo-assets.git}"
+BRIDGE_PYTHON="${GIMBAL_PYTHON:-python3}"
+COUNT=1
+GUI=0
+ENCODER=x264
+ADVERTISE_HOST=""
+WORLD=geo_32_217857_119_105878
+PARTITION=px4_scenario_02_rocket_two_axis_pod
+RTSP_PORT=8555
+
+usage() {
+	cat <<'EOF'
+用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder x264|nvenc]
+
+在 geo_32_217857_119_105878 world 中启动火箭穿越机与两轴吊仓组合模型。
+默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
+
+选项：
+  -n, --count COUNT       飞机数量，1～10（默认：1）
+      --gui               启动 Gazebo GUI
+      --advertise-host IP 打印给远程客户端使用的本机地址
+      --encoder TYPE      吊仓视频编码器：x264 或 nvenc（默认：x264）
+  -h, --help              显示帮助
+
+环境变量：
+  PX4_GAZEBO_ASSETS_ROOT  资产仓路径，默认 ../px4-gazebo-assets
+  PX4_GAZEBO_ASSETS_URL   自动下载使用的仓库地址
+  GIMBAL_PYTHON           吊仓网关使用的 Python 解释器
+EOF
+}
+
+require_value() {
+	if (($# < 2)) || [[ -z $2 || $2 == --* ]]; then
+		echo "ERROR: 参数 $1 缺少值" >&2
+		exit 2
+	fi
+}
+
+while (($# > 0)); do
+	case "$1" in
+		-n|--count)
+			require_value "$@"
+			COUNT=$2
+			shift 2
+			;;
+		--gui)
+			GUI=1
+			shift
+			;;
+		--advertise-host)
+			require_value "$@"
+			ADVERTISE_HOST=$2
+			shift 2
+			;;
+		--encoder)
+			require_value "$@"
+			ENCODER=$2
+			shift 2
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			echo "ERROR: 未知参数：$1" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+done
+
+if [[ ! $COUNT =~ ^[0-9]+$ ]] || ((COUNT < 1 || COUNT > 10)); then
+	echo "ERROR: 架数必须是 1～10 的整数" >&2
+	exit 2
+fi
+if [[ $ENCODER != x264 && $ENCODER != nvenc ]]; then
+	echo "ERROR: --encoder 只接受 x264 或 nvenc" >&2
+	exit 2
+fi
+if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
+	echo "ERROR: --advertise-host 不能包含空白字符" >&2
+	exit 2
+fi
+
+if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
+	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
+	|| pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
+	echo "ERROR: 当前已有 PX4 SITL、Gazebo 或本场景吊仓网关在运行。" >&2
+	echo "请先执行 ${SCRIPT_DIR}/stop.sh。" >&2
+	exit 1
+fi
+
+ASSETS_ROOT=$(realpath -m -- "$ASSETS_ROOT")
+if [[ ! -e $ASSETS_ROOT ]]; then
+	echo "未找到资产仓，开始下载最新 main：${ASSETS_URL}"
+	mkdir -p -- "$(dirname -- "$ASSETS_ROOT")"
+	git clone --branch main --single-branch "$ASSETS_URL" "$ASSETS_ROOT" || {
+		echo "ERROR: 资产仓下载失败：${ASSETS_URL}" >&2
+		exit 1
+	}
+elif [[ ! -d $ASSETS_ROOT/.git ]]; then
+	echo "ERROR: 资产路径不是 Git 仓库：${ASSETS_ROOT}" >&2
+	exit 1
+fi
+
+if [[ -n $(git -C "$ASSETS_ROOT" status --porcelain) ]]; then
+	echo "ERROR: 资产仓存在未提交修改，无法安全同步最新 main：${ASSETS_ROOT}" >&2
+	git -C "$ASSETS_ROOT" status --short >&2
+	exit 1
+fi
+if [[ $(git -C "$ASSETS_ROOT" branch --show-current) != main ]]; then
+	echo "ERROR: 资产仓当前不是 main 分支，拒绝自动切换：${ASSETS_ROOT}" >&2
+	exit 1
+fi
+echo "同步资产仓最新 main：${ASSETS_ROOT}"
+git -C "$ASSETS_ROOT" pull --ff-only origin main || {
+	echo "ERROR: 无法快进同步资产仓 main，请检查网络或仓库分支状态。" >&2
+	exit 1
+}
+ASSETS_REV=$(git -C "$ASSETS_ROOT" rev-parse --short=12 HEAD)
+echo "资产仓版本：${ASSETS_REV}"
+
+WORLD_SOURCE="${ASSETS_ROOT}/worlds/${WORLD}/world.sdf"
+GENERATOR="${ASSETS_ROOT}/assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py"
+CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/two_axis_pod/controller"
+BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
+for required in "$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
+	"$BRIDGE_SERVICE/gimbal_bridge.py"; do
+	[[ -f $required ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required}" >&2; exit 1; }
+done
+
+for command in gz setsid timeout git cmake make find; do
+	command -v "$command" >/dev/null || { echo "ERROR: 缺少命令：${command}" >&2; exit 1; }
+done
+
+if [[ ! -x $PX4_BIN || ! -d $PX4_ETC ]]; then
+	echo "PX4 SITL 尚未构建，开始构建 px4_sitl_default。"
+	make -C "$PX4_DIR" px4_sitl_default
+fi
+
+echo "增量构建两轴吊仓控制插件。"
+cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$CONTROLLER_DIR/build" -j"$(nproc)"
+
+GUI_PLUGIN_DIR="${ASSETS_ROOT}/worlds/${WORLD}/gui"
+if ((GUI)); then
+	echo "增量构建 world 的 Gazebo GUI 插件。"
+	cmake -S "$GUI_PLUGIN_DIR" -B "$GUI_PLUGIN_DIR/build" -DCMAKE_BUILD_TYPE=Release
+	cmake --build "$GUI_PLUGIN_DIR/build" -j"$(nproc)"
+fi
+
+python3 -c 'import numpy'
+"$BRIDGE_PYTHON" -c 'import gi, gz.transport13; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
+
+if [[ -z $ADVERTISE_HOST ]]; then
+	# 不使用 `ip route get` 查询公网地址：代理软件可能通过策略路由
+	# 返回 mihomo 等虚拟接口的 198.18.0.0/15 地址。改为读取主默认
+	# 路由接口上的全局 IPv4，例如 enp130s0 上的 192.168.1.56。
+	default_interface=$(ip -o -4 route show to default 2>/dev/null \
+		| awk 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }' \
+		|| true)
+	if [[ -n $default_interface ]]; then
+		ADVERTISE_HOST=$(ip -o -4 addr show dev "$default_interface" scope global 2>/dev/null \
+			| awk 'NR == 1 { split($4, address, "/"); print address[1] }' || true)
+	fi
+	[[ -n $ADVERTISE_HOST ]] || ADVERTISE_HOST=127.0.0.1
+fi
+
+python3 - "$COUNT" <<'PY_PORTS'
+import socket
+import sys
+
+count = int(sys.argv[1])
+sockets = []
+try:
+    for port in range(8770, 8770 + count):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sockets.append(sock)
+        try:
+            sock.bind(("0.0.0.0", port))
+        except OSError as error:
+            raise SystemExit(f"ERROR: 吊仓 UDP 端口 {port} 已被使用：{error}")
+finally:
+    for sock in sockets:
+        sock.close()
+PY_PORTS
+
+rm -rf -- "$RUNTIME_DIR"
+mkdir -p -- "$RUNTIME_DIR/models" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/pids"
+printf '%s\n' "$COUNT" > "$RUNTIME_DIR/count"
+printf '%s\n' "$ASSETS_ROOT" > "$RUNTIME_DIR/assets_root"
+printf '%s\n' "$ASSETS_REV" > "$RUNTIME_DIR/assets_revision"
+
+model_args=()
+for ((i = 0; i < COUNT; i++)); do
+	aircraft_id=$((i + 1))
+	generated="${RUNTIME_DIR}/generated/aircraft_${aircraft_id}/rocket_two_axis_pod"
+	python3 "$GENERATOR" --output-dir "$generated" --topic-prefix "/uav_${aircraft_id}/pod"
+	model_args+=(--model "$aircraft_id" "$generated/model.sdf")
+done
+
+WORLD_FILE="${RUNTIME_DIR}/world.sdf"
+python3 "$SCRIPT_DIR/prepare_world.py" --source-world "$WORLD_SOURCE" \
+	--output "$WORLD_FILE" "${model_args[@]}"
+gz sdf -k "$WORLD_FILE"
+
+cp -R "$PX4_ETC" "$RUNTIME_DIR/etc"
+rm -f "$RUNTIME_DIR/etc/init.d-posix/airframes/"*_gz_rocket_two_axis_pod
+mapfile -t generated_airframes < <(find \
+	"$RUNTIME_DIR/generated/aircraft_1/rocket_two_axis_pod/px4" -maxdepth 1 -type f \
+	-name '*_gz_rocket_two_axis_pod' -print)
+if ((${#generated_airframes[@]} != 1)); then
+	echo "ERROR: 最新资产仓应生成一个 rocket_two_axis_pod PX4 机体文件，实际为 ${#generated_airframes[@]} 个。" >&2
+	exit 1
+fi
+runtime_airframe="$RUNTIME_DIR/etc/init.d-posix/airframes/$(basename -- "${generated_airframes[0]}")"
+cp "${generated_airframes[0]}" "$runtime_airframe"
+if ! grep -q '^param set-default EKF2_HGT_REF ' "$runtime_airframe"; then
+	echo "ERROR: 最新资产仓生成的机体文件缺少 EKF2_HGT_REF 配置。" >&2
+	exit 1
+fi
+# 本 world 的 GPS 海拔约为 4.2 m，而气压高度原点约为 0 m。使用 GPS
+# 高度参考，确保全局高度有效，Mission 航线模式可以通过解锁检查。
+sed -i 's/^param set-default EKF2_HGT_REF .*/param set-default EKF2_HGT_REF 1/' "$runtime_airframe"
+
+RESOURCE_PATH="${RUNTIME_DIR}/models:${ASSETS_ROOT}/assembledmodels:${ASSETS_ROOT}/models/vehicles:${ASSETS_ROOT}/models/gimbals${GZ_SIM_RESOURCE_PATH:+:${GZ_SIM_RESOURCE_PATH}}"
+SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
+SERVER_CONFIG_PATH="${ASSETS_ROOT}/models/gimbals/two_axis_pod/scripts/server.config"
+GUI_PLUGIN_PATH="${GUI_PLUGIN_DIR}/build${GZ_GUI_PLUGIN_PATH:+:${GZ_GUI_PLUGIN_PATH}}"
+export GZ_PARTITION="$PARTITION"
+export GZ_IP=127.0.0.1
+export GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH"
+export GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+export GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+((GUI)) && export GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH"
+
+start_process() {
+	local name=$1
+	shift
+	setsid "$@" >"${RUNTIME_DIR}/logs/${name}.log" 2>&1 </dev/null &
+	local pid=$!
+	printf '%s\n' "$pid" > "${RUNTIME_DIR}/pids/${name}.pid"
+}
+
+wait_for_log() {
+	local name=$1
+	local pattern=$2
+	local timeout_seconds=$3
+	local pid log_file
+	pid=$(<"${RUNTIME_DIR}/pids/${name}.pid")
+	log_file="${RUNTIME_DIR}/logs/${name}.log"
+	for ((attempt = 0; attempt < timeout_seconds * 2; attempt++)); do
+		grep -q -- "$pattern" "$log_file" 2>/dev/null && return 0
+		if ! kill -0 "$pid" 2>/dev/null; then
+			echo "ERROR: ${name} 启动期间退出" >&2
+			tail -n 50 "$log_file" >&2 || true
+			return 1
+		fi
+		sleep 0.5
+	done
+	echo "ERROR: 等待 ${name} 就绪超时" >&2
+	tail -n 50 "$log_file" >&2 || true
+	return 1
+}
+
+FAILED=1
+cleanup_on_failure() {
+	if ((FAILED)); then
+		echo "场景启动失败，清理已启动的进程。" >&2
+		bash "$SCRIPT_DIR/stop.sh" >/dev/null 2>&1 || true
+	fi
+}
+trap cleanup_on_failure EXIT
+
+gazebo_command=(env -u DISPLAY GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+	GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+	GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+	gz sim -r -s --headless-rendering -v2 "$WORLD_FILE")
+printf 'Gazebo command: '
+printf '%q ' "${gazebo_command[@]}"
+printf '\n'
+start_process gazebo "${gazebo_command[@]}"
+
+for ((i = 0; i < COUNT; i++)); do
+	aircraft_id=$((i + 1))
+	entity="rocket_two_axis_pod_${aircraft_id}"
+	imu_topic="/world/${WORLD}/model/${entity}/link/base_link/sensor/imu_sensor/imu"
+	if ! timeout 120 gz topic -e -t "$imu_topic" -n 1 \
+		>"${RUNTIME_DIR}/logs/imu_${aircraft_id}.log" 2>&1; then
+		echo "ERROR: 飞机 ${aircraft_id} 的 IMU 未就绪：${imu_topic}" >&2
+		tail -n 30 "${RUNTIME_DIR}/logs/gazebo.log" >&2 || true
+		exit 1
+	fi
+done
+
+if ((GUI)); then
+	printf 'Gazebo GUI command: '
+	printf '%q ' env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1 \
+		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
+	printf '\n'
+	start_process gui gz sim -g -v2
+fi
+
+printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+for ((i = 0; i < COUNT; i++)); do
+	aircraft_id=$((i + 1))
+	entity="rocket_two_axis_pod_${aircraft_id}"
+	topic_prefix="/uav_${aircraft_id}/pod"
+	mavsdk_port=$((14280 + i))
+	udp_port=$((8770 + i))
+	rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
+	rootfs="${RUNTIME_DIR}/rootfs_${aircraft_id}"
+	mkdir -p "$rootfs"
+
+	px4_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+		GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+		GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+		PX4_SIM_MODEL=gz_rocket_two_axis_pod PX4_GZ_STANDALONE=1
+		PX4_GZ_WORLD="$WORLD" PX4_GZ_MODEL_NAME="$entity"
+		"$PX4_BIN" -d "$RUNTIME_DIR/etc" -i "$i" -w "$rootfs")
+	bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+		GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+		GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+		GIMBAL_RUNDIR="${RUNTIME_DIR}/gimbal_${aircraft_id}"
+		"$BRIDGE_PYTHON" -u "$BRIDGE_SERVICE/gimbal_bridge.py"
+		--world "$WORLD" --gimbal-model "$entity"
+		--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
+		--udp-port "$udp_port" --rtsp-port "$RTSP_PORT"
+		--mount /two_axis_pod --aircraft-id "$aircraft_id" --encoder "$ENCODER")
+
+	echo
+	echo "飞机 ${aircraft_id}："
+	printf '  PX4 command: '
+	printf '%q ' "${px4_command[@]}"
+	printf '\n'
+	printf '  吊仓网关 command: '
+	printf '%q ' "${bridge_command[@]}"
+	printf '\n'
+	echo "  MAVSDK：        udpout://${ADVERTISE_HOST}:${mavsdk_port}"
+	echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
+	echo "  吊仓视频：      ${rtsp_url}"
+	printf '  地面站 command: '
+	printf '%q ' env GIMBAL_PYTHON="$BRIDGE_PYTHON" bash \
+		"$ASSETS_ROOT/models/gimbals/two_axis_pod/ground_station/run.sh" \
+		--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
+		--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
+		--mount /two_axis_pod --decoder avdec --window-title "飞机${aircraft_id}吊仓"
+	printf '\n'
+
+	start_process "px4_${aircraft_id}" "${px4_command[@]}"
+	wait_for_log "px4_${aircraft_id}" 'Startup script returned successfully' 60 || exit 1
+	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
+	wait_for_log "bridge_${aircraft_id}" '遥测/指令服务' 30 || exit 1
+	wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
+	printf '%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" "$rtsp_url" \
+		>> "$RUNTIME_DIR/interfaces.tsv"
+done
+
+FAILED=0
+trap - EXIT
+echo
+echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
+echo "飞机保持待命，不自动解锁或飞行。"
+echo "接口表：${RUNTIME_DIR}/interfaces.tsv"
+echo "日志目录：${RUNTIME_DIR}/logs"
+echo "停止场景：${SCRIPT_DIR}/stop.sh"
