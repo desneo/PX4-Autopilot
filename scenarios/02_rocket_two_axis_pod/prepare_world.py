@@ -12,6 +12,10 @@ import xml.etree.ElementTree as ET
 
 WORLD_NAME = "geo_32_217857_119_105878"
 MODEL_BASENAME = "rocket_two_axis_pod"
+TARGET_COMMAND_TOPIC = "/scenario/02/target/command"
+TARGET_STATUS_TOPIC = "/scenario/02/target/status"
+TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
+TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
 
 
 def set_text(parent: ET.Element, tag: str, value: object) -> ET.Element:
@@ -85,12 +89,73 @@ def load_model(aircraft_id: int, model_path: Path) -> ET.Element:
     return model
 
 
+def add_target_control(world: ET.Element) -> ET.Element:
+    """只向运行副本加入 02 场景的靶机控制面板。"""
+    gui = world.find("gui")
+    if gui is None:
+        gui = ET.SubElement(world, "gui", fullscreen="false")
+
+    for old in gui.findall('./plugin[@filename="TargetControl"]'):
+        gui.remove(old)
+
+    elevation_text = world.findtext("spherical_coordinates/elevation", "0")
+    try:
+        default_altitude_m = float(elevation_text) + 100.0
+    except ValueError as error:
+        raise ValueError(f"world 中心海拔不是有效数值：{elevation_text}") from error
+    if not math.isfinite(default_altitude_m):
+        raise ValueError("world 中心海拔必须为有限数值")
+
+    plugin = ET.SubElement(gui, "plugin", filename="TargetControl", name="靶机控制")
+    gz_gui = ET.SubElement(plugin, "gz-gui")
+    set_text(gz_gui, "title", "靶机控制")
+    for value_type, key, value in (
+        ("string", "state", "floating"),
+        # 使用插件自己的固定标题栏，避免 Gazebo GzCard 标题栏的拖动行为。
+        ("bool", "showTitleBar", "false"),
+        ("bool", "showDockButton", "false"),
+        ("bool", "showCloseButton", "false"),
+        ("bool", "showCollapseButton", "false"),
+        ("bool", "resizable", "false"),
+        ("double", "width", "350"),
+        ("double", "height", "540"),
+        ("double", "z", "2"),
+    ):
+        property_element = ET.SubElement(
+            gz_gui, "property", type=value_type, key=key
+        )
+        property_element.text = value
+    anchors = ET.SubElement(gz_gui, "anchors", target="3D View")
+    ET.SubElement(anchors, "line", own="right", target="right")
+    ET.SubElement(anchors, "line", own="bottom", target="bottom")
+    set_text(plugin, "command_topic", TARGET_COMMAND_TOPIC)
+    set_text(plugin, "status_topic", TARGET_STATUS_TOPIC)
+    set_text(plugin, "default_altitude_m", f"{default_altitude_m:.6f}")
+    return plugin
+
+
+def add_target_trajectory(world: ET.Element) -> ET.Element:
+    """加入按仿真时间推进靶机视觉模型的 world 系统插件。"""
+    for old in world.findall('./plugin[@name="scenario02::TargetTrajectory"]'):
+        world.remove(old)
+    plugin = ET.SubElement(
+        world,
+        "plugin",
+        filename="libTargetTrajectory.so",
+        name="scenario02::TargetTrajectory",
+    )
+    set_text(plugin, "command_topic", TRAJECTORY_COMMAND_TOPIC)
+    set_text(plugin, "status_topic", TRAJECTORY_STATUS_TOPIC)
+    return plugin
+
+
 def prepare(
     source_world: Path,
     output: Path,
     models: list[tuple[int, Path]],
     spacing: float = 5.0,
     altitude: float = 0.24,
+    target_control: bool = False,
 ) -> Path:
     if not models:
         raise ValueError("至少需要一架飞机")
@@ -124,6 +189,10 @@ def prepare(
             clip = ET.SubElement(scene, "camera_clip")
         set_text(clip, "near", 0.005)
 
+    if target_control:
+        add_target_control(world)
+        add_target_trajectory(world)
+
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(tree, space="  ")
@@ -151,10 +220,24 @@ def main() -> int:
     )
     parser.add_argument("--spacing", type=float, default=5.0)
     parser.add_argument("--altitude", type=float, default=0.24)
+    parser.add_argument(
+        "--target-control",
+        action="store_true",
+        help="加入 Gazebo 靶机控制面板和场景航迹插件",
+    )
     args = parser.parse_args()
     try:
         models = [parse_model(value) for value in args.model]
-        print(prepare(args.source_world, args.output, models, args.spacing, args.altitude))
+        print(
+            prepare(
+                args.source_world,
+                args.output,
+                models,
+                args.spacing,
+                args.altitude,
+                args.target_control,
+            )
+        )
     except (OSError, ValueError, ET.ParseError) as error:
         parser.error(str(error))
     return 0

@@ -54,6 +54,7 @@ class PrepareWorldTest(unittest.TestCase):
             self.root / "world" / "world.sdf",
             output,
             [(1, self.make_model(1)), (2, self.make_model(2))],
+            target_control=True,
         )
         world = ET.parse(output).getroot().find("world")
         self.assertEqual(world.get("name"), "geo_32_217857_119_105878")
@@ -65,6 +66,32 @@ class PrepareWorldTest(unittest.TestCase):
             first.findtext(".//command_topic"), "/uav_1/pod/command"
         )
         self.assertTrue(Path(first.findtext(".//uri")).is_absolute())
+        target_control = world.find("./gui/plugin[@filename='TargetControl']")
+        self.assertIsNotNone(target_control)
+        self.assertEqual(
+            target_control.findtext("command_topic"),
+            "/scenario/02/target/command",
+        )
+        self.assertEqual(target_control.findtext("default_altitude_m"), "100.000000")
+        gui_properties = {
+            item.get("key"): item.text
+            for item in target_control.findall("./gz-gui/property")
+        }
+        self.assertEqual(gui_properties["showTitleBar"], "false")
+        self.assertEqual(gui_properties["showDockButton"], "false")
+        self.assertEqual(gui_properties["showCloseButton"], "false")
+        self.assertEqual(gui_properties["showCollapseButton"], "false")
+        self.assertEqual(gui_properties["height"], "540")
+        anchors = target_control.find("./gz-gui/anchors")
+        self.assertEqual(anchors.get("target"), "3D View")
+        self.assertIsNotNone(anchors.find("./line[@own='right'][@target='right']"))
+        self.assertIsNotNone(anchors.find("./line[@own='bottom'][@target='bottom']"))
+        trajectory = world.find("./plugin[@name='scenario02::TargetTrajectory']")
+        self.assertIsNotNone(trajectory)
+        self.assertEqual(
+            trajectory.findtext("command_topic"),
+            "/scenario/02/target/trajectory/command",
+        )
 
     def test_rejects_wrong_topic_prefix(self):
         with self.assertRaisesRegex(ValueError, "吊仓话题应为"):
@@ -73,6 +100,32 @@ class PrepareWorldTest(unittest.TestCase):
                 self.root / "run" / "world.sdf",
                 [(2, self.make_model(1))],
             )
+
+    def test_target_default_altitude_uses_world_center_elevation(self):
+        source = self.root / "world" / "world.sdf"
+        source.write_text(
+            "<sdf version='1.10'><world name='source'>"
+            "<spherical_coordinates><elevation>4.019969</elevation>"
+            "</spherical_coordinates></world></sdf>"
+        )
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(source, output, [(1, self.make_model(1))], target_control=True)
+        world = ET.parse(output).getroot().find("world")
+        self.assertEqual(
+            world.findtext("./gui/plugin[@filename='TargetControl']/default_altitude_m"),
+            "104.019969",
+        )
+
+    def test_headless_world_does_not_load_target_plugins(self):
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(
+            self.root / "world" / "world.sdf",
+            output,
+            [(1, self.make_model(1))],
+        )
+        world = ET.parse(output).getroot().find("world")
+        self.assertIsNone(world.find("./gui/plugin[@filename='TargetControl']"))
+        self.assertIsNone(world.find("./plugin[@name='scenario02::TargetTrajectory']"))
 
 
 if __name__ == "__main__":

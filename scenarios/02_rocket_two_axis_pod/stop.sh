@@ -25,6 +25,7 @@ while IFS= read -r pid; do add_pid "$pid"; done < <(
 		pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' || true
 		pgrep -f '(^|[ /])gz sim([ ]|$)' || true
 		pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' || true
+		pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' || true
 	} | sort -nu
 )
 
@@ -34,7 +35,7 @@ if ((${#pids[@]} == 0)); then
 	exit 0
 fi
 
-echo "停止当前 PX4 SITL/Gazebo/吊仓网关进程：${pids[*]}"
+echo "停止当前 PX4 SITL/Gazebo/吊仓网关/靶机管理进程：${pids[*]}"
 for pid in "${pids[@]}"; do
 	kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
 done

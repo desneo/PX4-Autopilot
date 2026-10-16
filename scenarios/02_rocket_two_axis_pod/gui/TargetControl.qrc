@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/TargetControl">
+    <file>TargetControl.qml</file>
+  </qresource>
+</RCC>

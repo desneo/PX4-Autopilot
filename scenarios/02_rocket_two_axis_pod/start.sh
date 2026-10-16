@@ -9,6 +9,7 @@ RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
 ASSETS_ROOT="${PX4_GAZEBO_ASSETS_ROOT:-${PX4_DIR}/../px4-gazebo-assets}"
 ASSETS_URL="${PX4_GAZEBO_ASSETS_URL:-https://github.com/desneo/px4-gazebo-assets.git}"
 BRIDGE_PYTHON="${GIMBAL_PYTHON:-python3}"
+SCENARIO_GUI_DIR="${SCRIPT_DIR}/gui"
 COUNT=1
 GUI=0
 ENCODER=x264
@@ -16,6 +17,8 @@ ADVERTISE_HOST=""
 WORLD=geo_32_217857_119_105878
 PARTITION=px4_scenario_02_rocket_two_axis_pod
 RTSP_PORT=8555
+TARGET_QGC_ADDRESS=127.0.0.1:14550
+TARGET_MAVLINK_SYSID=200
 
 usage() {
 	cat <<'EOF'
@@ -29,6 +32,9 @@ usage() {
       --gui               启动 Gazebo GUI
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：x264 或 nvenc（默认：x264）
+      --target-qgc-address HOST:PORT
+                           轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
+      --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
   -h, --help              显示帮助
 
 环境变量：
@@ -66,6 +72,16 @@ while (($# > 0)); do
 			ENCODER=$2
 			shift 2
 			;;
+		--target-qgc-address)
+			require_value "$@"
+			TARGET_QGC_ADDRESS=$2
+			shift 2
+			;;
+		--target-sysid)
+			require_value "$@"
+			TARGET_MAVLINK_SYSID=$2
+			shift 2
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -90,10 +106,24 @@ if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
 	echo "ERROR: --advertise-host 不能包含空白字符" >&2
 	exit 2
 fi
+if [[ $TARGET_QGC_ADDRESS == *[[:space:]]* || $TARGET_QGC_ADDRESS != *:* ]]; then
+	echo "ERROR: --target-qgc-address 格式应为 HOST:PORT" >&2
+	exit 2
+fi
+if [[ ! $TARGET_MAVLINK_SYSID =~ ^[0-9]+$ ]] \
+	|| ((TARGET_MAVLINK_SYSID < 1 || TARGET_MAVLINK_SYSID > 254)); then
+	echo "ERROR: --target-sysid 必须是 1～254 的整数" >&2
+	exit 2
+fi
+if ((TARGET_MAVLINK_SYSID <= COUNT)); then
+	echo "ERROR: 靶机 SYSID ${TARGET_MAVLINK_SYSID} 与普通飞机 SYSID 1～${COUNT} 冲突" >&2
+	exit 2
+fi
 
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
-	|| pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
+	|| pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' >/dev/null \
+	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
 	echo "ERROR: 当前已有 PX4 SITL、Gazebo 或本场景吊仓网关在运行。" >&2
 	echo "请先执行 ${SCRIPT_DIR}/stop.sh。" >&2
 	exit 1
@@ -134,7 +164,11 @@ GENERATOR="${ASSETS_ROOT}/assembledmodels/rocket_two_axis_pod/tools/generate_dyn
 CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/two_axis_pod/controller"
 BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
 for required in "$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
-	"$BRIDGE_SERVICE/gimbal_bridge.py"; do
+	"$BRIDGE_SERVICE/gimbal_bridge.py" \
+	"$ASSETS_ROOT/worlds/${WORLD}/metadata.json" \
+	"$ASSETS_ROOT/models/vehicles/xiaomotuo/model.sdf" \
+	"$ASSETS_ROOT/models/vehicles/xiaobianfu/model.sdf" \
+	"$SCRIPT_DIR/target_manager.py"; do
 	[[ -f $required ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required}" >&2; exit 1; }
 done
 
@@ -156,10 +190,16 @@ if ((GUI)); then
 	echo "增量构建 world 的 Gazebo GUI 插件。"
 	cmake -S "$GUI_PLUGIN_DIR" -B "$GUI_PLUGIN_DIR/build" -DCMAKE_BUILD_TYPE=Release
 	cmake --build "$GUI_PLUGIN_DIR/build" -j"$(nproc)"
+	echo "增量构建 02 场景靶机控制面板。"
+	cmake -S "$SCENARIO_GUI_DIR" -B "$SCENARIO_GUI_DIR/build" -DCMAKE_BUILD_TYPE=Release
+	cmake --build "$SCENARIO_GUI_DIR/build" -j"$(nproc)"
 fi
 
 python3 -c 'import numpy'
 "$BRIDGE_PYTHON" -c 'import gi, gz.transport13; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
+if ((GUI)); then
+	python3 -c 'import gz.transport13, gz.msgs10.stringmsg_pb2'
+fi
 
 if [[ -z $ADVERTISE_HOST ]]; then
 	# 不使用 `ip route get` 查询公网地址：代理软件可能通过策略路由
@@ -195,7 +235,7 @@ finally:
 PY_PORTS
 
 rm -rf -- "$RUNTIME_DIR"
-mkdir -p -- "$RUNTIME_DIR/models" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/pids"
+mkdir -p -- "$RUNTIME_DIR/models" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/pids" "$RUNTIME_DIR/target"
 printf '%s\n' "$COUNT" > "$RUNTIME_DIR/count"
 printf '%s\n' "$ASSETS_ROOT" > "$RUNTIME_DIR/assets_root"
 printf '%s\n' "$ASSETS_REV" > "$RUNTIME_DIR/assets_revision"
@@ -209,8 +249,10 @@ for ((i = 0; i < COUNT; i++)); do
 done
 
 WORLD_FILE="${RUNTIME_DIR}/world.sdf"
-python3 "$SCRIPT_DIR/prepare_world.py" --source-world "$WORLD_SOURCE" \
-	--output "$WORLD_FILE" "${model_args[@]}"
+prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
+	--source-world "$WORLD_SOURCE" --output "$WORLD_FILE" "${model_args[@]}")
+((GUI)) && prepare_world_command+=(--target-control)
+"${prepare_world_command[@]}"
 gz sdf -k "$WORLD_FILE"
 
 cp -R "$PX4_ETC" "$RUNTIME_DIR/etc"
@@ -232,10 +274,14 @@ fi
 # 高度参考，确保全局高度有效，Mission 航线模式可以通过解锁检查。
 sed -i 's/^param set-default EKF2_HGT_REF .*/param set-default EKF2_HGT_REF 1/' "$runtime_airframe"
 
+TARGET_SYSTEM_PLUGIN_DIR="${SCENARIO_GUI_DIR}/build/target-system-plugins"
+
 RESOURCE_PATH="${RUNTIME_DIR}/models:${ASSETS_ROOT}/assembledmodels:${ASSETS_ROOT}/models/vehicles:${ASSETS_ROOT}/models/gimbals${GZ_SIM_RESOURCE_PATH:+:${GZ_SIM_RESOURCE_PATH}}"
-SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
+SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib"
+((GUI)) && SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${TARGET_SYSTEM_PLUGIN_DIR}"
+SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
 SERVER_CONFIG_PATH="${ASSETS_ROOT}/models/gimbals/two_axis_pod/scripts/server.config"
-GUI_PLUGIN_PATH="${GUI_PLUGIN_DIR}/build${GZ_GUI_PLUGIN_PATH:+:${GZ_GUI_PLUGIN_PATH}}"
+GUI_PLUGIN_PATH="${GUI_PLUGIN_DIR}/build:${SCENARIO_GUI_DIR}/build${GZ_GUI_PLUGIN_PATH:+:${GZ_GUI_PLUGIN_PATH}}"
 export GZ_PARTITION="$PARTITION"
 export GZ_IP=127.0.0.1
 export GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH"
@@ -303,11 +349,22 @@ for ((i = 0; i < COUNT; i++)); do
 done
 
 if ((GUI)); then
+	target_manager_command=(python3 -u "$SCRIPT_DIR/target_manager.py"
+		--world "$WORLD" --runtime-dir "$RUNTIME_DIR" --assets-root "$ASSETS_ROOT"
+		--qgc-address "$TARGET_QGC_ADDRESS"
+		--mavlink-system-id "$TARGET_MAVLINK_SYSID")
+	printf '靶机管理服务 command: '
+	printf '%q ' "${target_manager_command[@]}"
+	printf '\n'
+	start_process target_manager "${target_manager_command[@]}"
+	wait_for_log target_manager '靶机管理服务已就绪' 15 || exit 1
+
 	printf 'Gazebo GUI command: '
 	printf '%q ' env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1 \
 		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
 	printf '\n'
-	start_process gui gz sim -g -v2
+	start_process gui env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1 \
+		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
 fi
 
 printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
@@ -370,6 +427,11 @@ trap - EXIT
 echo
 echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
 echo "飞机保持待命，不自动解锁或飞行。"
+if ((GUI)); then
+	echo "靶机控制：使用 Gazebo 界面右下角的“靶机控制”面板（场景航迹模式）。"
+	echo "靶机位置 JSON：由面板配置的地面站地址接收，频率 1 Hz。"
+	echo "QGC 靶机：      udp://${TARGET_QGC_ADDRESS}，SYSID=${TARGET_MAVLINK_SYSID}（只读轻量代理）。"
+fi
 echo "接口表：${RUNTIME_DIR}/interfaces.tsv"
 echo "日志目录：${RUNTIME_DIR}/logs"
 echo "停止场景：${SCRIPT_DIR}/stop.sh"

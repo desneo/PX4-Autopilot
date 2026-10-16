@@ -11,6 +11,10 @@ bash scenarios/02_rocket_two_axis_pod/start.sh
 # 四架，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 4 --gui
 
+# QGC 在远程机器时，显式指定 QGC 的 UDP 地址
+bash scenarios/02_rocket_two_axis_pod/start.sh --gui \
+  --target-qgc-address 192.168.1.100:14550
+
 # 打印给局域网客户端使用的指定地址
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 \
   --advertise-host 192.168.1.56
@@ -42,6 +46,33 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
 
 脚本会增量构建 PX4 SITL 和资产仓的两轴吊仓插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件。
 
+## 靶机控制
+
+使用 `--gui` 启动时，Gazebo 界面右下角显示“靶机控制”面板。面板的“启用靶机”下拉框包含“不启用”“小摩托”和“小蝙蝠”。选择机型后显示巡航速度、海拔高度、来源距离、来源方向、地面站地址以及启动/终止按钮。场景默认无 GUI，因此不启动靶机管理服务；无 GUI 的既有用法保持不变。
+
+面板固定在 3D 地图右下角，不能拖动或关闭；蓝色标题栏只保留折叠/展开按钮，避免误操作改变布局或在靶机运行时关闭控制入口。
+
+靶机使用资产仓模型的视觉部分，由 Gazebo 场景航迹插件按仿真时间直接控制位姿；它不启动独立 PX4、不运行传感器或气动插件，也不占用 MAVLink 端口。同一时间只允许一架靶机。重复点击“启动靶机”会提示先终止当前靶机；点击“终止靶机”会从 world 删除模型，并立即停止位置数据发送。普通火箭机和吊仓仍使用真实 PX4 SITL，不受影响。
+
+机型切换时自动设置经过模型飞行验证的默认巡航速度，并在界面显示有效范围：
+
+- 小摩托：默认 `35 m/s`，允许 `25～65 m/s`；
+- 小蝙蝠：默认 `18 m/s`，允许 `10～30 m/s`。
+
+速度、距离、地址格式或其他参数无效时，界面和后端都会提示原因并阻止启动。界面显示来源距离范围提示，允许 `100～10000 m`，默认 `2000 m`。海拔高度使用 MSL，默认值是 world 中心海拔加100米，即当前 world 约 `104.02 m`；输入高度还必须高于整段航线最高地形至少30米。
+
+“从东向西”在中心正东方生成靶机，“从东北45度”在中心东北方向生成靶机。模型直接生成在配置的海拔高度，随后按配置巡航速度直线飞向 world 中心；穿过中心后继续飞行500米，并在终点保持静止，直到终止靶机。该模式用于场景目标和吊仓搜索测试，不模拟靶机自身的起飞、姿态动力学或飞控故障。
+
+地面站地址默认为 `192.168.1.41:7788`。靶机有效定位建立后，以 1 Hz 向该地址发送一个 UTF-8 UDP JSON 数据报；`altitude` 为 MSL 米，`speed` 为实时水平地速 m/s：
+
+```json
+{"type":"target_position","timestamp_ms":1792108800000,"model":"xiaomotuo","latitude":32.217857,"longitude":119.105878,"altitude":104.02,"speed":34.8}
+```
+
+启用 GUI 靶机功能需要系统 Python 能导入 `gz.transport13` 和 `gz.msgs10`，不需要 `pymavlink`。靶机位姿按每个仿真步更新，管理服务以20 Hz接收位置状态，UDP 经纬高仍以1 Hz发送。
+
+靶机同时通过轻量 MAVLink 代理出现在 QGroundControl 中。默认发送到 `127.0.0.1:14550`，使用独立 `SYSID=200`；可通过 `--target-qgc-address HOST:PORT` 和 `--target-sysid ID` 修改。代理只发送 `HEARTBEAT`、`GLOBAL_POSITION_INT`、`GPS_RAW_INT` 和 `VFR_HUD`，不监听或执行 QGC 控制指令，也不占用普通飞机的 `14280+i` 端口。启动脚本会拒绝与当前普通飞机 `SYSID 1～n` 重叠的靶机 SYSID。终止靶机后代理立即停止发送，QGC 会在心跳超时后将该靶机显示为断开或移除。
+
 ## 多机接口
 
 第 `i` 架飞机使用：
@@ -69,8 +100,14 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
 
 ```bash
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
+python3 -m unittest scenarios/02_rocket_two_axis_pod/test_target_manager.py
 bash -n scenarios/02_rocket_two_axis_pod/start.sh
 bash -n scenarios/02_rocket_two_axis_pod/stop.sh
+
+cmake -S scenarios/02_rocket_two_axis_pod/gui \
+  -B scenarios/02_rocket_two_axis_pod/gui/build
+cmake --build scenarios/02_rocket_two_axis_pod/gui/build
+ctest --test-dir scenarios/02_rocket_two_axis_pod/gui/build --output-on-failure
 ```
 
 启动场景后，可使用原生 MAVSDK 通过 `14280+i` 依次控制飞机完成 20 米见方的闭合航线，并验证实际水平位移、爬升、航线完成、返航和落地：
