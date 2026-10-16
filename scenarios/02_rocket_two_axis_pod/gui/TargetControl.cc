@@ -117,6 +117,7 @@ void TargetControl::OnStatus(const gz::msgs::StringMsg &_message)
         state == QStringLiteral("stopping");
     this->running = state == QStringLiteral("starting") ||
         state == QStringLiteral("running") ||
+        state == QStringLiteral("collided") ||
         state == QStringLiteral("stopping");
     this->status = message.isEmpty() ? QStringLiteral("等待操作") : message;
     emit this->StateChanged();

@@ -39,7 +39,9 @@ class PrepareWorldTest(unittest.TestCase):
         path = directory / "model.sdf"
         path.write_text(
             "<sdf version='1.9'><model name='rocket_two_axis_pod'><static>false</static>"
-            "<link name='base_link'><visual name='body'><geometry><mesh>"
+            "<link name='base_link'><collision name='body_collision'><geometry><box>"
+            "<size>1 1 1</size></box></geometry></collision>"
+            "<visual name='body'><geometry><mesh>"
             "<uri>model://rocket_two_axis_pod/meshes/body.stl</uri>"
             "</mesh></geometry></visual></link>"
             "<plugin name='two_axis::GimbalController' filename='lib.so'>"
@@ -66,6 +68,26 @@ class PrepareWorldTest(unittest.TestCase):
             first.findtext(".//command_topic"), "/uav_1/pod/command"
         )
         self.assertTrue(Path(first.findtext(".//uri")).is_absolute())
+        contact_sensor = first.find(".//sensor[@type='contact']")
+        self.assertIsNotNone(contact_sensor)
+        self.assertEqual(
+            contact_sensor.findtext("contact/collision"), "body_collision"
+        )
+        self.assertEqual(contact_sensor.findtext("update_rate"), "250")
+        self.assertIsNotNone(
+            world.find("./plugin[@name='gz::sim::systems::Contact']")
+        )
+        collision_monitor = world.find(
+            "./plugin[@name='scenario02::CollisionMonitor']"
+        )
+        self.assertIsNotNone(collision_monitor)
+        self.assertEqual(
+            collision_monitor.findtext("event_topic"),
+            "/scenario/02/collision/event",
+        )
+        self.assertEqual(
+            collision_monitor.findtext("target_damage_speed_m_s"), "10.0"
+        )
         target_control = world.find("./gui/plugin[@filename='TargetControl']")
         self.assertIsNotNone(target_control)
         self.assertEqual(
@@ -126,6 +148,23 @@ class PrepareWorldTest(unittest.TestCase):
         world = ET.parse(output).getroot().find("world")
         self.assertIsNone(world.find("./gui/plugin[@filename='TargetControl']"))
         self.assertIsNone(world.find("./plugin[@name='scenario02::TargetTrajectory']"))
+        self.assertIsNotNone(
+            world.find("./plugin[@name='scenario02::CollisionMonitor']")
+        )
+
+    def test_rejects_aircraft_without_collision_geometry(self):
+        model = self.make_model(1)
+        tree = ET.parse(model)
+        collision = tree.getroot().find(".//collision")
+        parent = tree.getroot().find(".//link")
+        parent.remove(collision)
+        tree.write(model)
+        with self.assertRaisesRegex(ValueError, "缺少碰撞体"):
+            MODULE.prepare(
+                self.root / "world" / "world.sdf",
+                self.root / "run" / "world.sdf",
+                [(1, model)],
+            )
 
 
 if __name__ == "__main__":

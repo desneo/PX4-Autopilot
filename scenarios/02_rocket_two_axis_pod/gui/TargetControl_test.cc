@@ -97,6 +97,12 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   }
   QTRY_VERIFY_WITH_TIMEOUT(plugin.Running(), 2000);
   QCOMPARE(plugin.Status(), QStringLiteral("靶机飞行中"));
+
+  status.set_data(R"({"state":"collided","message":"靶机已碰撞"})");
+  statusPublisher.Publish(status);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      plugin.Status(), QStringLiteral("靶机已碰撞"), 2000);
+  QVERIFY(plugin.Running());
 }
 
 int main(int argc, char **argv)

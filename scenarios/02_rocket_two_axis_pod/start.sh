@@ -123,6 +123,7 @@ fi
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
 	|| pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' >/dev/null \
+	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
 	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
 	echo "ERROR: 当前已有 PX4 SITL、Gazebo 或本场景吊仓网关在运行。" >&2
 	echo "请先执行 ${SCRIPT_DIR}/stop.sh。" >&2
@@ -168,6 +169,7 @@ for required in "$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$ASSETS_ROOT/worlds/${WORLD}/metadata.json" \
 	"$ASSETS_ROOT/models/vehicles/xiaomotuo/model.sdf" \
 	"$ASSETS_ROOT/models/vehicles/xiaobianfu/model.sdf" \
+	"$SCRIPT_DIR/collision_manager.py" \
 	"$SCRIPT_DIR/target_manager.py"; do
 	[[ -f $required ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required}" >&2; exit 1; }
 done
@@ -186,20 +188,24 @@ cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$CONTROLLER_DIR/build" -j"$(nproc)"
 
 GUI_PLUGIN_DIR="${ASSETS_ROOT}/worlds/${WORLD}/gui"
+echo "增量构建 02 场景碰撞监控与靶机插件。"
+if ((GUI)); then
+	cmake -S "$SCENARIO_GUI_DIR" -B "$SCENARIO_GUI_DIR/build" \
+		-DCMAKE_BUILD_TYPE=Release -DSCENARIO02_BUILD_GUI=ON -DBUILD_TESTING=OFF
+	cmake --build "$SCENARIO_GUI_DIR/build" -j"$(nproc)"
+else
+	cmake -S "$SCENARIO_GUI_DIR" -B "$SCENARIO_GUI_DIR/build" \
+		-DCMAKE_BUILD_TYPE=Release -DSCENARIO02_BUILD_GUI=OFF -DBUILD_TESTING=OFF
+	cmake --build "$SCENARIO_GUI_DIR/build" --target CollisionMonitor -j"$(nproc)"
+fi
 if ((GUI)); then
 	echo "增量构建 world 的 Gazebo GUI 插件。"
 	cmake -S "$GUI_PLUGIN_DIR" -B "$GUI_PLUGIN_DIR/build" -DCMAKE_BUILD_TYPE=Release
 	cmake --build "$GUI_PLUGIN_DIR/build" -j"$(nproc)"
-	echo "增量构建 02 场景靶机控制面板。"
-	cmake -S "$SCENARIO_GUI_DIR" -B "$SCENARIO_GUI_DIR/build" -DCMAKE_BUILD_TYPE=Release
-	cmake --build "$SCENARIO_GUI_DIR/build" -j"$(nproc)"
 fi
 
-python3 -c 'import numpy'
+python3 -c 'import numpy, gz.transport13, gz.msgs10.stringmsg_pb2'
 "$BRIDGE_PYTHON" -c 'import gi, gz.transport13; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
-if ((GUI)); then
-	python3 -c 'import gz.transport13, gz.msgs10.stringmsg_pb2'
-fi
 
 if [[ -z $ADVERTISE_HOST ]]; then
 	# 不使用 `ip route get` 查询公网地址：代理软件可能通过策略路由
@@ -278,7 +284,7 @@ TARGET_SYSTEM_PLUGIN_DIR="${SCENARIO_GUI_DIR}/build/target-system-plugins"
 
 RESOURCE_PATH="${RUNTIME_DIR}/models:${ASSETS_ROOT}/assembledmodels:${ASSETS_ROOT}/models/vehicles:${ASSETS_ROOT}/models/gimbals${GZ_SIM_RESOURCE_PATH:+:${GZ_SIM_RESOURCE_PATH}}"
 SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib"
-((GUI)) && SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${TARGET_SYSTEM_PLUGIN_DIR}"
+SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${TARGET_SYSTEM_PLUGIN_DIR}"
 SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
 SERVER_CONFIG_PATH="${ASSETS_ROOT}/models/gimbals/two_axis_pod/scripts/server.config"
 GUI_PLUGIN_PATH="${GUI_PLUGIN_DIR}/build:${SCENARIO_GUI_DIR}/build${GZ_GUI_PLUGIN_PATH:+:${GZ_GUI_PLUGIN_PATH}}"
@@ -318,6 +324,29 @@ wait_for_log() {
 	return 1
 }
 
+wait_for_gz_message() {
+	local name=$1
+	local topic=$2
+	local timeout_seconds=$3
+	local deadline=$((SECONDS + timeout_seconds))
+	local attempt=0
+	local status=0
+	local log_file="${RUNTIME_DIR}/logs/${name}.log"
+	: > "$log_file"
+	while ((SECONDS < deadline)); do
+		attempt=$((attempt + 1))
+		if timeout 10 gz topic -e -t "$topic" -n 1 >>"$log_file" 2>&1; then
+			return 0
+		else
+			status=$?
+		fi
+		printf '第 %d 次等待失败（exit=%d），继续重试：%s\n' \
+			"$attempt" "$status" "$topic" >> "$log_file"
+		sleep 0.5
+	done
+	return 1
+}
+
 FAILED=1
 cleanup_on_failure() {
 	if ((FAILED)); then
@@ -340,8 +369,7 @@ for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
 	entity="rocket_two_axis_pod_${aircraft_id}"
 	imu_topic="/world/${WORLD}/model/${entity}/link/base_link/sensor/imu_sensor/imu"
-	if ! timeout 120 gz topic -e -t "$imu_topic" -n 1 \
-		>"${RUNTIME_DIR}/logs/imu_${aircraft_id}.log" 2>&1; then
+	if ! wait_for_gz_message "imu_${aircraft_id}" "$imu_topic" 120; then
 		echo "ERROR: 飞机 ${aircraft_id} 的 IMU 未就绪：${imu_topic}" >&2
 		tail -n 30 "${RUNTIME_DIR}/logs/gazebo.log" >&2 || true
 		exit 1
@@ -422,11 +450,22 @@ for ((i = 0; i < COUNT; i++)); do
 		>> "$RUNTIME_DIR/interfaces.tsv"
 done
 
+collision_manager_command=(python3 -u "$SCRIPT_DIR/collision_manager.py"
+	--aircraft-count "$COUNT" --px4-bin "$PX4_BIN"
+	--metadata "$ASSETS_ROOT/worlds/$WORLD/metadata.json"
+	--event-log "$RUNTIME_DIR/logs/collision-events.jsonl")
+printf '碰撞致损服务 command: '
+printf '%q ' "${collision_manager_command[@]}"
+printf '\n'
+start_process collision_manager "${collision_manager_command[@]}"
+wait_for_log collision_manager '碰撞致损服务已就绪' 15 || exit 1
+
 FAILED=0
 trap - EXIT
 echo
 echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
 echo "飞机保持待命，不自动解锁或飞行。"
+echo "碰撞致损：      PX4 飞机碰撞后关闭全部电机；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
 if ((GUI)); then
 	echo "靶机控制：使用 Gazebo 界面右下角的“靶机控制”面板（场景航迹模式）。"
 	echo "靶机位置 JSON：由面板配置的地面站地址接收，频率 1 Hz。"

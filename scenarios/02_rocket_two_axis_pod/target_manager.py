@@ -22,6 +22,8 @@ COMMAND_TOPIC = "/scenario/02/target/command"
 STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
 TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
+COLLISION_EVENT_TOPIC = "/scenario/02/collision/event"
+TARGET_DAMAGE_SPEED_M_S = 10.0
 EARTH_RADIUS_M = 6_371_000.0
 MODEL_RULES = {
     "xiaomotuo": {"display": "小摩托", "speed": (25.0, 65.0)},
@@ -333,6 +335,7 @@ class TargetSession:
         self.manager = manager
         self.config = config
         self.stop_event = threading.Event()
+        self.collided_event = threading.Event()
         self.truth_event = threading.Event()
         self.truth_lock = threading.Lock()
         self.truth: tuple[float, float, float, float, bool] | None = None
@@ -413,6 +416,17 @@ class TargetSession:
             self.truth = (x, y, z, speed, done)
         self.truth_event.set()
 
+    def on_collision(self, relative_speed: float) -> None:
+        if relative_speed < TARGET_DAMAGE_SPEED_M_S or self.collided_event.is_set():
+            return
+        self.collided_event.set()
+        self.manager.publish_trajectory("STOP")
+        self._status(
+            "collided",
+            f"靶机已与 PX4 飞机碰撞（相对速度 {relative_speed:.1f} m/s），"
+            "航迹和遥测已停止，请点击终止靶机清理模型",
+        )
+
     def _send_udp_if_due(self) -> None:
         now = time.monotonic()
         if now - self.last_udp < 1.0:
@@ -486,6 +500,8 @@ class TargetSession:
         )
         endpoint_reported = False
         while not self.stop_event.wait(0.05):
+            if self.collided_event.is_set():
+                continue
             self._send_udp_if_due()
             self._send_mavlink()
             with self.truth_lock:
@@ -534,6 +550,10 @@ class TargetManager:
             StringMsg, TRAJECTORY_STATUS_TOPIC, self.on_trajectory_status
         ):
             raise RuntimeError(f"无法订阅航迹状态话题：{TRAJECTORY_STATUS_TOPIC}")
+        if not self.node.subscribe(
+            StringMsg, COLLISION_EVENT_TOPIC, self.on_collision_event
+        ):
+            raise RuntimeError(f"无法订阅碰撞事件话题：{COLLISION_EVENT_TOPIC}")
         self.lock = threading.Lock()
         self.session: TargetSession | None = None
         self.worker: threading.Thread | None = None
@@ -584,6 +604,22 @@ class TargetManager:
                 raise ValueError("未知靶机命令")
         except (json.JSONDecodeError, ValueError) as error:
             self.publish_status("error", str(error))
+
+    def on_collision_event(self, message) -> None:
+        try:
+            payload = json.loads(message.data)
+            if payload.get("collision_type") != "px4_target":
+                return
+            relative_speed = float(payload["relative_speed_m_s"])
+            target_model = str(payload.get("entity_2", ""))
+            if not math.isfinite(relative_speed):
+                return
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            return
+        with self.lock:
+            session = self.session
+        if session is not None and target_model == session.config.model:
+            session.on_collision(relative_speed)
 
     def start(self, payload: dict) -> None:
         with self.lock:

@@ -152,6 +152,38 @@ class TargetManagerTest(unittest.TestCase):
         self.assertTrue(all(frame[5] == 200 for frame, _ in fake.sent))
         self.assertTrue(all(address == ("127.0.0.1", 14550) for _, address in fake.sent))
 
+    def test_target_collision_threshold_freezes_trajectory(self):
+        class FakeManager:
+            def __init__(self):
+                self.qgc_address = ("127.0.0.1", 14550)
+                self.mavlink_system_id = 200
+                self.trajectory = []
+                self.status = []
+
+            def publish_trajectory(self, value):
+                self.trajectory.append(value)
+
+            def publish_status(self, state, message, model=None):
+                self.status.append((state, message, model))
+
+        class FakeSocket:
+            def close(self):
+                pass
+
+        manager = FakeManager()
+        config = MODULE.TargetConfig(
+            "xiaomotuo", 35, 104.019969, 2000, "east_west",
+            ("127.0.0.1", 7788),
+        )
+        with mock.patch.object(MODULE.socket, "socket", return_value=FakeSocket()):
+            session = MODULE.TargetSession(manager, config)
+        session.on_collision(9.999)
+        self.assertFalse(session.collided_event.is_set())
+        session.on_collision(10.0)
+        self.assertTrue(session.collided_event.is_set())
+        self.assertEqual(manager.trajectory, ["STOP"])
+        self.assertEqual(manager.status[-1][0], "collided")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,7 @@ TARGET_COMMAND_TOPIC = "/scenario/02/target/command"
 TARGET_STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
 TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
+COLLISION_EVENT_TOPIC = "/scenario/02/collision/event"
 
 
 def set_text(parent: ET.Element, tag: str, value: object) -> ET.Element:
@@ -87,6 +88,54 @@ def load_model(aircraft_id: int, model_path: Path) -> ET.Element:
     absolute_resources(model, model_path)
     model.set("name", f"{MODEL_BASENAME}_{aircraft_id}")
     return model
+
+
+def add_contact_sensors(model: ET.Element) -> int:
+    """为每个物理碰撞体增加 Gazebo 原生接触传感器。"""
+    count = 0
+    for link in model.findall(".//link"):
+        for collision in link.findall("collision"):
+            collision_name = collision.get("name")
+            if not collision_name:
+                continue
+            sensor_name = f"scenario02_contact_{count}"
+            sensor = ET.SubElement(link, "sensor", name=sensor_name, type="contact")
+            contact = ET.SubElement(sensor, "contact")
+            set_text(contact, "collision", collision_name)
+            set_text(sensor, "always_on", "true")
+            set_text(sensor, "update_rate", "250")
+            count += 1
+    if count == 0:
+        raise ValueError(f"飞机模型缺少碰撞体：{model.get('name', '')}")
+    return count
+
+
+def add_collision_systems(world: ET.Element) -> ET.Element:
+    """加入接触数据系统和场景碰撞监控器。"""
+    for old in world.findall('./plugin[@name="gz::sim::systems::Contact"]'):
+        world.remove(old)
+    world.insert(
+        0,
+        ET.Element(
+            "plugin",
+            filename="gz-sim-contact-system",
+            name="gz::sim::systems::Contact",
+        ),
+    )
+
+    for old in world.findall('./plugin[@name="scenario02::CollisionMonitor"]'):
+        world.remove(old)
+    plugin = ET.SubElement(
+        world,
+        "plugin",
+        filename="libCollisionMonitor.so",
+        name="scenario02::CollisionMonitor",
+    )
+    set_text(plugin, "event_topic", COLLISION_EVENT_TOPIC)
+    set_text(plugin, "aircraft_prefix", f"{MODEL_BASENAME}_")
+    set_text(plugin, "airborne_height_m", "1.0")
+    set_text(plugin, "target_damage_speed_m_s", "10.0")
+    return plugin
 
 
 def add_target_control(world: ET.Element) -> ET.Element:
@@ -177,10 +226,13 @@ def prepare(
     columns = math.ceil(math.sqrt(len(models)))
     for index, (aircraft_id, model_path) in enumerate(models):
         model = load_model(aircraft_id, model_path.resolve())
+        add_contact_sensors(model)
         x = (index % columns) * spacing
         y = (index // columns) * spacing
         set_text(model, "pose", f"{x:g} {y:g} {altitude:g} 0 0 0")
         world.append(model)
+
+    add_collision_systems(world)
 
     scene = world.find('./gui/plugin[@filename="MinimalScene"]')
     if scene is not None:

@@ -44,7 +44,7 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
   bash scenarios/02_rocket_two_axis_pod/start.sh
 ```
 
-脚本会增量构建 PX4 SITL 和资产仓的两轴吊仓插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件。
+脚本会增量构建 PX4 SITL、两轴吊仓插件和本场景的碰撞监控插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件。
 
 ## 靶机控制
 
@@ -72,6 +72,26 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
 启用 GUI 靶机功能需要系统 Python 能导入 `gz.transport13` 和 `gz.msgs10`，不需要 `pymavlink`。靶机位姿按每个仿真步更新，管理服务以20 Hz接收位置状态，UDP 经纬高仍以1 Hz发送。
 
 靶机同时通过轻量 MAVLink 代理出现在 QGroundControl 中。默认发送到 `127.0.0.1:14550`，使用独立 `SYSID=200`；可通过 `--target-qgc-address HOST:PORT` 和 `--target-sysid ID` 修改。代理只发送 `HEARTBEAT`、`GLOBAL_POSITION_INT`、`GPS_RAW_INT` 和 `VFR_HUD`，不监听或执行 QGC 控制指令，也不占用普通飞机的 `14280+i` 端口。启动脚本会拒绝与当前普通飞机 `SYSID 1～n` 重叠的靶机 SYSID。终止靶机后代理立即停止发送，QGC 会在心跳超时后将该靶机显示为断开或移除。
+
+## 碰撞致损
+
+场景默认启用确定性的 `damage-on-contact`，用于发现集群路径规划中的碰撞问题。致损服务直接调用对应 SITL 实例的 PX4 内置故障注入命令，将全部电机设为关闭；它不占用 MAVSDK UDP 端口，也不会改变外部控制程序的连接。
+
+- PX4 与 PX4：使用 Gazebo 原生碰撞体和接触检测；发生实际接触后，两架飞机都关闭全部电机。
+- PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND` 或 `AUTO_PRECLAND` 的正常降落接触被豁免，其他飞行中表面接触会关闭全部电机。
+- PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。监控器使用与模型尺寸匹配的简化包围盒判定相交，并按速度矢量差计算相对速度：`|V_px4 - V_target|`。相对速度 **大于或等于10 m/s** 才关闭 PX4 的全部电机；低于 `10 m/s` 只记录事件，不触发坠毁。
+
+PX4 与靶机达到致损条件后，靶机冻结在碰撞位置，状态变为“已碰撞”，立即停止航迹、1 Hz JSON 遥测和虚拟 MAVLink 遥测，但不模拟自由落体。模型保留在 world 中，点击“终止靶机”后才清理。
+
+当前地理 world 的地面和高程结构统一包含在 `tile_*::terrain::ground` 网格碰撞体中，因此事件中不区分“地面”和“建筑物”，两者执行相同致损策略。重复接触不会重复注入故障。
+
+所有碰撞事件写入：
+
+```text
+/tmp/px4-scenarios/02_rocket_two_axis_pod/logs/collision-events.jsonl
+```
+
+每行是一个 JSON 对象，包含碰撞类型、仿真时间、飞机编号、相对速度、ENU/WGS84 位置、是否触发致损以及各 PX4 实例的故障注入结果。低速靶机碰撞会记录 `reason=relative_speed_below_10_m_s`，正常降落豁免会记录 `reason=normal_landing_mode`。
 
 ## 多机接口
 
@@ -101,11 +121,13 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
 ```bash
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_target_manager.py
+python3 -m unittest scenarios/02_rocket_two_axis_pod/test_collision_manager.py
 bash -n scenarios/02_rocket_two_axis_pod/start.sh
 bash -n scenarios/02_rocket_two_axis_pod/stop.sh
 
 cmake -S scenarios/02_rocket_two_axis_pod/gui \
-  -B scenarios/02_rocket_two_axis_pod/gui/build
+  -B scenarios/02_rocket_two_axis_pod/gui/build \
+  -DSCENARIO02_BUILD_GUI=ON -DBUILD_TESTING=ON
 cmake --build scenarios/02_rocket_two_axis_pod/gui/build
 ctest --test-dir scenarios/02_rocket_two_axis_pod/gui/build --output-on-failure
 ```
