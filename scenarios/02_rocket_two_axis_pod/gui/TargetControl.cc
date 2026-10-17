@@ -1,14 +1,38 @@
 #include "TargetControl.hh"
 
 #include <cmath>
+#include <sstream>
+#include <algorithm>
+#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
+#include <gz/common/MouseEvent.hh>
+#include <gz/common/KeyEvent.hh>
+#include <gz/gui/Application.hh>
+#include <gz/gui/GuiEvents.hh>
+#include <gz/gui/MainWindow.hh>
+#include <gz/msgs/Utility.hh>
 #include <gz/plugin/Register.hh>
 #include <tinyxml2.h>
 
 namespace scenario_02
 {
+namespace
+{
+constexpr double kMinFollowDistanceM = 0.25;
+constexpr double kMaxFollowDistanceM = 500.0;
+}
+
+TargetControl::TargetControl()
+{
+}
+
+TargetControl::~TargetControl()
+{
+  this->SetNativeCameraControlBlocked(false);
+}
+
 void TargetControl::LoadConfig(const tinyxml2::XMLElement *_config)
 {
   if (this->title.empty())
@@ -28,6 +52,31 @@ void TargetControl::LoadConfig(const tinyxml2::XMLElement *_config)
     if (const auto *value = _config->FirstChildElement("radar_status_topic");
         value && value->GetText())
       this->radarStatusTopic = QString::fromUtf8(value->GetText());
+    if (const auto *value = _config->FirstChildElement("follow_service");
+        value && value->GetText())
+      this->followService = QString::fromUtf8(value->GetText());
+    if (const auto *value = _config->FirstChildElement("move_to_pose_service");
+        value && value->GetText())
+      this->moveToPoseService = QString::fromUtf8(value->GetText());
+    if (const auto *value = _config->FirstChildElement("track_topic");
+        value && value->GetText())
+      this->trackTopic = QString::fromUtf8(value->GetText());
+    if (const auto *value = _config->FirstChildElement("aircraft_count");
+        value && value->GetText())
+    {
+      bool ok = false;
+      const int count = QString::fromUtf8(value->GetText()).toInt(&ok);
+      if (ok && count > 0)
+        this->aircraftCount = count;
+    }
+    if (const auto *value = _config->FirstChildElement("center_pose");
+        value && value->GetText())
+    {
+      std::istringstream input(value->GetText());
+      gz::math::Pose3d pose;
+      if (input >> pose && pose.IsFinite())
+        this->centerPose = pose;
+    }
     if (const auto *value = _config->FirstChildElement("default_altitude_m");
         value && value->GetText())
     {
@@ -42,6 +91,8 @@ void TargetControl::LoadConfig(const tinyxml2::XMLElement *_config)
       this->commandTopic.toStdString());
   this->radarPublisher = this->node.Advertise<gz::msgs::StringMsg>(
       this->radarCommandTopic.toStdString());
+  this->trackingPublisher = this->node.Advertise<gz::msgs::CameraTrack>(
+      this->trackTopic.toStdString());
   const bool subscribed = this->node.Subscribe(
       this->statusTopic.toStdString(), &TargetControl::OnStatus, this);
   const bool radarSubscribed = this->node.Subscribe(
@@ -50,8 +101,254 @@ void TargetControl::LoadConfig(const tinyxml2::XMLElement *_config)
     this->status = QStringLiteral("靶机控制通信初始化失败");
   if (!this->radarPublisher.Valid() || !radarSubscribed)
     this->radarStatus = QStringLiteral("雷达控制通信初始化失败");
+  if (auto *window = gz::gui::App()->findChild<gz::gui::MainWindow *>())
+    window->installEventFilter(this);
   emit this->StateChanged();
   emit this->RadarStateChanged();
+  emit this->CameraStateChanged();
+}
+
+bool TargetControl::eventFilter(QObject *_object, QEvent *_event)
+{
+  if (this->following && !this->cameraBusy &&
+      _event->type() == gz::gui::events::MousePressOnScene::kType)
+  {
+    const auto *press = static_cast<gz::gui::events::MousePressOnScene *>(
+        _event);
+    const auto &mouse = press->Mouse();
+    this->lastMousePosition = mouse.Pos();
+    this->followDragActive =
+        mouse.Button() == gz::common::MouseEvent::MIDDLE ||
+        (mouse.Buttons() & gz::common::MouseEvent::MIDDLE) ||
+        ((mouse.Button() == gz::common::MouseEvent::LEFT ||
+          (mouse.Buttons() & gz::common::MouseEvent::LEFT)) && mouse.Shift());
+  }
+  else if (this->following && !this->cameraBusy &&
+      _event->type() == gz::gui::events::DragOnScene::kType)
+  {
+    const auto *drag = static_cast<gz::gui::events::DragOnScene *>(_event);
+    const auto mouse = drag->Mouse();
+    const bool orbitGesture =
+        mouse.Button() == gz::common::MouseEvent::MIDDLE ||
+        (mouse.Buttons() & gz::common::MouseEvent::MIDDLE) ||
+        ((mouse.Button() == gz::common::MouseEvent::LEFT ||
+          (mouse.Buttons() & gz::common::MouseEvent::LEFT)) && mouse.Shift());
+    if (orbitGesture)
+    {
+      if (!this->followDragActive)
+        this->lastMousePosition = mouse.PrevPos();
+      this->OrbitFollow(mouse.Pos() - this->lastMousePosition);
+      this->lastMousePosition = mouse.Pos();
+      this->followDragActive = true;
+    }
+  }
+  else if (this->following && !this->cameraBusy &&
+      _event->type() == gz::gui::events::ScrollOnScene::kType)
+  {
+    const auto *scroll = static_cast<gz::gui::events::ScrollOnScene *>(_event);
+    this->ZoomFollow(scroll->Mouse().Scroll().Y());
+  }
+  else if (_event->type() == gz::gui::events::KeyReleaseOnScene::kType)
+  {
+    const auto *release = static_cast<gz::gui::events::KeyReleaseOnScene *>(
+        _event);
+    if (this->following && release->Key().Key() == Qt::Key_Escape)
+    {
+      this->SetNativeCameraControlBlocked(false);
+      this->following = false;
+      this->followingEntity.clear();
+      this->followingLabel.clear();
+      this->followDragActive = false;
+      this->cameraStatus = QStringLiteral("已停止跟随，当前为自由视角");
+      emit this->CameraStateChanged();
+    }
+  }
+
+  return QObject::eventFilter(_object, _event);
+}
+
+void TargetControl::ClearCameraTracking()
+{
+  if (auto *window = gz::gui::App()->findChild<gz::gui::MainWindow *>())
+  {
+    gz::common::KeyEvent key;
+    key.SetKey(Qt::Key_Escape);
+    key.SetType(gz::common::KeyEvent::RELEASE);
+    gz::gui::events::KeyReleaseOnScene escape(key);
+    QCoreApplication::sendEvent(window, &escape);
+  }
+}
+
+void TargetControl::SetNativeCameraControlBlocked(bool _blocked)
+{
+  if (auto *window = gz::gui::App()->findChild<gz::gui::MainWindow *>())
+  {
+    gz::gui::events::BlockOrbit block(_blocked);
+    QCoreApplication::sendEvent(window, &block);
+  }
+}
+
+void TargetControl::OrbitFollow(const gz::math::Vector2i &_drag)
+{
+  if (_drag == gz::math::Vector2i::Zero)
+    return;
+  const double radius = std::max(
+      this->followOffset.Length(), kMinFollowDistanceM);
+  double azimuth = std::atan2(this->followOffset.Y(), this->followOffset.X());
+  double elevation = std::atan2(this->followOffset.Z(),
+      std::hypot(this->followOffset.X(), this->followOffset.Y()));
+  azimuth -= static_cast<double>(_drag.X()) * 0.006;
+  elevation = std::clamp(
+      elevation + static_cast<double>(_drag.Y()) * 0.006,
+      0.035, 1.483);
+  const double horizontal = radius * std::cos(elevation);
+  this->followOffset.Set(
+      horizontal * std::cos(azimuth),
+      horizontal * std::sin(azimuth),
+      radius * std::sin(elevation));
+  this->PublishFollow(this->followingEntity);
+}
+
+void TargetControl::ZoomFollow(int _scrollSteps)
+{
+  if (_scrollSteps == 0)
+    return;
+  double steps = static_cast<double>(_scrollSteps);
+  if (std::abs(steps) > 10.0)
+    steps /= 120.0;
+  steps = std::clamp(steps, -4.0, 4.0);
+  const double currentRadius = std::max(
+      this->followOffset.Length(), kMinFollowDistanceM);
+  // 当前 Gazebo 鼠标事件中，滚轮向前为负值、向后为正值。
+  // 因此负值应缩短半径，正值应增大半径。
+  const double newRadius = std::clamp(
+      currentRadius * std::exp(0.18 * steps),
+      kMinFollowDistanceM, kMaxFollowDistanceM);
+  this->followOffset *= newRadius / currentRadius;
+  this->PublishFollow(this->followingEntity);
+}
+
+void TargetControl::PublishFollow(const QString &_entity)
+{
+  if (!this->trackingPublisher.Valid())
+    return;
+  gz::msgs::CameraTrack message;
+  message.set_track_mode(gz::msgs::CameraTrack::FOLLOW);
+  message.mutable_follow_target()->set_name(_entity.toStdString());
+  gz::msgs::Set(message.mutable_follow_offset(), this->followOffset);
+  // gz-gui 8 的 FOLLOW 实现交叉使用这两个增益；都设为 1 可避免高速飞机
+  // 下相机明显滞后，同时保证恢复交互视角时不会弹回旧位置。
+  message.set_follow_pgain(1.0);
+  message.set_track_pgain(1.0);
+  this->trackingPublisher.Publish(message);
+}
+
+void TargetControl::FollowEntity(
+    const QString &_entity, const QString &_label)
+{
+  if (this->cameraBusy || _entity.trimmed().isEmpty())
+    return;
+
+  gz::msgs::StringMsg request;
+  request.set_data(_entity.trimmed().toStdString());
+  this->pendingFollowingEntity = _entity.trimmed();
+  this->pendingFollowingLabel = _label.trimmed();
+  this->cameraBusy = true;
+  this->cameraStatus = QStringLiteral("正在定位并跟随 %1…")
+      .arg(this->pendingFollowingLabel);
+  emit this->CameraStateChanged();
+
+  if (!this->node.Request(this->followService.toStdString(), request,
+      &TargetControl::OnFollowResponse, this))
+  {
+    this->cameraBusy = false;
+    this->pendingFollowingEntity.clear();
+    this->pendingFollowingLabel.clear();
+    this->cameraStatus = QStringLiteral("相机跟随服务尚未就绪");
+    emit this->CameraStateChanged();
+  }
+}
+
+void TargetControl::OnFollowResponse(
+    const gz::msgs::Boolean &_response, bool _result)
+{
+  const bool success = _result && _response.data();
+  QMetaObject::invokeMethod(this, [this, success]
+  {
+    this->cameraBusy = false;
+    if (success)
+    {
+      this->followOffset.Set(-12.0, 0.0, 6.0);
+      this->PublishFollow(this->pendingFollowingEntity);
+      this->SetNativeCameraControlBlocked(true);
+      this->following = true;
+      this->followingEntity = this->pendingFollowingEntity;
+      this->followingLabel = this->pendingFollowingLabel;
+      this->cameraStatus = QStringLiteral(
+          "视野正在跟随 %1；滚轮前推靠近/后拉远离，中键拖动旋转")
+          .arg(this->followingLabel);
+    }
+    else
+    {
+      this->cameraStatus = QStringLiteral("未找到所选飞机，请确认模型已经生成");
+    }
+    this->pendingFollowingEntity.clear();
+    this->pendingFollowingLabel.clear();
+    emit this->CameraStateChanged();
+  }, Qt::QueuedConnection);
+}
+
+void TargetControl::StopFollowing()
+{
+  if (this->cameraBusy)
+    return;
+  this->SetNativeCameraControlBlocked(false);
+  this->followDragActive = false;
+  this->ClearCameraTracking();
+  this->following = false;
+  this->followingEntity.clear();
+  this->followingLabel.clear();
+  this->cameraStatus = QStringLiteral("已停止跟随，当前为自由视角");
+  emit this->CameraStateChanged();
+}
+
+void TargetControl::ReturnToMapCenter()
+{
+  if (this->cameraBusy)
+    return;
+
+  this->SetNativeCameraControlBlocked(false);
+  this->followDragActive = false;
+  this->ClearCameraTracking();
+  gz::msgs::GUICamera request;
+  gz::msgs::Set(request.mutable_pose(), this->centerPose);
+  this->cameraBusy = true;
+  this->following = false;
+  this->followingEntity.clear();
+  this->followingLabel.clear();
+  this->cameraStatus = QStringLiteral("正在回到地图中心…");
+  emit this->CameraStateChanged();
+
+  if (!this->node.Request(this->moveToPoseService.toStdString(), request,
+      &TargetControl::OnMapCenterResponse, this))
+  {
+    this->cameraBusy = false;
+    this->cameraStatus = QStringLiteral("地图中心视角服务尚未就绪");
+    emit this->CameraStateChanged();
+  }
+}
+
+void TargetControl::OnMapCenterResponse(
+    const gz::msgs::Boolean &_response, bool _result)
+{
+  const bool success = _result && _response.data();
+  QMetaObject::invokeMethod(this, [this, success]
+  {
+    this->cameraBusy = false;
+    this->cameraStatus = success ? QStringLiteral("已回到地图中心") :
+        QStringLiteral("视角尚未就绪，请稍后重试");
+    emit this->CameraStateChanged();
+  }, Qt::QueuedConnection);
 }
 
 void TargetControl::PublishRadar(const QString &_json)
@@ -174,7 +471,8 @@ void TargetControl::OnStatus(const gz::msgs::StringMsg &_message)
   const auto object = document.object();
   const QString state = object.value(QStringLiteral("state")).toString();
   const QString message = object.value(QStringLiteral("message")).toString();
-  QMetaObject::invokeMethod(this, [this, state, message]
+  const QString model = object.value(QStringLiteral("model")).toString();
+  QMetaObject::invokeMethod(this, [this, state, message, model]
   {
     this->busy = state == QStringLiteral("starting") ||
         state == QStringLiteral("stopping");
@@ -182,8 +480,13 @@ void TargetControl::OnStatus(const gz::msgs::StringMsg &_message)
         state == QStringLiteral("running") ||
         state == QStringLiteral("collided") ||
         state == QStringLiteral("stopping");
+    const QString previousTargetModel = this->targetModel;
+    this->targetModel = this->running ? model : QString{};
     this->status = message.isEmpty() ? QStringLiteral("等待操作") : message;
     emit this->StateChanged();
+    if (!this->running && !previousTargetModel.isEmpty() &&
+        this->followingEntity == previousTargetModel)
+      this->StopFollowing();
   }, Qt::QueuedConnection);
 }
 

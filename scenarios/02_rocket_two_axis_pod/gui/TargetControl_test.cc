@@ -4,8 +4,14 @@
 #include <QJsonObject>
 #include <QQuickItem>
 #include <QtTest/QtTest>
+#include <cmath>
 #include <functional>
+#include <gz/common/MouseEvent.hh>
 #include <gz/gui/Application.hh>
+#include <gz/gui/GuiEvents.hh>
+#include <gz/msgs/boolean.pb.h>
+#include <gz/msgs/cameratrack.pb.h>
+#include <gz/msgs/gui_camera.pb.h>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/transport/Node.hh>
 #include <tinyxml2.h>
@@ -26,12 +32,20 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
       <status_topic>/test/target/status</status_topic>
       <radar_command_topic>/test/radar/command</radar_command_topic>
       <radar_status_topic>/test/radar/status</radar_status_topic>
+      <follow_service>/test/gui/follow</follow_service>
+      <track_topic>/test/gui/track</track_topic>
+      <move_to_pose_service>/test/gui/move_to/pose</move_to_pose_service>
+      <center_pose>0 0 200 0 1.5707963267948966 1.5707963267948966</center_pose>
+      <aircraft_count>2</aircraft_count>
       <default_altitude_m>104.019969</default_altitude_m>
     </plugin>)") == tinyxml2::XML_SUCCESS);
 
   gz::transport::Node node;
   QString command;
   QString radarCommand;
+  QString followedEntity;
+  gz::msgs::CameraTrack trackMessage;
+  bool returnedToCenter = false;
   QVERIFY(node.Subscribe<gz::msgs::StringMsg>("/test/target/command",
       std::function<void(const gz::msgs::StringMsg &)>([&command](
           const gz::msgs::StringMsg &_message)
@@ -44,11 +58,44 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
       {
         radarCommand = QString::fromStdString(_message.data());
       })));
+  QVERIFY(node.Subscribe<gz::msgs::CameraTrack>("/test/gui/track",
+      std::function<void(const gz::msgs::CameraTrack &)>([&trackMessage](
+          const gz::msgs::CameraTrack &_message)
+      {
+        trackMessage = _message;
+      })));
+  std::function<bool(const gz::msgs::StringMsg &, gz::msgs::Boolean &)>
+      followHandler = [&followedEntity](
+      const gz::msgs::StringMsg &_request, gz::msgs::Boolean &_response)
+  {
+    followedEntity = QString::fromStdString(_request.data());
+    _response.set_data(true);
+    return true;
+  };
+  QVERIFY(node.Advertise("/test/gui/follow", followHandler));
+  std::function<bool(const gz::msgs::GUICamera &, gz::msgs::Boolean &)>
+      centerHandler = [&returnedToCenter](
+      const gz::msgs::GUICamera &_request, gz::msgs::Boolean &_response)
+  {
+    returnedToCenter = _request.has_pose() &&
+        qFuzzyCompare(_request.pose().position().z(), 200.0);
+    _response.set_data(returnedToCenter);
+    return true;
+  };
+  QVERIFY(node.Advertise("/test/gui/move_to/pose", centerHandler));
 
   scenario_02::TargetControl plugin;
   plugin.Load(config.RootElement());
   QVERIFY(plugin.PluginItem());
   QCOMPARE(plugin.DefaultAltitudeM(), 104.019969);
+  QCOMPARE(plugin.AircraftCount(), 2);
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("returnToMapCenterButton"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("fixedFollowTitleBar"));
+  auto *aircraftCombo = plugin.PluginItem()->findChild<QQuickItem *>(
+      "aircraftFollowCombo");
+  QVERIFY(aircraftCombo);
+  QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 3, 1000);
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("stopFollowingButton"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("fixedTargetTitleBar"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("fixedRadarTitleBar"));
   auto *collapseButton = plugin.PluginItem()->findChild<QQuickItem *>(
@@ -78,6 +125,77 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QCOMPARE(radarRateRange->property("text").toString(),
       QStringLiteral("1.0～2.0 Hz"));
 
+  plugin.FollowEntity("rocket_two_axis_pod_2", "飞机 2 · PX4");
+  QTRY_COMPARE_WITH_TIMEOUT(
+      followedEntity, QStringLiteral("rocket_two_axis_pod_2"), 2000);
+  QTRY_VERIFY_WITH_TIMEOUT(plugin.Following(), 2000);
+  QTRY_COMPARE_WITH_TIMEOUT(trackMessage.track_mode(),
+      gz::msgs::CameraTrack::FOLLOW, 2000);
+  QCOMPARE(QString::fromStdString(trackMessage.follow_target().name()),
+      QStringLiteral("rocket_two_axis_pod_2"));
+  QCOMPARE(trackMessage.follow_pgain(), 1.0);
+  QCOMPARE(trackMessage.track_pgain(), 1.0);
+  QCOMPARE(trackMessage.follow_offset().x(), -12.0);
+  QCOMPARE(trackMessage.follow_offset().z(), 6.0);
+  QCOMPARE(plugin.FollowingEntity(), QStringLiteral("rocket_two_axis_pod_2"));
+  QCOMPARE(plugin.FollowingLabel(), QStringLiteral("飞机 2 · PX4"));
+
+  const double initialRadius = std::hypot(
+      std::hypot(trackMessage.follow_offset().x(),
+                 trackMessage.follow_offset().y()),
+      trackMessage.follow_offset().z());
+  gz::common::MouseEvent scrollMouse;
+  scrollMouse.SetType(gz::common::MouseEvent::SCROLL);
+  scrollMouse.SetScroll(0, -1);
+  gz::gui::events::ScrollOnScene scrollEvent(scrollMouse);
+  QVERIFY(!plugin.eventFilter(nullptr, &scrollEvent));
+  QTRY_VERIFY_WITH_TIMEOUT(std::hypot(
+      std::hypot(trackMessage.follow_offset().x(),
+                 trackMessage.follow_offset().y()),
+      trackMessage.follow_offset().z()) < initialRadius, 2000);
+  QCOMPARE(trackMessage.track_mode(), gz::msgs::CameraTrack::FOLLOW);
+  QCOMPARE(QString::fromStdString(trackMessage.follow_target().name()),
+      QStringLiteral("rocket_two_axis_pod_2"));
+
+  for (int index = 0; index < 30; ++index)
+    QVERIFY(!plugin.eventFilter(nullptr, &scrollEvent));
+  QTRY_VERIFY_WITH_TIMEOUT(std::hypot(
+      std::hypot(trackMessage.follow_offset().x(),
+                 trackMessage.follow_offset().y()),
+      trackMessage.follow_offset().z()) < 0.5, 2000);
+  const double closestRadius = std::hypot(
+      std::hypot(trackMessage.follow_offset().x(),
+                 trackMessage.follow_offset().y()),
+      trackMessage.follow_offset().z());
+  QVERIFY(closestRadius >= 0.249);
+
+  gz::common::MouseEvent pressMouse;
+  pressMouse.SetType(gz::common::MouseEvent::PRESS);
+  pressMouse.SetButton(gz::common::MouseEvent::MIDDLE);
+  pressMouse.SetButtons(gz::common::MouseEvent::MIDDLE);
+  pressMouse.SetPos(100, 100);
+  gz::gui::events::MousePressOnScene pressEvent(pressMouse);
+  QVERIFY(!plugin.eventFilter(nullptr, &pressEvent));
+  gz::common::MouseEvent dragMouse;
+  dragMouse.SetType(gz::common::MouseEvent::MOVE);
+  dragMouse.SetButtons(gz::common::MouseEvent::MIDDLE);
+  dragMouse.SetPrevPos(100, 100);
+  dragMouse.SetPos(140, 120);
+  gz::gui::events::DragOnScene dragEvent(dragMouse);
+  const double beforeOrbitY = trackMessage.follow_offset().y();
+  QVERIFY(!plugin.eventFilter(nullptr, &dragEvent));
+  QTRY_VERIFY_WITH_TIMEOUT(
+      std::abs(trackMessage.follow_offset().y() - beforeOrbitY) > 0.01, 2000);
+  QCOMPARE(trackMessage.track_mode(), gz::msgs::CameraTrack::FOLLOW);
+  QCOMPARE(QString::fromStdString(trackMessage.follow_target().name()),
+      QStringLiteral("rocket_two_axis_pod_2"));
+
+  plugin.StopFollowing();
+  QVERIFY(!plugin.Following());
+  plugin.ReturnToMapCenter();
+  QTRY_VERIFY_WITH_TIMEOUT(returnedToCenter, 2000);
+  QTRY_VERIFY_WITH_TIMEOUT(!plugin.CameraBusy(), 2000);
+
   targetModel->setProperty("currentIndex", 1);
   QTRY_COMPARE(speedRange->property("text").toString(),
       QStringLiteral("25～65 m/s"));
@@ -85,15 +203,17 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QTRY_COMPARE(speedRange->property("text").toString(),
       QStringLiteral("10～30 m/s"));
 
-  QVERIFY(QMetaObject::invokeMethod(collapseButton, "clicked"));
-  QTRY_VERIFY_WITH_TIMEOUT(
-      plugin.PluginItem()->property("targetCollapsed").toBool(), 1000);
+  QVERIFY(plugin.PluginItem()->property("targetCollapsed").toBool());
   QVERIFY(QMetaObject::invokeMethod(collapseButton, "clicked"));
   QTRY_VERIFY_WITH_TIMEOUT(
       !plugin.PluginItem()->property("targetCollapsed").toBool(), 1000);
+  QVERIFY(QMetaObject::invokeMethod(collapseButton, "clicked"));
+  QTRY_VERIFY_WITH_TIMEOUT(
+      plugin.PluginItem()->property("targetCollapsed").toBool(), 1000);
+  QVERIFY(plugin.PluginItem()->property("radarCollapsed").toBool());
   QVERIFY(QMetaObject::invokeMethod(radarCollapseButton, "clicked"));
   QTRY_VERIFY_WITH_TIMEOUT(
-      plugin.PluginItem()->property("radarCollapsed").toBool(), 1000);
+      !plugin.PluginItem()->property("radarCollapsed").toBool(), 1000);
 
   plugin.StartTarget(
       "xiaomotuo", 35, 104.019969, 2000, "east_west",
@@ -117,7 +237,8 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
       "/test/target/status");
   QVERIFY(statusPublisher.Valid());
   gz::msgs::StringMsg status;
-  status.set_data(R"({"state":"running","message":"靶机飞行中"})");
+  status.set_data(
+      R"({"state":"running","message":"靶机飞行中","model":"xiaomotuo"})");
   for (int attempt = 0; attempt < 20 && !plugin.Running(); ++attempt)
   {
     statusPublisher.Publish(status);
@@ -125,6 +246,8 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   }
   QTRY_VERIFY_WITH_TIMEOUT(plugin.Running(), 2000);
   QCOMPARE(plugin.Status(), QStringLiteral("靶机飞行中"));
+  QCOMPARE(plugin.TargetModel(), QStringLiteral("xiaomotuo"));
+  QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 4, 1000);
 
   status.set_data(R"({"state":"collided","message":"靶机已碰撞"})");
   statusPublisher.Publish(status);

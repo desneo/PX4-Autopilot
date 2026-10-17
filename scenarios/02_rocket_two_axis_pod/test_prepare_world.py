@@ -24,6 +24,9 @@ class PrepareWorldTest(unittest.TestCase):
         (assets / "terrain.dae").write_text("mesh")
         (self.root / "world" / "world.sdf").write_text(
             "<sdf version='1.10'><world name='source'>"
+            "<gui><plugin filename='MapCenter' name='地图中心'>"
+            "<center_pose>1 2 210 0 1.5707963267948966 1.5707963267948966</center_pose>"
+            "</plugin></gui>"
             "<model name='terrain'><link name='link'><visual name='v'><geometry><mesh>"
             "<uri>assets/terrain.dae</uri></mesh></geometry></visual></link></model>"
             "</world></sdf>"
@@ -95,6 +98,17 @@ class PrepareWorldTest(unittest.TestCase):
             "/scenario/02/target/command",
         )
         self.assertEqual(target_control.findtext("default_altitude_m"), "100.000000")
+        self.assertEqual(target_control.findtext("aircraft_count"), "2")
+        self.assertEqual(
+            target_control.findtext("center_pose"),
+            "1 2 210 0 1.5707963267948966 1.5707963267948966",
+        )
+        self.assertEqual(target_control.findtext("follow_service"), "/gui/follow")
+        self.assertEqual(target_control.findtext("track_topic"), "/gui/track")
+        self.assertEqual(
+            target_control.findtext("move_to_pose_service"), "/gui/move_to/pose"
+        )
+        self.assertIsNone(world.find("./gui/plugin[@filename='MapCenter']"))
         gui_properties = {
             item.get("key"): item.text
             for item in target_control.findall("./gz-gui/property")
@@ -156,6 +170,7 @@ class PrepareWorldTest(unittest.TestCase):
         )
         world = ET.parse(output).getroot().find("world")
         self.assertIsNone(world.find("./gui/plugin[@filename='TargetControl']"))
+        self.assertIsNotNone(world.find("./gui/plugin[@filename='MapCenter']"))
         self.assertIsNone(world.find("./plugin[@name='scenario02::TargetTrajectory']"))
         self.assertIsNotNone(
             world.find("./plugin[@name='scenario02::CollisionMonitor']")

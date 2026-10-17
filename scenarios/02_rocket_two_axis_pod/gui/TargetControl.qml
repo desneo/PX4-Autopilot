@@ -7,8 +7,21 @@ Item {
   anchors.fill: parent
   Layout.minimumWidth: 350
   Layout.minimumHeight: 700
-  property bool radarCollapsed: false
-  property bool targetCollapsed: false
+  property bool followCollapsed: false
+  property bool radarCollapsed: true
+  property bool targetCollapsed: true
+  property bool rebuildingAircraftModel: false
+  property bool observedTargetRunning: TargetControl.running
+  property string observedTargetModel: TargetControl.targetModel
+  property bool observedFollowing: TargetControl.following
+  property bool observedCameraBusy: TargetControl.cameraBusy
+  property int observedAircraftCount: TargetControl.aircraftCount
+
+  onObservedTargetRunningChanged: root.refreshAircraftModel()
+  onObservedTargetModelChanged: root.refreshAircraftModel()
+  onObservedFollowingChanged: root.syncAircraftSelection()
+  onObservedCameraBusyChanged: root.syncAircraftSelection()
+  onObservedAircraftCountChanged: root.refreshAircraftModel()
 
   function selectedModel() {
     return targetModel.currentIndex === 1 ? "xiaomotuo" :
@@ -16,6 +29,45 @@ Item {
   }
   function speedMinimum() { return targetModel.currentIndex === 1 ? 25 : 10 }
   function speedMaximum() { return targetModel.currentIndex === 1 ? 65 : 30 }
+  function targetDisplayName(model) {
+    if (model === "xiaomotuo") return "靶机 · 小摩托"
+    if (model === "xiaobianfu") return "靶机 · 小蝙蝠"
+    return "靶机"
+  }
+  function refreshAircraftModel() {
+    var selectedEntity = TargetControl.followingEntity
+    rebuildingAircraftModel = true
+    aircraftOptions.clear()
+    aircraftOptions.append({"label": "请选择飞机", "entity": ""})
+    for (var index = 1; index <= TargetControl.aircraftCount; ++index) {
+      aircraftOptions.append({
+        "label": "飞机 " + index + " · PX4",
+        "entity": "rocket_two_axis_pod_" + index
+      })
+    }
+    if (TargetControl.running && TargetControl.targetModel.length > 0) {
+      aircraftOptions.append({
+        "label": root.targetDisplayName(TargetControl.targetModel),
+        "entity": TargetControl.targetModel
+      })
+    }
+    var selectedIndex = 0
+    for (var row = 1; row < aircraftOptions.count; ++row) {
+      if (aircraftOptions.get(row).entity === selectedEntity) {
+        selectedIndex = row
+        break
+      }
+    }
+    aircraftCombo.currentIndex = selectedIndex
+    rebuildingAircraftModel = false
+  }
+  function syncAircraftSelection() {
+    if (!TargetControl.cameraBusy && !TargetControl.following) {
+      rebuildingAircraftModel = true
+      aircraftCombo.currentIndex = 0
+      rebuildingAircraftModel = false
+    }
+  }
   function stationValid(value) {
     var separator = value.lastIndexOf(":")
     if (separator <= 0 || separator === value.length - 1)
@@ -48,8 +100,37 @@ Item {
     return ""
   }
 
+  ListModel { id: aircraftOptions }
+
+  Component.onCompleted: root.refreshAircraftModel()
+
+  Button {
+    id: mapCenterButton
+    objectName: "returnToMapCenterButton"
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.topMargin: 8
+    anchors.rightMargin: 8
+    width: 190
+    height: 56
+    text: "回到地图中心"
+    enabled: !TargetControl.cameraBusy
+    onClicked: {
+      root.rebuildingAircraftModel = true
+      aircraftCombo.currentIndex = 0
+      root.rebuildingAircraftModel = false
+      TargetControl.ReturnToMapCenter()
+    }
+    ToolTip.visible: hovered
+    ToolTip.text: "退出飞机跟随，回到中心点上方200米俯视地图"
+  }
+
   Flickable {
-    anchors.fill: parent
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.topMargin: 78
     clip: true
     contentWidth: width
     contentHeight: panels.height
@@ -59,6 +140,100 @@ Item {
       id: panels
       width: parent.width
       spacing: 4
+
+      Rectangle {
+        id: followPanel
+        width: parent.width
+        height: root.followCollapsed ? 50 : 190
+        color: "#e8ffffff"
+
+        Rectangle {
+          id: followTitleBar
+          objectName: "fixedFollowTitleBar"
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.top: parent.top
+          height: 50
+          color: "#03a9f4"
+          Label {
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: "飞机定位与跟随"
+            color: "white"
+            font.pixelSize: 16
+          }
+          ToolButton {
+            id: followCollapseButton
+            objectName: "collapseFollowPanelButton"
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 50
+            text: root.followCollapsed ? "\u25BE" : "\u25B4"
+            contentItem: Text {
+              text: followCollapseButton.text
+              color: "white"
+              horizontalAlignment: Text.AlignHCenter
+              verticalAlignment: Text.AlignVCenter
+            }
+            background: Item {}
+            onClicked: root.followCollapsed = !root.followCollapsed
+            ToolTip.visible: hovered
+            ToolTip.text: root.followCollapsed ? "展开飞机定位与跟随" : "折叠飞机定位与跟随"
+          }
+        }
+
+        ColumnLayout {
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.top: followTitleBar.bottom
+          anchors.bottom: parent.bottom
+          anchors.margins: 10
+          spacing: 6
+          visible: !root.followCollapsed
+
+          Label { text: "选择飞机"; color: "#202124"; font.bold: true }
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            ComboBox {
+              id: aircraftCombo
+              objectName: "aircraftFollowCombo"
+              Layout.fillWidth: true
+              model: aircraftOptions
+              textRole: "label"
+              enabled: !TargetControl.cameraBusy
+              onCurrentIndexChanged: {
+                if (root.rebuildingAircraftModel || currentIndex <= 0)
+                  return
+                var selected = aircraftOptions.get(currentIndex)
+                TargetControl.FollowEntity(selected.entity, selected.label)
+              }
+            }
+            Button {
+              objectName: "stopFollowingButton"
+              text: "停止跟随"
+              enabled: TargetControl.following && !TargetControl.cameraBusy
+              onClicked: {
+                root.rebuildingAircraftModel = true
+                aircraftCombo.currentIndex = 0
+                root.rebuildingAircraftModel = false
+                TargetControl.StopFollowing()
+              }
+            }
+          }
+          Label {
+            objectName: "cameraStatusLabel"
+            Layout.fillWidth: true
+            text: TargetControl.cameraStatus
+            color: TargetControl.following ? "#2e7d32" : "#607d8b"
+            wrapMode: Text.WordWrap
+            font.pixelSize: 12
+          }
+          Item { Layout.fillHeight: true }
+        }
+      }
 
       Rectangle {
         id: radarPanel

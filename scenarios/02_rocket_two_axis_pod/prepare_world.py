@@ -140,13 +140,29 @@ def add_collision_systems(world: ET.Element) -> ET.Element:
     return plugin
 
 
-def add_target_control(world: ET.Element) -> ET.Element:
-    """只向运行副本加入 02 场景的雷达/靶机固定控制面板。"""
+def add_target_control(world: ET.Element, aircraft_count: int) -> ET.Element:
+    """加入右侧安全区控制面板，并接管地图中心与相机跟随。"""
     gui = world.find("gui")
     if gui is None:
         gui = ET.SubElement(world, "gui", fullscreen="false")
 
     for old in gui.findall('./plugin[@filename="TargetControl"]'):
+        gui.remove(old)
+
+    center_pose = "0 0 200 0 1.5707963267948966 1.5707963267948966"
+    for old in gui.findall('./plugin[@filename="MapCenter"]'):
+        configured_pose = old.findtext("center_pose", "").strip()
+        if configured_pose:
+            values = configured_pose.split()
+            try:
+                valid = len(values) == 6 and all(
+                    math.isfinite(float(value)) for value in values
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                raise ValueError(f"MapCenter center_pose 不是有效六自由度位姿：{configured_pose}")
+            center_pose = configured_pose
         gui.remove(old)
 
     elevation_text = world.findtext("spherical_coordinates/elevation", "0")
@@ -183,6 +199,11 @@ def add_target_control(world: ET.Element) -> ET.Element:
     set_text(plugin, "status_topic", TARGET_STATUS_TOPIC)
     set_text(plugin, "radar_command_topic", RADAR_COMMAND_TOPIC)
     set_text(plugin, "radar_status_topic", RADAR_STATUS_TOPIC)
+    set_text(plugin, "follow_service", "/gui/follow")
+    set_text(plugin, "track_topic", "/gui/track")
+    set_text(plugin, "move_to_pose_service", "/gui/move_to/pose")
+    set_text(plugin, "center_pose", center_pose)
+    set_text(plugin, "aircraft_count", aircraft_count)
     set_text(plugin, "default_altitude_m", f"{default_altitude_m:.6f}")
     return plugin
 
@@ -277,7 +298,7 @@ def prepare(
         set_text(clip, "near", 0.005)
 
     if target_control:
-        add_target_control(world)
+        add_target_control(world, len(models))
         add_target_trajectory(world)
 
     output = output.resolve()
