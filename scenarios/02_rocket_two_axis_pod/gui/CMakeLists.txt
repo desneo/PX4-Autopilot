@@ -61,6 +61,6 @@ if(BUILD_TESTING)
     add_test(NAME TargetControl COMMAND TargetControl_test)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/test-home")
     set_tests_properties(TargetControl PROPERTIES ENVIRONMENT
-      "HOME=${CMAKE_BINARY_DIR}/test-home;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;GZ_GUI_PLUGIN_PATH=$<TARGET_FILE_DIR:TargetControl>;GZ_PARTITION=target_control_test")
+      "HOME=${CMAKE_BINARY_DIR}/test-home;QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;GZ_GUI_PLUGIN_PATH=$<TARGET_FILE_DIR:TargetControl>;GZ_PARTITION=target_control_test;GZ_IP=127.0.0.1")
   endif()
 endif()

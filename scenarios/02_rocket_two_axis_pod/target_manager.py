@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""场景 02 靶机管理服务：场景航迹控制与 1 Hz UDP 经纬高。"""
+"""场景 02 靶机管理服务：场景航迹控制与 10 Hz UDP 真值。"""
 
 from __future__ import annotations
 
@@ -429,7 +429,7 @@ class TargetSession:
 
     def _send_udp_if_due(self) -> None:
         now = time.monotonic()
-        if now - self.last_udp < 1.0:
+        if now - self.last_udp < 0.1:
             return
         with self.truth_lock:
             truth = self.truth
@@ -443,13 +443,14 @@ class TargetSession:
             y,
         )
         payload = {
-            "type": "target_position",
+            "type": "target_truth",
+            "source": "simulation_truth",
             "timestamp_ms": int(time.time() * 1000),
             "model": self.config.model,
             "latitude": latitude,
             "longitude": longitude,
-            "altitude": self.config.altitude,
-            "speed": speed,
+            "altitude_msl_m": self.config.altitude,
+            "speed_m_s": speed,
         }
         self.udp_socket.sendto(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),

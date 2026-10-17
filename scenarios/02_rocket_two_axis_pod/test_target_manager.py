@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
+import json
 
 
 HERE = Path(__file__).resolve().parent
@@ -183,6 +184,49 @@ class TargetManagerTest(unittest.TestCase):
         self.assertTrue(session.collided_event.is_set())
         self.assertEqual(manager.trajectory, ["STOP"])
         self.assertEqual(manager.status[-1][0], "collided")
+
+    def test_truth_udp_uses_distinct_schema_and_ten_hertz_interval(self):
+        class FakeManager:
+            qgc_address = ("127.0.0.1", 14550)
+            mavlink_system_id = 200
+            terrain = type("Terrain", (), {
+                "center_latitude": 32.217857,
+                "center_longitude": 119.105878,
+                "origin_elevation": 4.019969,
+            })()
+
+        class FakeSocket:
+            def __init__(self):
+                self.sent = []
+            def sendto(self, data, address):
+                self.sent.append((data, address))
+            def close(self):
+                pass
+
+        sockets = []
+        def socket_factory(*_args, **_kwargs):
+            value = FakeSocket()
+            sockets.append(value)
+            return value
+
+        config = MODULE.TargetConfig(
+            "xiaomotuo", 35, 104.019969, 2000, "east_west",
+            ("127.0.0.1", 7790),
+        )
+        with mock.patch.object(MODULE.socket, "socket", side_effect=socket_factory):
+            session = MODULE.TargetSession(FakeManager(), config)
+        session.truth = (1000.0, 0.0, 100.0, 35.0, False)
+        with mock.patch.object(MODULE.time, "monotonic", side_effect=[1.0, 1.05, 1.11]):
+            session._send_udp_if_due()
+            session._send_udp_if_due()
+            session._send_udp_if_due()
+        self.assertEqual(len(sockets[0].sent), 2)
+        payload = json.loads(sockets[0].sent[0][0])
+        self.assertEqual(payload["type"], "target_truth")
+        self.assertEqual(payload["source"], "simulation_truth")
+        self.assertIn("altitude_msl_m", payload)
+        self.assertIn("speed_m_s", payload)
+        self.assertNotIn("range_m", payload)
 
 
 if __name__ == "__main__":

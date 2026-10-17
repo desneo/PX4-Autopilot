@@ -24,9 +24,10 @@ while IFS= read -r pid; do add_pid "$pid"; done < <(
 	{
 		pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' || true
 		pgrep -f '(^|[ /])gz sim([ ]|$)' || true
-		pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' || true
+		pgrep -f '[g]imbal_bridge[.]py' || true
 		pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' || true
 		pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' || true
+		pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' || true
 	} | sort -nu
 )
 
@@ -57,4 +58,4 @@ for pid in "${pids[@]}"; do
 done
 
 rm -rf -- "$RUNTIME_DIR"
-echo "当前 PX4 SITL、Gazebo、吊仓网关、靶机与碰撞致损服务已停止。共享 RTSP 中继会在无视频路后自动退出。"
+echo "当前 PX4 SITL、Gazebo、吊仓网关、靶机、雷达与碰撞致损服务已停止。共享 RTSP 中继会在无视频路后自动退出。"

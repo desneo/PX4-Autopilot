@@ -103,11 +103,20 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(gui_properties["showDockButton"], "false")
         self.assertEqual(gui_properties["showCloseButton"], "false")
         self.assertEqual(gui_properties["showCollapseButton"], "false")
-        self.assertEqual(gui_properties["height"], "540")
+        self.assertEqual(gui_properties["height"], "700")
         anchors = target_control.find("./gz-gui/anchors")
         self.assertEqual(anchors.get("target"), "3D View")
         self.assertIsNotNone(anchors.find("./line[@own='right'][@target='right']"))
-        self.assertIsNotNone(anchors.find("./line[@own='bottom'][@target='bottom']"))
+        self.assertIsNotNone(anchors.find("./line[@own='top'][@target='top']"))
+        self.assertEqual(
+            target_control.findtext("radar_command_topic"),
+            "/scenario/02/radar/command",
+        )
+        radar = world.find("./model[@name='scenario02_radar']")
+        self.assertIsNotNone(radar)
+        self.assertEqual(radar.findtext("static"), "true")
+        self.assertEqual(radar.findtext("link/visual[@name='antenna']/pose"), "0 0 3.0 0 0 0")
+        self.assertIsNone(radar.find(".//collision"))
         trajectory = world.find("./plugin[@name='scenario02::TargetTrajectory']")
         self.assertIsNotNone(trajectory)
         self.assertEqual(
@@ -151,6 +160,7 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertIsNotNone(
             world.find("./plugin[@name='scenario02::CollisionMonitor']")
         )
+        self.assertIsNotNone(world.find("./model[@name='scenario02_radar']"))
 
     def test_rejects_aircraft_without_collision_geometry(self):
         model = self.make_model(1)

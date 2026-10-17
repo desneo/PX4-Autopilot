@@ -12,7 +12,7 @@ BRIDGE_PYTHON="${GIMBAL_PYTHON:-python3}"
 SCENARIO_GUI_DIR="${SCRIPT_DIR}/gui"
 COUNT=1
 GUI=0
-ENCODER=x264
+ENCODER=nvenc
 ADVERTISE_HOST=""
 WORLD=geo_32_217857_119_105878
 PARTITION=px4_scenario_02_rocket_two_axis_pod
@@ -22,7 +22,7 @@ TARGET_MAVLINK_SYSID=200
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder x264|nvenc]
+用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder nvenc]
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与两轴吊仓组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
@@ -31,7 +31,7 @@ usage() {
   -n, --count COUNT       飞机数量，1～10（默认：1）
       --gui               启动 Gazebo GUI
       --advertise-host IP 打印给远程客户端使用的本机地址
-      --encoder TYPE      吊仓视频编码器：x264 或 nvenc（默认：x264）
+      --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
@@ -98,8 +98,8 @@ if [[ ! $COUNT =~ ^[0-9]+$ ]] || ((COUNT < 1 || COUNT > 10)); then
 	echo "ERROR: 架数必须是 1～10 的整数" >&2
 	exit 2
 fi
-if [[ $ENCODER != x264 && $ENCODER != nvenc ]]; then
-	echo "ERROR: --encoder 只接受 x264 或 nvenc" >&2
+if [[ $ENCODER != nvenc ]]; then
+	echo "ERROR: 最新资产仓的 --encoder 只接受 nvenc" >&2
 	exit 2
 fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
@@ -122,9 +122,10 @@ fi
 
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
-	|| pgrep -f '[g]imbal_bridge[.]py.*--world geo_32_217857_119_105878' >/dev/null \
+	|| pgrep -f '[g]imbal_bridge[.]py' >/dev/null \
 	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
-	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
+	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null \
+	|| pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
 	echo "ERROR: 当前已有 PX4 SITL、Gazebo 或本场景吊仓网关在运行。" >&2
 	echo "请先执行 ${SCRIPT_DIR}/stop.sh。" >&2
 	exit 1
@@ -170,7 +171,8 @@ for required in "$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$ASSETS_ROOT/models/vehicles/xiaomotuo/model.sdf" \
 	"$ASSETS_ROOT/models/vehicles/xiaobianfu/model.sdf" \
 	"$SCRIPT_DIR/collision_manager.py" \
-	"$SCRIPT_DIR/target_manager.py"; do
+	"$SCRIPT_DIR/target_manager.py" \
+	"$SCRIPT_DIR/radar_manager.py"; do
 	[[ -f $required ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required}" >&2; exit 1; }
 done
 
@@ -204,7 +206,7 @@ if ((GUI)); then
 	cmake --build "$GUI_PLUGIN_DIR/build" -j"$(nproc)"
 fi
 
-python3 -c 'import numpy, gz.transport13, gz.msgs10.stringmsg_pb2'
+python3 -c 'import numpy, gz.transport13, gz.msgs10.stringmsg_pb2, gz.msgs10.pose_v_pb2'
 "$BRIDGE_PYTHON" -c 'import gi, gz.transport13; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
 
 if [[ -z $ADVERTISE_HOST ]]; then
@@ -387,6 +389,14 @@ if ((GUI)); then
 	start_process target_manager "${target_manager_command[@]}"
 	wait_for_log target_manager '靶机管理服务已就绪' 15 || exit 1
 
+	radar_manager_command=(python3 -u "$SCRIPT_DIR/radar_manager.py"
+		--world "$WORLD" --metadata "$ASSETS_ROOT/worlds/$WORLD/metadata.json")
+	printf '雷达管理服务 command: '
+	printf '%q ' "${radar_manager_command[@]}"
+	printf '\n'
+	start_process radar_manager "${radar_manager_command[@]}"
+	wait_for_log radar_manager '雷达管理服务已就绪' 15 || exit 1
+
 	printf 'Gazebo GUI command: '
 	printf '%q ' env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1 \
 		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
@@ -467,8 +477,8 @@ echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASS
 echo "飞机保持待命，不自动解锁或飞行。"
 echo "碰撞致损：      PX4 飞机碰撞后关闭全部电机；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
 if ((GUI)); then
-	echo "靶机控制：使用 Gazebo 界面右下角的“靶机控制”面板（场景航迹模式）。"
-	echo "靶机位置 JSON：由面板配置的地面站地址接收，频率 1 Hz。"
+	echo "雷达/靶机控制：使用 Gazebo 地图右侧的固定控制面板。"
+	echo "地面站 JSON：   雷达航迹默认 1 Hz（可设 1～2 Hz），靶机真值 10 Hz；共享面板地址。"
 	echo "QGC 靶机：      udp://${TARGET_QGC_ADDRESS}，SYSID=${TARGET_MAVLINK_SYSID}（只读轻量代理）。"
 fi
 echo "接口表：${RUNTIME_DIR}/interfaces.tsv"

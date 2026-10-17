@@ -17,6 +17,8 @@ TARGET_STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
 TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
 COLLISION_EVENT_TOPIC = "/scenario/02/collision/event"
+RADAR_COMMAND_TOPIC = "/scenario/02/radar/command"
+RADAR_STATUS_TOPIC = "/scenario/02/radar/status"
 
 
 def set_text(parent: ET.Element, tag: str, value: object) -> ET.Element:
@@ -139,7 +141,7 @@ def add_collision_systems(world: ET.Element) -> ET.Element:
 
 
 def add_target_control(world: ET.Element) -> ET.Element:
-    """只向运行副本加入 02 场景的靶机控制面板。"""
+    """只向运行副本加入 02 场景的雷达/靶机固定控制面板。"""
     gui = world.find("gui")
     if gui is None:
         gui = ET.SubElement(world, "gui", fullscreen="false")
@@ -155,9 +157,9 @@ def add_target_control(world: ET.Element) -> ET.Element:
     if not math.isfinite(default_altitude_m):
         raise ValueError("world 中心海拔必须为有限数值")
 
-    plugin = ET.SubElement(gui, "plugin", filename="TargetControl", name="靶机控制")
+    plugin = ET.SubElement(gui, "plugin", filename="TargetControl", name="场景控制")
     gz_gui = ET.SubElement(plugin, "gz-gui")
-    set_text(gz_gui, "title", "靶机控制")
+    set_text(gz_gui, "title", "场景控制")
     for value_type, key, value in (
         ("string", "state", "floating"),
         # 使用插件自己的固定标题栏，避免 Gazebo GzCard 标题栏的拖动行为。
@@ -167,7 +169,7 @@ def add_target_control(world: ET.Element) -> ET.Element:
         ("bool", "showCollapseButton", "false"),
         ("bool", "resizable", "false"),
         ("double", "width", "350"),
-        ("double", "height", "540"),
+        ("double", "height", "700"),
         ("double", "z", "2"),
     ):
         property_element = ET.SubElement(
@@ -176,11 +178,43 @@ def add_target_control(world: ET.Element) -> ET.Element:
         property_element.text = value
     anchors = ET.SubElement(gz_gui, "anchors", target="3D View")
     ET.SubElement(anchors, "line", own="right", target="right")
-    ET.SubElement(anchors, "line", own="bottom", target="bottom")
+    ET.SubElement(anchors, "line", own="top", target="top")
     set_text(plugin, "command_topic", TARGET_COMMAND_TOPIC)
     set_text(plugin, "status_topic", TARGET_STATUS_TOPIC)
+    set_text(plugin, "radar_command_topic", RADAR_COMMAND_TOPIC)
+    set_text(plugin, "radar_status_topic", RADAR_STATUS_TOPIC)
     set_text(plugin, "default_altitude_m", f"{default_altitude_m:.6f}")
     return plugin
+
+
+def add_radar_model(world: ET.Element) -> ET.Element:
+    """在 world 中心增加固定的 3 米雷达天线；不添加碰撞体。"""
+    old = world.find("./model[@name='scenario02_radar']")
+    if old is not None:
+        world.remove(old)
+    model = ET.SubElement(world, "model", name="scenario02_radar")
+    set_text(model, "static", "true")
+    set_text(model, "pose", "0 0 0 0 0 0")
+    link = ET.SubElement(model, "link", name="radar_link")
+
+    mast = ET.SubElement(link, "visual", name="mast")
+    set_text(mast, "pose", "0 0 1.5 0 0 0")
+    geometry = ET.SubElement(mast, "geometry")
+    cylinder = ET.SubElement(geometry, "cylinder")
+    set_text(cylinder, "radius", "0.08")
+    set_text(cylinder, "length", "3.0")
+
+    antenna = ET.SubElement(link, "visual", name="antenna")
+    set_text(antenna, "pose", "0 0 3.0 0 0 0")
+    geometry = ET.SubElement(antenna, "geometry")
+    sphere = ET.SubElement(geometry, "sphere")
+    set_text(sphere, "radius", "0.32")
+
+    for visual, color in ((mast, "0.25 0.25 0.25 1"), (antenna, "0.1 0.65 0.85 1")):
+        material = ET.SubElement(visual, "material")
+        set_text(material, "ambient", color)
+        set_text(material, "diffuse", color)
+    return model
 
 
 def add_target_trajectory(world: ET.Element) -> ET.Element:
@@ -233,6 +267,7 @@ def prepare(
         world.append(model)
 
     add_collision_systems(world)
+    add_radar_model(world)
 
     scene = world.find('./gui/plugin[@filename="MinimalScene"]')
     if scene is not None:
