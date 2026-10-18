@@ -24,6 +24,22 @@ bash scenarios/02_rocket_two_axis_pod/stop.sh
 
 `-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列。`GZ_IP=127.0.0.1` 只限制 Gazebo Transport 使用回环接口，不影响 MAVLink、吊仓 UDP 和 RTSP 的局域网访问。
 
+### WSL 图形环境
+
+WSL 下启动脚本默认设置 `GALLIUM_DRIVER=d3d12` 和
+`MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA`，使 Gazebo GUI 与无窗口相机使用
+NVIDIA GPU；已显式设置的环境变量优先。可用 `glxinfo -B` 检查渲染器，
+应显示 `D3D12 (NVIDIA ...)` 和 `Accelerated: yes`；`llvmpipe` 表示 CPU 软件渲染。
+
+中文界面和 SVG 图标需要安装字体与 Qt 组件：
+
+```bash
+sudo apt-get install fonts-noto-cjk libqt5svg5 mesa-utils
+sudo usermod -aG render,video "$USER"
+```
+
+加入设备访问组后，重新登录终端再启动场景。字体安装后需重新打开 GUI。
+
 未指定 `--advertise-host` 时，脚本读取系统主默认路由接口上的全局 IPv4；它不会使用 mihomo 等代理策略路由的 `198.18.0.0/15` 地址。若机器有多条默认路由，可显式传入 `--advertise-host 192.168.1.56`。
 
 ## 资产仓

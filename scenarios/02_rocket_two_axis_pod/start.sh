@@ -297,6 +297,13 @@ export GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
 export GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
 ((GUI)) && export GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH"
 
+# WSL 的 Mesa 可能默认选择 llvmpipe；GUI 和无窗口相机均使用 D3D12。
+if [[ -e /dev/dxg ]] && grep -qi microsoft /proc/sys/kernel/osrelease; then
+	export GALLIUM_DRIVER="${GALLIUM_DRIVER:-d3d12}"
+	export MESA_D3D12_DEFAULT_ADAPTER_NAME="${MESA_D3D12_DEFAULT_ADAPTER_NAME:-NVIDIA}"
+	echo "WSL 渲染配置：GALLIUM_DRIVER=${GALLIUM_DRIVER}，适配器=${MESA_D3D12_DEFAULT_ADAPTER_NAME}"
+fi
+
 start_process() {
 	local name=$1
 	shift
