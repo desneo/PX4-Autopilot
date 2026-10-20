@@ -2,6 +2,8 @@
 
 在资产仓的 `geo_32_217857_119_105878` world 中启动火箭穿越机与顶部两轴吊仓组合模型。所有飞机使用同一个 world，默认启动一架、不开启 Gazebo GUI，启动后保持待命，不自动解锁或飞行。
 
+当前组合模型总长 `590 mm`、质量 `5.00 kg`。每次启动从资产仓原生模型生成运行副本，继承质量、惯量、动力配置，以及装配生成器派生的重心参考、控制分配和 IMU/GPS 位置参数。
+
 ## 启动和停止
 
 ```bash
@@ -120,10 +122,10 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 场景默认启用确定性的 `damage-on-contact`，用于发现集群路径规划中的碰撞问题。致损服务直接调用对应 SITL 实例的 PX4 内置故障注入命令，将全部电机设为关闭；它不占用 MAVSDK UDP 端口，也不会改变外部控制程序的连接。
 
 - PX4 与 PX4：使用 Gazebo 原生碰撞体和接触检测；发生实际接触后，两架飞机都关闭全部电机。
-- PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND` 或 `AUTO_PRECLAND` 的正常降落接触被豁免，其他飞行中表面接触会关闭全部电机。
-- PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。监控器使用与模型尺寸匹配的简化包围盒判定相交，并按速度矢量差计算相对速度：`|V_px4 - V_target|`。相对速度 **大于或等于10 m/s** 才关闭 PX4 的全部电机；低于 `10 m/s` 只记录事件，不触发坠毁。
+- PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND`、`AUTO_PRECLAND`，或处于 `AUTO_RTL` 且当前有效位置设定点为 `LAND` 时，正常降落触地被豁免。RTL 的爬升、返航和盘旋阶段不豁免，其他飞行中表面接触仍关闭全部电机。降落豁免不适用于飞机之间或飞机与靶机的接触。
+- PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。**碰撞即损毁，不设置相对速度门槛，包括零相对速度接触。** 监控器从运行中的 PX4 模型读取各物理碰撞体的尺寸、中心和实时姿态，逐个与靶机的简化定向包围盒检查相交；支持俯仰、横滚、偏航和吊仓关节运动，不使用固定整机尺寸。圆柱、球等形状使用局部外接盒近似，盒角区域的判定仍有近似误差。相对速度 `|V_px4 - V_target|` 仅用于记录事件。
 
-PX4 与靶机达到致损条件后，靶机冻结在碰撞位置，状态变为“已碰撞”，立即停止航迹、10 Hz JSON 真值和虚拟 MAVLink 遥测，但不模拟自由落体。模型保留在 world 中，点击“终止靶机”后才清理。雷达若仍在运行，会按自身的航迹保持/丢失规则处理该目标。
+PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，状态变为“已碰撞”，立即停止航迹、10 Hz JSON 真值和虚拟 MAVLink 遥测，但不模拟自由落体。模型保留在 world 中，点击“终止靶机”后才清理。雷达若仍在运行，会按自身的航迹保持/丢失规则处理该目标。
 
 当前地理 world 的地面和高程结构统一包含在 `tile_*::terrain::ground` 网格碰撞体中，因此事件中不区分“地面”和“建筑物”，两者执行相同致损策略。重复接触不会重复注入故障。
 
@@ -133,7 +135,7 @@ PX4 与靶机达到致损条件后，靶机冻结在碰撞位置，状态变为�
 /tmp/px4-scenarios/02_rocket_two_axis_pod/logs/collision-events.jsonl
 ```
 
-每行是一个 JSON 对象，包含碰撞类型、仿真时间、飞机编号、相对速度、ENU/WGS84 位置、是否触发致损以及各 PX4 实例的故障注入结果。低速靶机碰撞会记录 `reason=relative_speed_below_10_m_s`，正常降落豁免会记录 `reason=normal_landing_mode`。
+每行是一个 JSON 对象，包含碰撞类型、仿真时间、飞机编号、相对速度、ENU/WGS84 位置、是否触发致损以及各 PX4 实例的故障注入结果。致损事件记录 `reason=collision_damage_policy`，直接降落豁免记录 `reason=normal_landing_mode`，RTL 最后降落阶段记录 `reason=rtl_landing_setpoint` 和当前设定点的有效标记、类型。
 
 ## 多机接口
 
@@ -156,6 +158,8 @@ PX4 与靶机达到致损条件后，靶机冻结在碰撞位置，状态变为�
 
 每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
+吊仓网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。
+
 最新资产仓的吊仓网关仅支持 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
 
 ## 测试
@@ -174,6 +178,9 @@ cmake -S scenarios/02_rocket_two_axis_pod/gui \
 cmake --build scenarios/02_rocket_two_axis_pod/gui/build
 ctest --test-dir scenarios/02_rocket_two_axis_pod/gui/build --output-on-failure
 
+# 独立 Gazebo 分区：零速碰撞、三维姿态、实际部件偏置与接触去重
+python3 scenarios/02_rocket_two_axis_pod/test_collision_integration.py
+
 # 使用独立 Gazebo 分区进行雷达端到端冒烟测试，不启动 PX4
 python3 scenarios/02_rocket_two_axis_pod/test_radar_integration.py \
   --metadata ../px4-gazebo-assets/worlds/geo_32_217857_119_105878/metadata.json
@@ -181,7 +188,13 @@ python3 scenarios/02_rocket_two_axis_pod/test_radar_integration.py \
 # 场景已经使用 --gui 启动后，联合验证 10 Hz 真值与 1 Hz 雷达航迹
 GZ_PARTITION=px4_scenario_02_rocket_two_axis_pod GZ_IP=127.0.0.1 \
   python3 scenarios/02_rocket_two_axis_pod/test_live_radar_target.py --duration 5
+
+# 双机场景：复用资产仓地面站客户端，验证双轴转动和逐机控制隔离；结束时回零
+../px4-gazebo-assets/.venv-linux/bin/python \
+  scenarios/02_rocket_two_axis_pod/test_gimbal_interfaces.py -n 2
 ```
+
+吊仓接口测试需要资产仓已配置的地面站 Python 环境，执行期间不要同时人工控制吊仓。视频身份与帧表绑定可复用资产仓的 `scenarios/geographic_rocket_two_axis_pod/check_rtsp_binding.py`，分别指定各机 ID、UDP 端口和输出目录；该工具只读取遥测与视频。
 
 启动场景后，可使用原生 MAVSDK 通过 `14280+i` 依次控制飞机完成 20 米见方的闭合航线，并验证实际水平位移、爬升、航线完成、返航和落地：
 

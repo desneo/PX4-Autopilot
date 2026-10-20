@@ -88,9 +88,7 @@ class PrepareWorldTest(unittest.TestCase):
             collision_monitor.findtext("event_topic"),
             "/scenario/02/collision/event",
         )
-        self.assertEqual(
-            collision_monitor.findtext("target_damage_speed_m_s"), "10.0"
-        )
+        self.assertIsNone(collision_monitor.find("target_damage_speed_m_s"))
         target_control = world.find("./gui/plugin[@filename='TargetControl']")
         self.assertIsNotNone(target_control)
         self.assertEqual(
@@ -190,6 +188,16 @@ class PrepareWorldTest(unittest.TestCase):
                 self.root / "run" / "world.sdf",
                 [(1, model)],
             )
+
+    def test_rejects_unsupported_target_collision_shape_before_start(self):
+        model = self.make_model(1)
+        tree = ET.parse(model)
+        geometry = tree.getroot().find(".//collision/geometry")
+        geometry.clear()
+        ET.SubElement(geometry, "mesh")
+        tree.write(model)
+        with self.assertRaisesRegex(ValueError, "不支持碰撞体形状"):
+            MODULE.load_model(1, model)
 
 
 if __name__ == "__main__":

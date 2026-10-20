@@ -2,10 +2,16 @@
 
 #include <array>
 #include <cmath>
+#include <optional>
 
 #include <gz/math/Pose3.hh>
-#include <gz/math/Vector2.hh>
 #include <gz/math/Vector3.hh>
+#include <sdf/Box.hh>
+#include <sdf/Capsule.hh>
+#include <sdf/Cylinder.hh>
+#include <sdf/Ellipsoid.hh>
+#include <sdf/Geometry.hh>
+#include <sdf/Sphere.hh>
 
 namespace scenario02
 {
@@ -15,38 +21,71 @@ struct OrientedBox
   gz::math::Vector3d halfExtents;
 };
 
+// 各物理碰撞体的局部外接盒；位姿由 Gazebo 的实际 link / joint 状态给出。
+inline std::optional<gz::math::Vector3d> CollisionHalfExtents(
+    const sdf::Geometry &_geometry)
+{
+  if (const auto *box = _geometry.BoxShape();
+      _geometry.Type() == sdf::GeometryType::BOX && box)
+    return box->Size() * 0.5;
+  if (const auto *cylinder = _geometry.CylinderShape();
+      _geometry.Type() == sdf::GeometryType::CYLINDER && cylinder)
+    return gz::math::Vector3d(
+        cylinder->Radius(), cylinder->Radius(), cylinder->Length() * 0.5);
+  if (const auto *sphere = _geometry.SphereShape();
+      _geometry.Type() == sdf::GeometryType::SPHERE && sphere)
+    return gz::math::Vector3d(sphere->Radius(), sphere->Radius(), sphere->Radius());
+  if (const auto *capsule = _geometry.CapsuleShape();
+      _geometry.Type() == sdf::GeometryType::CAPSULE && capsule)
+    return gz::math::Vector3d(capsule->Radius(), capsule->Radius(),
+        capsule->Length() * 0.5 + capsule->Radius());
+  if (const auto *ellipsoid = _geometry.EllipsoidShape();
+      _geometry.Type() == sdf::GeometryType::ELLIPSOID && ellipsoid)
+    return ellipsoid->Radii();
+  return std::nullopt;
+}
+
 inline bool Intersects(const OrientedBox &_a, const OrientedBox &_b)
 {
-  if (std::abs(_a.pose.Pos().Z() - _b.pose.Pos().Z()) >
-      _a.halfExtents.Z() + _b.halfExtents.Z())
-    return false;
-
-  const double yawA = _a.pose.Rot().Yaw();
-  const double yawB = _b.pose.Rot().Yaw();
-  const std::array<gz::math::Vector2d, 2> axesA{{
-      {std::cos(yawA), std::sin(yawA)},
-      {-std::sin(yawA), std::cos(yawA)},
+  const std::array<gz::math::Vector3d, 3> axesA{{
+      _a.pose.Rot().RotateVector(gz::math::Vector3d::UnitX),
+      _a.pose.Rot().RotateVector(gz::math::Vector3d::UnitY),
+      _a.pose.Rot().RotateVector(gz::math::Vector3d::UnitZ),
   }};
-  const std::array<gz::math::Vector2d, 2> axesB{{
-      {std::cos(yawB), std::sin(yawB)},
-      {-std::sin(yawB), std::cos(yawB)},
+  const std::array<gz::math::Vector3d, 3> axesB{{
+      _b.pose.Rot().RotateVector(gz::math::Vector3d::UnitX),
+      _b.pose.Rot().RotateVector(gz::math::Vector3d::UnitY),
+      _b.pose.Rot().RotateVector(gz::math::Vector3d::UnitZ),
   }};
-  const gz::math::Vector2d delta(
-      _b.pose.Pos().X() - _a.pose.Pos().X(),
-      _b.pose.Pos().Y() - _a.pose.Pos().Y());
+  const auto delta = _b.pose.Pos() - _a.pose.Pos();
 
-  const auto separated = [&](const gz::math::Vector2d &_axis)
+  const auto separated = [&](const gz::math::Vector3d &_axis)
   {
-    const double radiusA =
-        std::abs(_axis.Dot(axesA[0])) * _a.halfExtents.X() +
-        std::abs(_axis.Dot(axesA[1])) * _a.halfExtents.Y();
-    const double radiusB =
-        std::abs(_axis.Dot(axesB[0])) * _b.halfExtents.X() +
-        std::abs(_axis.Dot(axesB[1])) * _b.halfExtents.Y();
-    return std::abs(delta.Dot(_axis)) > radiusA + radiusB;
+    if (_axis.SquaredLength() < 1e-12)
+      return false;
+    double radiusA = 0.0;
+    double radiusB = 0.0;
+    for (std::size_t index = 0; index < 3; ++index)
+    {
+      radiusA += std::abs(_axis.Dot(axesA[index])) * _a.halfExtents[index];
+      radiusB += std::abs(_axis.Dot(axesB[index])) * _b.halfExtents[index];
+    }
+    return std::abs(delta.Dot(_axis)) >
+        radiusA + radiusB + 1e-9 * _axis.Length();
   };
 
-  return !separated(axesA[0]) && !separated(axesA[1]) &&
-      !separated(axesB[0]) && !separated(axesB[1]);
+  // 三维分离轴：两个盒子的六个面法线，加九个棱方向叉积。
+  for (const auto &axisA : axesA)
+  {
+    if (separated(axisA))
+      return false;
+    for (const auto &axisB : axesB)
+      if (separated(axisA.Cross(axisB)))
+        return false;
+  }
+  for (const auto &axisB : axesB)
+    if (separated(axisB))
+      return false;
+  return true;
 }
 }  // namespace scenario02

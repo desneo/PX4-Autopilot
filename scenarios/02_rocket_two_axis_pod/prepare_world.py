@@ -86,6 +86,16 @@ def load_model(aircraft_id: int, model_path: Path) -> ET.Element:
             f"飞机 {aircraft_id} 的吊仓话题应为 {expected_prefix}，实际为 {sorted(actual_prefixes)}"
         )
 
+    # 靶机交会使用各物理碰撞体的外接盒；不支持的形状应在启动前报错。
+    supported_shapes = {"box", "cylinder", "sphere", "capsule", "ellipsoid"}
+    for collision in model.findall(".//collision"):
+        geometry = collision.find("geometry")
+        shapes = list(geometry) if geometry is not None else []
+        if len(shapes) != 1 or shapes[0].tag not in supported_shapes:
+            raise ValueError(
+                f"靶机碰撞检测不支持碰撞体形状：{collision.get('name')}（{model_path}）"
+            )
+
     model = copy.deepcopy(model)
     absolute_resources(model, model_path)
     model.set("name", f"{MODEL_BASENAME}_{aircraft_id}")
@@ -136,7 +146,6 @@ def add_collision_systems(world: ET.Element) -> ET.Element:
     set_text(plugin, "event_topic", COLLISION_EVENT_TOPIC)
     set_text(plugin, "aircraft_prefix", f"{MODEL_BASENAME}_")
     set_text(plugin, "airborne_height_m", "1.0")
-    set_text(plugin, "target_damage_speed_m_s", "10.0")
     return plugin
 
 

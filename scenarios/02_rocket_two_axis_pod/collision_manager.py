@@ -16,8 +16,9 @@ import time
 
 
 COLLISION_TOPIC = "/scenario/02/collision/event"
-TARGET_DAMAGE_SPEED_M_S = 10.0
 NORMAL_LANDING_NAV_STATES = {18, 20}  # AUTO_LAND、AUTO_PRECLAND
+AUTO_RTL_NAV_STATE = 5
+LAND_SETPOINT_TYPE = 4
 EARTH_RADIUS_M = 6_371_000.0
 
 
@@ -34,6 +35,23 @@ def coordinate_offset(
 def parse_nav_state(output: str) -> int | None:
     match = re.search(r"(?m)^\s*nav_state:\s*(\d+)\s*$", output)
     return int(match.group(1)) if match else None
+
+
+def parse_current_setpoint(output: str) -> dict | None:
+    # listener 分别打印 previous / current / next，不能把下一航点的 LAND
+    # 当成已进入降落阶段；只读取当前有效设定点。
+    section = re.search(
+        r"(?ms)^[ \t]*current[ \t]+\(position_setpoint\):[ \t]*\n"
+        r"(.*?)(?=^[ \t]*(?:previous|next)[ \t]+\(position_setpoint\):|\Z)",
+        output,
+    )
+    if not section:
+        return None
+    valid = re.search(r"(?m)^[ \t]*valid:[ \t]*(True|False|true|false)[ \t]*$", section[1])
+    kind = re.search(r"(?m)^[ \t]*type:[ \t]*(\d+)[ \t]*$", section[1])
+    if not valid or not kind:
+        return None
+    return {"valid": valid[1].lower() == "true", "type": int(kind[1])}
 
 
 def validate_event(payload: object, aircraft_count: int) -> dict:
@@ -77,14 +95,14 @@ class Px4FailureController:
     def instance(aircraft_id: int) -> int:
         return aircraft_id - 1
 
-    def navigation_state(self, aircraft_id: int) -> int | None:
+    def _listen(self, aircraft_id: int, topic: str) -> str | None:
         try:
             result = subprocess.run(
                 [
                     str(self.listener_bin),
                     "--instance",
                     str(self.instance(aircraft_id)),
-                    "vehicle_status",
+                    topic,
                     "-n",
                     "1",
                 ],
@@ -96,7 +114,15 @@ class Px4FailureController:
             return None
         if result.returncode != 0:
             return None
-        return parse_nav_state(result.stdout + "\n" + result.stderr)
+        return result.stdout + "\n" + result.stderr
+
+    def navigation_state(self, aircraft_id: int) -> int | None:
+        output = self._listen(aircraft_id, "vehicle_status")
+        return parse_nav_state(output) if output is not None else None
+
+    def current_setpoint(self, aircraft_id: int) -> dict | None:
+        output = self._listen(aircraft_id, "position_setpoint_triplet")
+        return parse_current_setpoint(output) if output is not None else None
 
     def stop_all_motors(self, aircraft_id: int) -> tuple[bool, str]:
         command = [
@@ -177,22 +203,21 @@ class CollisionProcessor:
         collision_type = event["collision_type"]
         candidates = list(event["aircraft_ids"])
 
-        if (
-            collision_type == "px4_target"
-            and event["relative_speed_m_s"] < TARGET_DAMAGE_SPEED_M_S
-        ):
-            event["damage_triggered"] = False
-            event["reason"] = "relative_speed_below_10_m_s"
-            event["damage_results"] = []
-            self._write(event)
-            return event
-
         if collision_type == "px4_surface":
             nav_state = self.controller.navigation_state(candidates[0])
             event["navigation_state"] = nav_state
-            if nav_state in NORMAL_LANDING_NAV_STATES:
+            rtl_landing = False
+            if nav_state == AUTO_RTL_NAV_STATE:
+                setpoint = self.controller.current_setpoint(candidates[0])
+                event["current_position_setpoint"] = setpoint
+                rtl_landing = bool(
+                    setpoint is not None
+                    and setpoint["valid"]
+                    and setpoint["type"] == LAND_SETPOINT_TYPE
+                )
+            if nav_state in NORMAL_LANDING_NAV_STATES or rtl_landing:
                 event["damage_triggered"] = False
-                event["reason"] = "normal_landing_mode"
+                event["reason"] = "rtl_landing_setpoint" if rtl_landing else "normal_landing_mode"
                 event["damage_results"] = []
                 self._write(event)
                 return event
@@ -290,7 +315,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_shutdown)
     print(
         f"碰撞致损服务已就绪：topic={COLLISION_TOPIC} "
-        f"aircraft={args.aircraft_count} target_threshold=10m/s",
+        f"aircraft={args.aircraft_count} policy=damage-on-contact",
         flush=True,
     )
     manager.run()

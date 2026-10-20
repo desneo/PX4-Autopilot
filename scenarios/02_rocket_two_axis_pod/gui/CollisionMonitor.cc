@@ -22,7 +22,9 @@
 #include <gz/sim/Model.hh>
 #include <gz/sim/System.hh>
 #include <gz/sim/Util.hh>
+#include <gz/sim/components/Collision.hh>
 #include <gz/sim/components/ContactSensorData.hh>
+#include <gz/sim/components/Geometry.hh>
 #include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Name.hh>
 #include <gz/transport/Node.hh>
@@ -61,8 +63,6 @@ public:
     this->aircraftPrefix = _sdf->Get<std::string>(
         "aircraft_prefix", "rocket_two_axis_pod_").first;
     this->airborneHeight = _sdf->Get<double>("airborne_height_m", 1.0).first;
-    this->targetDamageSpeed = _sdf->Get<double>(
-        "target_damage_speed_m_s", 10.0).first;
     this->publisher = this->node.Advertise<gz::msgs::StringMsg>(this->eventTopic);
   }
 
@@ -185,7 +185,7 @@ public:
     }
     this->activeNative = std::move(currentNative);
 
-    this->CheckTargetIntersections(_info, byName);
+    this->CheckTargetIntersections(_info, byName, _ecm);
     this->previousPose.clear();
     for (const auto &[name, snapshot] : byName)
       this->previousPose.emplace(name, snapshot.pose);
@@ -244,9 +244,36 @@ private:
 
   void CheckTargetIntersections(
       const gz::sim::UpdateInfo &_info,
-      const std::map<std::string, Snapshot> &_models)
+      const std::map<std::string, Snapshot> &_models,
+      const gz::sim::EntityComponentManager &_ecm)
   {
-    std::map<std::string, bool> current;
+    if (std::none_of(_models.begin(), _models.end(),
+        [&](const auto &_item)
+        { return this->TargetHalfExtents(_item.first).has_value(); }))
+    {
+      this->activeTarget.clear();
+      return;
+    }
+
+    std::map<gz::sim::Entity, std::vector<OrientedBox>> aircraftBoxes;
+    for (const auto &[name, snapshot] : _models)
+      if (snapshot.aircraftId > 0)
+        aircraftBoxes.emplace(snapshot.entity, std::vector<OrientedBox>{});
+    _ecm.Each<gz::sim::components::Collision, gz::sim::components::Geometry>(
+        [&](const gz::sim::Entity &_entity,
+            const gz::sim::components::Collision *,
+            const gz::sim::components::Geometry *_geometry)
+        {
+          const auto aircraft = aircraftBoxes.find(this->ContainingModel(_entity, _ecm));
+          if (aircraft == aircraftBoxes.end())
+            return true;
+          const auto half = CollisionHalfExtents(_geometry->Data());
+          if (half)
+            aircraft->second.push_back({gz::sim::worldPose(_entity, _ecm), *half});
+          return true;
+        });
+
+    std::set<std::string> current;
     for (const auto &[targetName, target] : _models)
     {
       const auto targetHalf = this->TargetHalfExtents(targetName);
@@ -257,23 +284,19 @@ private:
         if (aircraft.aircraftId <= 0)
           continue;
         const std::string key = this->PairKey(targetName, aircraftName);
-        if (!Intersects({target.pose, *targetHalf},
-                        {aircraft.pose, {0.32, 0.32, 0.45}}))
+        const auto &boxes = aircraftBoxes.at(aircraft.entity);
+        if (std::none_of(boxes.begin(), boxes.end(), [&](const auto &_box)
+            { return Intersects({target.pose, *targetHalf}, _box); }))
+          continue;
+        current.insert(key);
+        if (this->activeTarget.count(key) != 0)
           continue;
         const double relativeSpeed =
             (target.velocity - aircraft.velocity).Length();
-        const bool damageCandidate = relativeSpeed >= this->targetDamageSpeed;
-        const auto previous = this->activeTarget.find(key);
-        const bool alreadyDamageCandidate =
-            previous != this->activeTarget.end() && previous->second;
-        current[key] = alreadyDamageCandidate || damageCandidate;
-        if (previous != this->activeTarget.end() &&
-            (alreadyDamageCandidate || !damageCandidate))
-          continue;
         this->Publish("px4_target", _info,
             (target.pose.Pos() + aircraft.pose.Pos()) * 0.5,
             {aircraft.aircraftId}, aircraft.name, target.name,
-            relativeSpeed, damageCandidate);
+            relativeSpeed, true);
       }
     }
     this->activeTarget = std::move(current);
@@ -318,12 +341,11 @@ private:
   std::string eventTopic;
   std::string aircraftPrefix;
   double airborneHeight{1.0};
-  double targetDamageSpeed{10.0};
   std::map<std::string, gz::math::Pose3d> previousPose;
   std::map<int, double> initialHeight;
   std::map<int, bool> airborne;
   std::set<std::string> activeNative;
-  std::map<std::string, bool> activeTarget;
+  std::set<std::string> activeTarget;
 };
 }  // namespace scenario02
 

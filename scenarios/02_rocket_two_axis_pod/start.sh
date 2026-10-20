@@ -451,11 +451,12 @@ for ((i = 0; i < COUNT; i++)); do
 	echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
 	echo "  吊仓视频：      ${rtsp_url}"
 	printf '  地面站 command: '
-	printf '%q ' env GIMBAL_PYTHON="$BRIDGE_PYTHON" bash \
+	printf '%q ' bash \
 		"$ASSETS_ROOT/models/gimbals/two_axis_pod/ground_station/run.sh" \
+		--no-manage-bridge \
 		--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
 		--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
-		--mount /two_axis_pod --decoder avdec --window-title "飞机${aircraft_id}吊仓"
+		--mount /two_axis_pod --decoder nvdec --window-title "飞机${aircraft_id}吊仓"
 	printf '\n'
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"

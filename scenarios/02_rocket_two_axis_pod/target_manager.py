@@ -23,7 +23,6 @@ STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
 TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
 COLLISION_EVENT_TOPIC = "/scenario/02/collision/event"
-TARGET_DAMAGE_SPEED_M_S = 10.0
 EARTH_RADIUS_M = 6_371_000.0
 MODEL_RULES = {
     "xiaomotuo": {"display": "小摩托", "speed": (25.0, 65.0)},
@@ -417,7 +416,7 @@ class TargetSession:
         self.truth_event.set()
 
     def on_collision(self, relative_speed: float) -> None:
-        if relative_speed < TARGET_DAMAGE_SPEED_M_S or self.collided_event.is_set():
+        if self.collided_event.is_set():
             return
         self.collided_event.set()
         self.manager.publish_trajectory("STOP")
@@ -613,7 +612,7 @@ class TargetManager:
                 return
             relative_speed = float(payload["relative_speed_m_s"])
             target_model = str(payload.get("entity_2", ""))
-            if not math.isfinite(relative_speed):
+            if not math.isfinite(relative_speed) or relative_speed < 0:
                 return
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return
