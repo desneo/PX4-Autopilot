@@ -13,6 +13,8 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -64,6 +66,27 @@ public:
         "aircraft_prefix", "rocket_two_axis_pod_").first;
     this->airborneHeight = _sdf->Get<double>("airborne_height_m", 1.0).first;
     this->publisher = this->node.Advertise<gz::msgs::StringMsg>(this->eventTopic);
+    if (_sdf->HasElement("mesh_collision"))
+    {
+      auto item = _sdf->FindElement("mesh_collision");
+      while (item)
+      {
+        for (const auto *field : {"model", "link", "collision", "center", "half_extents"})
+          if (!item->HasElement(field))
+            throw std::runtime_error(std::string("mesh_collision missing ") + field);
+        const auto model = item->Get<std::string>("model");
+        const auto link = item->Get<std::string>("link");
+        const auto collision = item->Get<std::string>("collision");
+        LocalBounds bounds{item->Get<gz::math::Vector3d>("center"),
+                           item->Get<gz::math::Vector3d>("half_extents")};
+        if (model.empty() || link.empty() || collision.empty() ||
+            !bounds.center.IsFinite() || !bounds.halfExtents.IsFinite() ||
+            bounds.halfExtents.X() <= 0 || bounds.halfExtents.Y() <= 0 || bounds.halfExtents.Z() <= 0 ||
+            !this->meshBounds.emplace(std::make_tuple(model, link, collision), bounds).second)
+          throw std::runtime_error("invalid or duplicate mesh_collision bounds");
+        item = item->GetNextElement("mesh_collision");
+      }
+    }
   }
 
   void PostUpdate(const gz::sim::UpdateInfo &_info,
@@ -247,13 +270,9 @@ private:
       const std::map<std::string, Snapshot> &_models,
       const gz::sim::EntityComponentManager &_ecm)
   {
-    if (std::none_of(_models.begin(), _models.end(),
+    const bool targetPresent = std::any_of(_models.begin(), _models.end(),
         [&](const auto &_item)
-        { return this->TargetHalfExtents(_item.first).has_value(); }))
-    {
-      this->activeTarget.clear();
-      return;
-    }
+        { return this->TargetHalfExtents(_item.first).has_value(); });
 
     std::map<gz::sim::Entity, std::vector<OrientedBox>> aircraftBoxes;
     for (const auto &[name, snapshot] : _models)
@@ -267,12 +286,38 @@ private:
           const auto aircraft = aircraftBoxes.find(this->ContainingModel(_entity, _ecm));
           if (aircraft == aircraftBoxes.end())
             return true;
-          const auto half = CollisionHalfExtents(_geometry->Data());
-          if (half)
-            aircraft->second.push_back({gz::sim::worldPose(_entity, _ecm), *half});
+          LocalBounds bounds;
+          if (_geometry->Data().Type() == sdf::GeometryType::MESH)
+          {
+            const auto *modelName = _ecm.Component<gz::sim::components::Name>(aircraft->first);
+            const auto *linkName = _ecm.Component<gz::sim::components::Name>(_ecm.ParentEntity(_entity));
+            const auto *collisionName = _ecm.Component<gz::sim::components::Name>(_entity);
+            if (!modelName || !linkName || !collisionName)
+              throw std::runtime_error("mesh collision missing model/link/collision identity");
+            const auto found = this->meshBounds.find(std::make_tuple(
+                modelName->Data(), linkName->Data(), collisionName->Data()));
+            if (found == this->meshBounds.end())
+              throw std::runtime_error("mesh collision has no validated startup bounds: " +
+                  modelName->Data() + "::" + linkName->Data() + "::" + collisionName->Data());
+            bounds = found->second;
+          }
+          else
+          {
+            const auto half = CollisionHalfExtents(_geometry->Data());
+            if (!half)
+              throw std::runtime_error("unsupported aircraft collision geometry");
+            bounds = {gz::math::Vector3d::Zero, *half};
+          }
+          if (targetPresent)
+            aircraft->second.push_back(WorldCollisionBox(gz::sim::worldPose(_entity, _ecm), bounds));
           return true;
         });
 
+    if (!targetPresent)
+    {
+      this->activeTarget.clear();
+      return;
+    }
     std::set<std::string> current;
     for (const auto &[targetName, target] : _models)
     {
@@ -346,6 +391,7 @@ private:
   std::map<int, bool> airborne;
   std::set<std::string> activeNative;
   std::set<std::string> activeTarget;
+  std::map<std::tuple<std::string, std::string, std::string>, LocalBounds> meshBounds;
 };
 }  // namespace scenario02
 

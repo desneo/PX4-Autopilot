@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -39,6 +41,7 @@ class PrepareWorldTest(unittest.TestCase):
         directory = self.root / f"generated_{aircraft_id}" / "rocket_two_axis_pod"
         (directory / "meshes").mkdir(parents=True)
         (directory / "meshes" / "body.stl").write_text("mesh")
+        (directory / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 0.24 0 0 0"}}))
         path = directory / "model.sdf"
         path.write_text(
             "<sdf version='1.9'><model name='rocket_two_axis_pod'><static>false</static>"
@@ -53,6 +56,111 @@ class PrepareWorldTest(unittest.TestCase):
         )
         return path
 
+    def add_terrain_tile(self):
+        path = self.root / "world" / "assets" / "tile.dae"
+        path.write_text("""<COLLADA><asset><unit meter='1'/><up_axis>Z_UP</up_axis></asset>
+          <library_geometries><geometry id='terrain'><mesh><source id='positions'>
+          <float_array id='positions-array' count='12'>0 0 0 20 0 -2 0 20 -4 20 20 -6</float_array>
+          <technique_common><accessor source='#positions-array' count='4' stride='3'/></technique_common></source>
+          <vertices id='vertices'><input semantic='POSITION' source='#positions'/></vertices>
+          <triangles count='2'><input semantic='VERTEX' source='#vertices' offset='0'/><p>0 1 2 1 3 2</p></triangles>
+          </mesh></geometry></library_geometries><library_visual_scenes><visual_scene id='Scene'>
+          <node id='terrain-node'><instance_geometry url='#terrain'/></node></visual_scene></library_visual_scenes>
+          <scene><instance_visual_scene url='#Scene'/></scene></COLLADA>""")
+        source = self.root / "world" / "world.sdf"
+        tree = ET.parse(source)
+        model = ET.SubElement(tree.getroot().find("world"), "model", name="tile_test")
+        ET.SubElement(model, "static").text = "true"
+        ET.SubElement(model, "pose").text = "0 0 2.5 0 0 0"
+        mesh = ET.SubElement(ET.SubElement(ET.SubElement(ET.SubElement(model, "link", name="terrain"), "collision", name="ground"), "geometry"), "mesh")
+        ET.SubElement(mesh, "uri").text = str(path)
+        tree.write(source)
+        return source, path
+
+    def test_ground_relative_spawn_and_marker_use_interpolated_absolute_height(self):
+        source, _ = self.add_terrain_tile()
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(source, output, [(1, self.make_model(1)), (2, self.make_model(2))])
+        world = ET.parse(output).getroot().find("world")
+        for number, expected_z in ((1, 1.215), (2, .715)):
+            model_z = float(world.findtext(f"model[@name='rocket_two_axis_pod_{number}']/pose").split()[2])
+            marker_z = float(world.findtext(f"model[@name='POD_LOCATION_MARKER_{number}']/pose").split()[2])
+            self.assertAlmostEqual(model_z, expected_z)
+            self.assertEqual(marker_z, model_z)
+
+    def test_missing_unsupported_or_uncovered_real_terrain_never_falls_back_to_zero(self):
+        source, path = self.add_terrain_tile()
+        world = ET.parse(source).getroot().find("world")
+        with self.assertRaisesRegex(ValueError, "覆盖范围"):
+            MODULE.terrain_heights(world, [(100, 100)])
+        original = path.read_text()
+        path.write_text(original.replace("Z_UP", "Y_UP"))
+        with self.assertRaisesRegex(ValueError, "米制Z_UP"):
+            MODULE.terrain_heights(world, [(5, 5)])
+        path.unlink()
+        with self.assertRaisesRegex(ValueError, "存在的绝对路径DAE"):
+            MODULE.terrain_heights(world, [(5, 5)])
+        world.find("model[@name='tile_test']").set("name", "unknown_physical_terrain")
+        with self.assertRaisesRegex(ValueError, "不能假定地面为0"):
+            MODULE.terrain_heights(world, [(5, 5)])
+
+    def test_actual_world_dual_spawn_aligns_normal_and_inherits_five_mm_tail_gap(self):
+        assets = HERE.parents[2] / "px4-gazebo-assets"
+        source = assets / "worlds/geo_32_217857_119_105878/world.sdf"
+        if not source.is_file():
+            self.skipTest("实际资产world未配置")
+        output = self.root / "run" / "world.sdf"
+        models = [(number, self.make_model(number)) for number in (1, 2)]
+        for _, path in models:
+            (path.parent / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 0.215 0 0 0"}}))
+        MODULE.prepare(source, output, models)
+        world = ET.parse(output).getroot().find("world")
+        vehicle = ET.parse(assets / "models/vehicles/rocket_racing_quad/model.sdf").getroot().find("model")
+        body = vehicle.find("link[@name='base_link']/collision[@name='body_collision']")
+        tail_z = float(body.findtext("pose").split()[2])-float(body.findtext("geometry/cylinder/length"))/2
+        for number, ground in ((1, -.251526112), (2, -.483718752)):
+            pose = [float(v) for v in world.findtext(f"model[@name='rocket_two_axis_pod_{number}']/pose").split()]
+            self.assertAlmostEqual(pose[2], ground+.215, places=10)
+            _, normal = MODULE.terrain_surfaces(world, [(pose[0], pose[1])])[0]
+            roll, pitch, yaw = pose[3:]
+            self.assertEqual(yaw, 0.0)
+            up = (math.sin(pitch)*math.cos(roll), -math.sin(roll), math.cos(pitch)*math.cos(roll))
+            for actual, expected in zip(up, normal):
+                self.assertAlmostEqual(actual, expected, places=10)
+            # 机体沿法线倾转，尾底圆面平行三角面；竖直原点高度须乘nz。
+            normal_gap = .215*normal[2]+tail_z
+            self.assertAlmostEqual(normal_gap, .005, delta=.0003)
+            marker_z = float(world.findtext(f"model[@name='POD_LOCATION_MARKER_{number}']/pose").split()[2])
+            self.assertEqual(marker_z, pose[2])
+
+    def test_spawn_height_inherits_each_model_and_explicit_override_wins(self):
+        first, second = self.make_model(1), self.make_model(2)
+        (first.parent / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 .215 0 0 0"}}))
+        (second.parent / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 .230 0 0 0"}}))
+        self.assertEqual(MODULE.spawn_altitude(first, None), .215)
+        self.assertEqual(MODULE.spawn_altitude(second, None), .230)
+        self.assertEqual(MODULE.spawn_altitude(first, .4), .4)
+        (first.parent / "parameters.json").unlink()
+        with self.assertRaisesRegex(ValueError, "simulation.spawn_pose"):
+            MODULE.spawn_altitude(first, None)
+        self.assertEqual(MODULE.spawn_altitude(first, .24), .24)
+        for bad in (0, -1, float("nan"), float("inf")):
+            with self.subTest(height=bad), self.assertRaises(ValueError):
+                MODULE.spawn_altitude(first, bad)
+
+    def test_slope_normal_is_upward_and_pose_yaw_remains_zero(self):
+        source, _ = self.add_terrain_tile()
+        world = ET.parse(source).getroot().find("world")
+        height, normal = MODULE.terrain_surfaces(world, [(5, 5)])[0]
+        self.assertAlmostEqual(height, 1.0)
+        length = math.sqrt(1.05)
+        for actual, expected in zip(normal, (.1/length, .2/length, 1/length)):
+            self.assertAlmostEqual(actual, expected)
+        roll, pitch = MODULE.ground_roll_pitch(normal)
+        up = (math.sin(pitch)*math.cos(roll), -math.sin(roll), math.cos(pitch)*math.cos(roll))
+        for actual, expected in zip(up, normal):
+            self.assertAlmostEqual(actual, expected)
+
     def test_two_aircraft_get_unique_names_topics_and_grid_poses(self):
         output = self.root / "run" / "world.sdf"
         MODULE.prepare(
@@ -65,8 +173,14 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(world.get("name"), "geo_32_217857_119_105878")
         first = world.find("model[@name='rocket_two_axis_pod_1']")
         second = world.find("model[@name='rocket_two_axis_pod_2']")
-        self.assertEqual(first.findtext("pose"), "0 0 0.24 0 0 0")
-        self.assertEqual(second.findtext("pose"), "5 0 0.24 0 0 0")
+        self.assertEqual(first.findtext("pose"), "5.25 5 0.24 0 0 0")
+        self.assertEqual(second.findtext("pose"), "10.25 5 0.24 0 0 0")
+        for number in (1, 2):
+            marker = world.find(f"model[@name='POD_LOCATION_MARKER_{number}']")
+            self.assertIsNotNone(marker)
+            self.assertFalse(marker.findall(".//collision"))
+        # 雷达仍位于世界中心，飞机出生点不进入雷达杆/相位中心。
+        self.assertEqual(world.findtext("model[@name='scenario02_radar']/pose"), "0 0 0 0 0 0")
         self.assertEqual(
             first.findtext(".//command_topic"), "/uav_1/pod/command"
         )
@@ -194,7 +308,7 @@ class PrepareWorldTest(unittest.TestCase):
         tree = ET.parse(model)
         geometry = tree.getroot().find(".//collision/geometry")
         geometry.clear()
-        ET.SubElement(geometry, "mesh")
+        ET.SubElement(geometry, "heightmap")
         tree.write(model)
         with self.assertRaisesRegex(ValueError, "不支持碰撞体形状"):
             MODULE.load_model(1, model)

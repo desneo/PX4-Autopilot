@@ -24,7 +24,11 @@ bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 \
 bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列。`GZ_IP=127.0.0.1` 只限制 Gazebo Transport 使用回环接口，不影响 MAVLink、吊仓 UDP 和 RTSP 的局域网访问。
+`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。
+
+每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
+
+地形采用当前world的米制Z_UP、平移tile、单平铺实例DAE三角面，缺失、不支持或格点未被地形覆盖时启动报错；世界中心雷达保持在 `(0,0)`，出生点和镜头不会位于雷达杆内部。`GZ_IP=127.0.0.1` 只限制 Gazebo Transport 使用回环接口，不影响 MAVLink、吊仓 UDP 和 RTSP 的局域网访问。
 
 ### WSL 图形环境
 
@@ -63,6 +67,21 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
 ```
 
 脚本会增量构建 PX4 SITL、两轴吊仓插件和本场景的碰撞监控插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动靶机和雷达管理服务。
+
+## 吊仓姿态与定位
+
+吊仓沿用新CAD原始零位，镜头朝机体 +Z；外轴 yaw 绕水平 −X、范围±60°，内轴 pitch 绕随动 −Y、范围−80°～+30°，运动链为 `Rx(-yaw) Ry(-pitch)`，协议 v6、`motion_head_joint`。外轴穿过球心，球心不随外轴公转。机械 yaw 不是绕竖直轴的水平 pan；机体倾转后，两轴和可达域随机体变化。
+
+水平安装时，yaw=0、pitch=−80°的前向光轴仍高于水平约10°。默认2 km来源距离、world中心海拔加100 m的靶机，其初始仰角约3°；近距、更高目标或载机倾转时，应依据实际机械可达域和罩壳遮挡检查图像覆盖。雷达检出与靶机真值输出不表示该方向已能由吊仓镜头锁定；当前入口不承诺任意方向跟踪。
+
+定位箭头的Z随该机地形插值后的出生绝对Z设置。每架飞机西侧设置橙黄色、无碰撞的 `POD_LOCATION_MARKER_i` 定位箭头，箭头约在该机出生原点Z上方0.35 m处，指向顶部吊仓附近。可在实体树搜索 `rocket_two_axis_pod_i` 或 `POD_LOCATION_MARKER_i`，再使用“飞机定位与跟随”抵近。浏览相机近裁剪距离为0.005 m；近景缩放时将鼠标指向实体表面，避免以远处背景作为缩放参考，右键缓慢拖动微调。浏览相机和吊仓视频相机分别配置。厘米级部件可先将浏览相机灵敏度设为0.1，再按场景尺度调整；该服务同时影响缩放、平移和旋转，需在GUI服务就绪后、同一Gazebo分区执行，每次重启GUI后重新设置：
+
+```bash
+GZ_PARTITION=px4_scenario_02_rocket_two_axis_pod GZ_IP=127.0.0.1 \
+  gz service -s /gui/camera/view_control/sensitivity \
+  --reqtype gz.msgs.Double --reptype gz.msgs.Boolean \
+  --timeout 3000 --req 'data: 0.1'
+```
 
 ## 雷达
 
@@ -123,7 +142,9 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 
 - PX4 与 PX4：使用 Gazebo 原生碰撞体和接触检测；发生实际接触后，两架飞机都关闭全部电机。
 - PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND`、`AUTO_PRECLAND`，或处于 `AUTO_RTL` 且当前有效位置设定点为 `LAND` 时，正常降落触地被豁免。RTL 的爬升、返航和盘旋阶段不豁免，其他飞行中表面接触仍关闭全部电机。降落豁免不适用于飞机之间或飞机与靶机的接触。
-- PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。**碰撞即损毁，不设置相对速度门槛，包括零相对速度接触。** 监控器从运行中的 PX4 模型读取各物理碰撞体的尺寸、中心和实时姿态，逐个与靶机的简化定向包围盒检查相交；支持俯仰、横滚、偏航和吊仓关节运动，不使用固定整机尺寸。圆柱、球等形状使用局部外接盒近似，盒角区域的判定仍有近似误差。相对速度 `|V_px4 - V_target|` 仅用于记录事件。
+- PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。**碰撞即损毁，不设置相对速度门槛，包括零相对速度接触。** 监控器从运行中的 PX4 模型读取各物理碰撞体的尺寸、中心和实时姿态，逐个与靶机的简化定向包围盒检查相交；支持俯仰、横滚、偏航和吊仓关节运动，不使用固定整机尺寸。圆柱、球等形状使用局部外接盒近似。当前9个CAD网格碰撞体的实际DAE顶点、实例节点变换、米制单位与mesh缩放在生成世界时读取，分别保存局部包围盒中心和半尺寸；运行时将局部中心经该collision的实时世界姿态变换，随载机和活动关节运动。物理mesh和原生接触传感器完整保留，不以这些检测盒替换。检测盒包含网格空腔及盒角，因此靶机交会判定仍是保守近似。相对速度 `|V_px4 - V_target|` 仅用于记录事件。
+
+mesh检测配置以实际 `model/link/collision` 唯一键绑定。当前支持资产仓导出的具备有效法线的Z_UP、三角面、平铺实例节点DAE，以及节点平移、旋转、缩放和仿射矩阵；支持非单位mesh缩放与非零局部中心。缺失、空、非有限或退化网格、未知格式、其他up_axis、嵌套节点、submesh选择或重置中心等情况在生成世界前明确拒绝。插件配置缺失或重复同样报错，不静默忽略碰撞体。
 
 PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，状态变为“已碰撞”，立即停止航迹、10 Hz JSON 真值和虚拟 MAVLink 遥测，但不模拟自由落体。模型保留在 world 中，点击“终止靶机”后才清理。雷达若仍在运行，会按自身的航迹保持/丢失规则处理该目标。
 
@@ -164,11 +185,15 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 ## 测试
 
+当前新组合飞机的双机接口、视频隔离、原生MAVSDK航线与落地验证结果见[验证报告](docs/validation.md)；数据、版本指纹和原始证据包位于 `docs/`。
+
 ```bash
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_target_manager.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_radar_manager.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_collision_manager.py
+python3 -m unittest scenarios/02_rocket_two_axis_pod/test_mesh_collision_bounds.py
+python3 -m unittest scenarios/02_rocket_two_axis_pod/test_gimbal_validation_math.py
 bash -n scenarios/02_rocket_two_axis_pod/start.sh
 bash -n scenarios/02_rocket_two_axis_pod/stop.sh
 
@@ -180,6 +205,9 @@ ctest --test-dir scenarios/02_rocket_two_axis_pod/gui/build --output-on-failure
 
 # 独立 Gazebo 分区：零速碰撞、三维姿态、实际部件偏置与接触去重
 python3 scenarios/02_rocket_two_axis_pod/test_collision_integration.py
+
+# 独立 Gazebo 分区：当前9个CAD mesh、局部中心、节点变换及活动关节交会
+python3 scenarios/02_rocket_two_axis_pod/test_mesh_collision_integration.py
 
 # 使用独立 Gazebo 分区进行雷达端到端冒烟测试，不启动 PX4
 python3 scenarios/02_rocket_two_axis_pod/test_radar_integration.py \

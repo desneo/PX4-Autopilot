@@ -15,6 +15,12 @@
 
 namespace scenario02
 {
+struct LocalBounds
+{
+  gz::math::Vector3d center;
+  gz::math::Vector3d halfExtents;
+};
+
 struct OrientedBox
 {
   gz::math::Pose3d pose;
@@ -43,6 +49,14 @@ inline std::optional<gz::math::Vector3d> CollisionHalfExtents(
       _geometry.Type() == sdf::GeometryType::ELLIPSOID && ellipsoid)
     return ellipsoid->Radii();
   return std::nullopt;
+}
+
+inline OrientedBox WorldCollisionBox(
+    const gz::math::Pose3d &_collisionPose, const LocalBounds &_bounds)
+{
+  auto pose = _collisionPose;
+  pose.Pos() += pose.Rot().RotateVector(_bounds.center);
+  return {pose, _bounds.halfExtents};
 }
 
 inline bool Intersects(const OrientedBox &_a, const OrientedBox &_b)

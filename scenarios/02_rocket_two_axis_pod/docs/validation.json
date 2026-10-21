@@ -1,0 +1,3104 @@
+{
+  "status": "passed",
+  "date": "2026-10-21",
+  "scenario": "PX4-Autopilot/scenarios/02_rocket_two_axis_pod",
+  "entry_point": "bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 --gui --advertise-host 127.0.0.1",
+  "assets_commit": "5a29c7eef09a078fdae721a376dd2101c9832d73",
+  "px4_repo_head": "f5dfb30c87a037a67646be7aaed3c3fa520257fc",
+  "runtime_world_sha256": "ea8c2e40e61dfd4041cc88c7b58622e9db0638d1ee687f1fad8762d0af270adc",
+  "snapshot": {
+    "captured_at_unix_s": 1792593452.0874672,
+    "assets_commit": "5a29c7eef09a078fdae721a376dd2101c9832d73",
+    "px4_commit": "f5dfb30c87a037a67646be7aaed3c3fa520257fc",
+    "scene_source_sha256": {
+      "scenarios/02_rocket_two_axis_pod/test_mesh_collision_integration.py": "76583f4e8b7224269e7d24dec29d390c5333949edf8ebb83714f09b6735f66dc",
+      "scenarios/02_rocket_two_axis_pod/test_live_radar_target.py": "a7f45051156cdde3cdff255ec5c2fa8098ca54a7a135ed24eb0ccdce5b62596e",
+      "scenarios/02_rocket_two_axis_pod/test_target_manager.py": "c4254db48cc02b11ef09d4d16ea56b1e08e4fcaac71f7bb67b41e7b40eeaa230",
+      "scenarios/02_rocket_two_axis_pod/test_collision_integration.py": "3f12439377d3c28eb0fe21319800253a78bfd3d6eeacd362b0fbd4def98c2791",
+      "scenarios/02_rocket_two_axis_pod/test_radar_manager.py": "dbd95f1490108a06d668433571f127ddce1e66d993f3395f43c395c9e3ce9acb",
+      "scenarios/02_rocket_two_axis_pod/test_radar_integration.py": "1ececf1d8de5fca8104d938b098042ba40f5fc5f956c3e91e584fa4366e434b9",
+      "scenarios/02_rocket_two_axis_pod/start.sh": "68ad3feea44c6f87985eb0be9d1034254d5378117c69eb3cca6f8419a6b217ec",
+      "scenarios/02_rocket_two_axis_pod/test_collision_manager.py": "bd930ccba67e814676572c319423846b1faff970e9a6f71f9a4283834293f7ad",
+      "scenarios/02_rocket_two_axis_pod/test_mesh_collision_bounds.py": "25ea49537538b85ad5ce6ebfeb1c05138636fc61707245f2198468a552048cf2",
+      "scenarios/02_rocket_two_axis_pod/collision_manager.py": "114b236e8894cf6251939bb7f7b791df5327b4923c2830910533ba00348baf4c",
+      "scenarios/02_rocket_two_axis_pod/test_gimbal_interfaces.py": "0ea5394936fbf33b37b34897501b576216dd595f10fda7215e51bb06f7c59491",
+      "scenarios/02_rocket_two_axis_pod/test_gimbal_validation_math.py": "494cddd9d041d42e2197e2e1a622d9cabb107d1ecfc04a4f5b3fd88a3568f1b8",
+      "scenarios/02_rocket_two_axis_pod/prepare_world.py": "34bd4abf165546abc0c2faf82c49caedb8c116b2568bc4fa4b7ee97c6ac2b21a",
+      "scenarios/02_rocket_two_axis_pod/stop.sh": "a168aaad10bd642ed60e4f309e7796eb1b14d89109d5a5fdeffb5418f6a38237",
+      "scenarios/02_rocket_two_axis_pod/test_prepare_world.py": "f293cd0813b6f10038e397f98f88cc113cd50aefc08b41bb28cefa0aa5eed1eb",
+      "scenarios/02_rocket_two_axis_pod/target_manager.py": "2ff92dcf89d22e7fbb2f2e56526356273c24ced934405251ae72923e3fcbbb1f",
+      "scenarios/02_rocket_two_axis_pod/test_mavsdk_route.sh": "68f3c1562d849bd13d0f512a3e199e4aba8f4e072830c9c1703e1eb99d0a68ec",
+      "scenarios/02_rocket_two_axis_pod/radar_manager.py": "9f351298d82b2040aca6578ce0bfc40cf2c3b8ad4b65a473a6724ae0a001ea8e",
+      "scenarios/02_rocket_two_axis_pod/build_mavsdk_route_test.sh": "1d9420ab46ec13a97cd06861bf7d612d91c6a67930397b2f97d6f57cc77e146e",
+      "scenarios/02_rocket_two_axis_pod/gui/TargetControl_test.cc": "c86e43f46b01d0674b23247b044d0e0e659e59f51a93ac2f14e6f55d612ce80b",
+      "scenarios/02_rocket_two_axis_pod/gui/CollisionMonitor.cc": "ded02aa37d6229f8ce02244f45106794ca11102f5c742b3519928ef112c51bd7",
+      "scenarios/02_rocket_two_axis_pod/gui/TargetControl.hh": "00aea96557842c2e41aec9088578725c830999556a1f10a5ca5f64ef0033afac",
+      "scenarios/02_rocket_two_axis_pod/gui/CollisionGeometry_test.cc": "b4eb72f3f2efa3fcd4bcf70d0d309f24eaff500fff8eb1eb2ac682d113fcc125",
+      "scenarios/02_rocket_two_axis_pod/gui/TargetTrajectory.cc": "10f36ddf921138aa71c2404bc42c46464a8307f1d2ab70d2c04c18f29777b58d",
+      "scenarios/02_rocket_two_axis_pod/gui/TargetControl.cc": "b67bd7343924330ffd9c87725b4d4ecf54eed27cd2eed58b24adb7c81619321c",
+      "scenarios/02_rocket_two_axis_pod/gui/CollisionGeometry.hh": "60bdfe14bf52399e360dc81675cdbf21ab5b55f7248a2b9915585c8a3999285e"
+    },
+    "binary_sha256": {
+      "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/controller/build/lib/libgz-two-axis-pod-controller.so": "8c817e0cdf119b98e36df8590200d85b99385cd2b066899fe73b0fa78c48a332",
+      "/home/aeroarx/zsh/PX4-Autopilot/scenarios/02_rocket_two_axis_pod/gui/build/target-system-plugins/libCollisionMonitor.so": "b876b779c6dba603695060895665382ae69f312ae5dc563f5bd12b24f44801ae",
+      "/home/aeroarx/zsh/PX4-Autopilot/scenarios/02_rocket_two_axis_pod/gui/build/target-system-plugins/libTargetTrajectory.so": "41b3fa5889feb407af2822431cd32eb184cbd9058a27d6c26a9f2e4e5bf75377",
+      "/home/aeroarx/zsh/PX4-Autopilot/build/px4_sitl_default/bin/px4": "34dbae848195b32d18510e4f103ba3dc9cd2752545d7f80f235ef4b9c0ac80d7"
+    },
+    "runtime_world_sha256": "ea8c2e40e61dfd4041cc88c7b58622e9db0638d1ee687f1fad8762d0af270adc",
+    "aircraft": [
+      {
+        "aircraft_id": 1,
+        "runtime_manifest": {
+          "mount_z_m": 0.28900000000000003,
+          "retained_body_length_m": 0.499,
+          "body_mass_kg": 4.5,
+          "body_mass_method": "native_inertial_preserved",
+          "airframe_id": 4023,
+          "topic_prefix": "/uav_1/pod",
+          "armed_idle_velocity_rad_s": 50.0,
+          "model_name": "rocket_two_axis_pod",
+          "mass_approximation": "完整保留基础机质量、重心和惯量，另加原生吊舱；顶部外形和碰撞截短不扣除机头质量。",
+          "image_topic": "/uav_1/pod/image",
+          "gravity_m_s2": 9.8,
+          "source_sha256": {
+            "assembledmodels/rocket_two_axis_pod/parameters.json": "72a2c00c15fb2b9c9f4c8dd07a80c97dae898e03689602e39b0e360420b47bae",
+            "assembledmodels/rocket_two_axis_pod/tools/generate_model.py": "7366ab898e626490b9c21428992b7bb1013bad577de5a1ab69fd4431b76218a4",
+            "assembledmodels/rocket_two_axis_pod/tools/pod_kinematics.py": "c3cfb0a4709443d3a3f209ee6bfa952f26d1f2d25d47a131643d6a8b87830368",
+            "assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py": "84b9d50ed0593ab731e293f877c11bcf02353c1be95c227e2b26a47dac882a97",
+            "assembledmodels/rocket_two_axis_pod/tests/run_flight_check.sh": "5a16e39d6ba1838fa166a00621de74f570e9800a9a45d75f35611f1eb0576c97",
+            "models/vehicles/rocket_racing_quad/parameters.json": "d8a342faf0d98ec5e49a9de20319e80124d3a65d96f60cf4a654aebc30d8b333",
+            "models/vehicles/rocket_racing_quad/tools/prepare_runtime.py": "c91af9c700a90769fe9e3730a915ca87235a6b810b36da63ff069bbdae69e416",
+            "models/vehicles/rocket_racing_quad/tools/generate_meshes.py": "b39af90c98a264603f62dca588e9dca673e946ea1d33d98ffcecfd800f6b7462",
+            "models/vehicles/rocket_racing_quad/tests/flight_check.py": "e5c023b414698e47d71bec8df595c3ad1a7f5116a406f206398e21ce188c1e29",
+            "models/vehicles/rocket_racing_quad/tests/gazebo_truth.py": "5b714e5984754394373eea355c571b39836b941b853b4c8eeaa5658d9a6330df",
+            "models/gimbals/two_axis_pod/parameters.json": "bcc13ff476287fdfa3d3e6cac226b9160fa42f3fcff25de9a5eefdf57ea69061",
+            "models/gimbals/two_axis_pod/model.sdf": "73df2cf3aa27cce239b522cd3c42c2aece5e7f1309c765abea67485a8bc6dba7",
+            "models/vehicles/rocket_racing_quad/model.sdf": "aa1a13c96411baebc0e1401b4e592e9c1c4ee9662045b600204c9ddd70de2b8f",
+            "models/vehicles/rocket_racing_quad/model.config": "4c6d734e4282c31db46c20e4f6487a69c02c4860da5aaa360c618ea8ce4267df",
+            "models/vehicles/rocket_racing_quad/tests/world.sdf": "80ffea55d651da9ddf46ee9541bc37acd6a230c64dc528a21f3c4d7bedd3e912",
+            "models/vehicles/rocket_racing_quad/meshes/fuselage.stl": "e3d99db10f307426d291655cd4f6c83226c097f583635b5134174cd4fc25f338",
+            "models/vehicles/rocket_racing_quad/meshes/nacelle.stl": "98eef3ec9a370598a56dcb7c4c2ddc6278f724a755266a25a3cffe572106c099",
+            "models/vehicles/rocket_racing_quad/meshes/propeller_10in.stl": "cc2841227d7a8151a1e8180e6d1b5f16848d13420c0fb771df3c249e70a181b1",
+            "models/vehicles/rocket_racing_quad/meshes/tail.stl": "2d954e31e76b7845fe3b8bfda111b2a4ff786618bb1dc493d306aaa7a7b6cd1c",
+            "models/vehicles/rocket_racing_quad/meshes/tail_fins.stl": "c3a00c796cdc38a07088f5c939e751a7692040d5a8f31df0524ea87a2646d445",
+            "models/vehicles/rocket_racing_quad/px4/4022_gz_rocket_racing_quad": "e38f4d555055fdc82ce660ba13a556ea0cd5c11dbe8025c4e9e883659fd486af",
+            "models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae": "2952493154a4d2e0ec7e76eab47a147e17eba1126d16161a9e864f5f0f446093",
+            "models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae": "2dcfe51a843439490edda9784c6a6552da1640638a1a72064b8fe5738accf2e3",
+            "models/gimbals/two_axis_pod/meshes/fixed_cowling.dae": "1b118b806a8f27a1a82d7cdfd460876bef0c095e30d92c8352c9721a3a45614e",
+            "models/gimbals/two_axis_pod/meshes/lens_bezel.dae": "f51d33349899bd74e989dc542dc752e7d18a6de96a1dcfce4bf3fdebc5eca5a2",
+            "models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae": "c19e454611b62eb50eaa624d9351f2214f6101a826657ae28be5fac8bd1ce18a",
+            "models/gimbals/two_axis_pod/meshes/optical_window.dae": "6f3bc5f75d4b8a77837882460014b1bb249a7749aaeb49030f43dc779fcada8f",
+            "models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae": "f6639e15a5a6d40f50f7a2724e4abe84bb6bfc43739a5266604a0f81cc76b7de",
+            "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae": "664f5d5840ae5722c3ce05648446c74510bf6cd35fffcc1d2ee06caf5c4c1ae1",
+            "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae": "03d5f71cf0008229847e2d86a55fc450ce363981f0b74818fa83500e502fa351"
+          },
+          "px4_reference": {
+            "reference_pose": "zero_joint_positions",
+            "base_cg_flu_m": [
+              0.0,
+              0.0,
+              0.030000000000000023
+            ],
+            "assembly_nominal_cg_flu_m": [
+              -0.00017626139553215636,
+              -3.4260534197300605e-09,
+              0.04439850484494542
+            ],
+            "offset_translation_frd_m": [
+              0.00017626139553215636,
+              -3.4260534197300605e-09,
+              0.014398504844945394
+            ],
+            "source_parameters": {
+              "CA_ROTOR0_PX": 0.2086,
+              "CA_ROTOR0_PY": 0.2086,
+              "CA_ROTOR0_PZ": 0.095,
+              "CA_ROTOR1_PX": -0.2086,
+              "CA_ROTOR1_PY": -0.2086,
+              "CA_ROTOR1_PZ": 0.095,
+              "CA_ROTOR2_PX": 0.2086,
+              "CA_ROTOR2_PY": -0.2086,
+              "CA_ROTOR2_PZ": 0.095,
+              "CA_ROTOR3_PX": -0.2086,
+              "CA_ROTOR3_PY": 0.2086,
+              "CA_ROTOR3_PZ": 0.095,
+              "EKF2_IMU_POS_X": 0.0,
+              "EKF2_IMU_POS_Y": 0.0,
+              "EKF2_IMU_POS_Z": 0.015,
+              "EKF2_GPS_POS_X": 0.0,
+              "EKF2_GPS_POS_Y": 0.0,
+              "EKF2_GPS_POS_Z": 0.015
+            },
+            "parameters": {
+              "CA_ROTOR0_PX": 0.20877626139553215,
+              "CA_ROTOR0_PY": 0.2085999965739466,
+              "CA_ROTOR0_PZ": 0.1093985048449454,
+              "CA_ROTOR1_PX": -0.20842373860446786,
+              "CA_ROTOR1_PY": -0.20860000342605342,
+              "CA_ROTOR1_PZ": 0.1093985048449454,
+              "CA_ROTOR2_PX": 0.20877626139553215,
+              "CA_ROTOR2_PY": -0.20860000342605342,
+              "CA_ROTOR2_PZ": 0.1093985048449454,
+              "CA_ROTOR3_PX": -0.20842373860446786,
+              "CA_ROTOR3_PY": 0.2085999965739466,
+              "CA_ROTOR3_PZ": 0.1093985048449454,
+              "EKF2_IMU_POS_X": 0.00017626139553215636,
+              "EKF2_IMU_POS_Y": -3.4260534197300605e-09,
+              "EKF2_IMU_POS_Z": 0.029398504844945394,
+              "EKF2_GPS_POS_X": 0.00017626139553215636,
+              "EKF2_GPS_POS_Y": -3.4260534197300605e-09,
+              "EKF2_GPS_POS_Z": 0.029398504844945394
+            }
+          },
+          "total_mass_kg": 5.0000000000003,
+          "px4_hover_thrust": 0.04452973995335947,
+          "hover_motor_velocity_rad_s": 370.751478855892,
+          "hover_motor_velocities_rad_s": [
+            370.751478855892,
+            370.751478855892,
+            370.751478855892,
+            370.751478855892
+          ],
+          "armed_idle_total_thrust_n": 0.89119,
+          "disarmed_velocity_rad_s": 0.0
+        },
+        "runtime_model_sha256": "0820539598f0c28887d16a2dfcd64d40b8ef073029155fcc21f920437aa0f207",
+        "world_pose": "5.25 5 -0.036526112 -0.00154310378985 0.0464051889947 0",
+        "physical_mesh_collisions": 9,
+        "contact_sensors": 26
+      },
+      {
+        "aircraft_id": 2,
+        "runtime_manifest": {
+          "mount_z_m": 0.28900000000000003,
+          "retained_body_length_m": 0.499,
+          "body_mass_kg": 4.5,
+          "body_mass_method": "native_inertial_preserved",
+          "airframe_id": 4023,
+          "topic_prefix": "/uav_2/pod",
+          "armed_idle_velocity_rad_s": 50.0,
+          "model_name": "rocket_two_axis_pod",
+          "mass_approximation": "完整保留基础机质量、重心和惯量，另加原生吊舱；顶部外形和碰撞截短不扣除机头质量。",
+          "image_topic": "/uav_2/pod/image",
+          "gravity_m_s2": 9.8,
+          "source_sha256": {
+            "assembledmodels/rocket_two_axis_pod/parameters.json": "72a2c00c15fb2b9c9f4c8dd07a80c97dae898e03689602e39b0e360420b47bae",
+            "assembledmodels/rocket_two_axis_pod/tools/generate_model.py": "7366ab898e626490b9c21428992b7bb1013bad577de5a1ab69fd4431b76218a4",
+            "assembledmodels/rocket_two_axis_pod/tools/pod_kinematics.py": "c3cfb0a4709443d3a3f209ee6bfa952f26d1f2d25d47a131643d6a8b87830368",
+            "assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py": "84b9d50ed0593ab731e293f877c11bcf02353c1be95c227e2b26a47dac882a97",
+            "assembledmodels/rocket_two_axis_pod/tests/run_flight_check.sh": "5a16e39d6ba1838fa166a00621de74f570e9800a9a45d75f35611f1eb0576c97",
+            "models/vehicles/rocket_racing_quad/parameters.json": "d8a342faf0d98ec5e49a9de20319e80124d3a65d96f60cf4a654aebc30d8b333",
+            "models/vehicles/rocket_racing_quad/tools/prepare_runtime.py": "c91af9c700a90769fe9e3730a915ca87235a6b810b36da63ff069bbdae69e416",
+            "models/vehicles/rocket_racing_quad/tools/generate_meshes.py": "b39af90c98a264603f62dca588e9dca673e946ea1d33d98ffcecfd800f6b7462",
+            "models/vehicles/rocket_racing_quad/tests/flight_check.py": "e5c023b414698e47d71bec8df595c3ad1a7f5116a406f206398e21ce188c1e29",
+            "models/vehicles/rocket_racing_quad/tests/gazebo_truth.py": "5b714e5984754394373eea355c571b39836b941b853b4c8eeaa5658d9a6330df",
+            "models/gimbals/two_axis_pod/parameters.json": "bcc13ff476287fdfa3d3e6cac226b9160fa42f3fcff25de9a5eefdf57ea69061",
+            "models/gimbals/two_axis_pod/model.sdf": "73df2cf3aa27cce239b522cd3c42c2aece5e7f1309c765abea67485a8bc6dba7",
+            "models/vehicles/rocket_racing_quad/model.sdf": "aa1a13c96411baebc0e1401b4e592e9c1c4ee9662045b600204c9ddd70de2b8f",
+            "models/vehicles/rocket_racing_quad/model.config": "4c6d734e4282c31db46c20e4f6487a69c02c4860da5aaa360c618ea8ce4267df",
+            "models/vehicles/rocket_racing_quad/tests/world.sdf": "80ffea55d651da9ddf46ee9541bc37acd6a230c64dc528a21f3c4d7bedd3e912",
+            "models/vehicles/rocket_racing_quad/meshes/fuselage.stl": "e3d99db10f307426d291655cd4f6c83226c097f583635b5134174cd4fc25f338",
+            "models/vehicles/rocket_racing_quad/meshes/nacelle.stl": "98eef3ec9a370598a56dcb7c4c2ddc6278f724a755266a25a3cffe572106c099",
+            "models/vehicles/rocket_racing_quad/meshes/propeller_10in.stl": "cc2841227d7a8151a1e8180e6d1b5f16848d13420c0fb771df3c249e70a181b1",
+            "models/vehicles/rocket_racing_quad/meshes/tail.stl": "2d954e31e76b7845fe3b8bfda111b2a4ff786618bb1dc493d306aaa7a7b6cd1c",
+            "models/vehicles/rocket_racing_quad/meshes/tail_fins.stl": "c3a00c796cdc38a07088f5c939e751a7692040d5a8f31df0524ea87a2646d445",
+            "models/vehicles/rocket_racing_quad/px4/4022_gz_rocket_racing_quad": "e38f4d555055fdc82ce660ba13a556ea0cd5c11dbe8025c4e9e883659fd486af",
+            "models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae": "2952493154a4d2e0ec7e76eab47a147e17eba1126d16161a9e864f5f0f446093",
+            "models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae": "2dcfe51a843439490edda9784c6a6552da1640638a1a72064b8fe5738accf2e3",
+            "models/gimbals/two_axis_pod/meshes/fixed_cowling.dae": "1b118b806a8f27a1a82d7cdfd460876bef0c095e30d92c8352c9721a3a45614e",
+            "models/gimbals/two_axis_pod/meshes/lens_bezel.dae": "f51d33349899bd74e989dc542dc752e7d18a6de96a1dcfce4bf3fdebc5eca5a2",
+            "models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae": "c19e454611b62eb50eaa624d9351f2214f6101a826657ae28be5fac8bd1ce18a",
+            "models/gimbals/two_axis_pod/meshes/optical_window.dae": "6f3bc5f75d4b8a77837882460014b1bb249a7749aaeb49030f43dc779fcada8f",
+            "models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae": "f6639e15a5a6d40f50f7a2724e4abe84bb6bfc43739a5266604a0f81cc76b7de",
+            "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae": "664f5d5840ae5722c3ce05648446c74510bf6cd35fffcc1d2ee06caf5c4c1ae1",
+            "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae": "03d5f71cf0008229847e2d86a55fc450ce363981f0b74818fa83500e502fa351"
+          },
+          "px4_reference": {
+            "reference_pose": "zero_joint_positions",
+            "base_cg_flu_m": [
+              0.0,
+              0.0,
+              0.030000000000000023
+            ],
+            "assembly_nominal_cg_flu_m": [
+              -0.00017626139553215636,
+              -3.4260534197300605e-09,
+              0.04439850484494542
+            ],
+            "offset_translation_frd_m": [
+              0.00017626139553215636,
+              -3.4260534197300605e-09,
+              0.014398504844945394
+            ],
+            "source_parameters": {
+              "CA_ROTOR0_PX": 0.2086,
+              "CA_ROTOR0_PY": 0.2086,
+              "CA_ROTOR0_PZ": 0.095,
+              "CA_ROTOR1_PX": -0.2086,
+              "CA_ROTOR1_PY": -0.2086,
+              "CA_ROTOR1_PZ": 0.095,
+              "CA_ROTOR2_PX": 0.2086,
+              "CA_ROTOR2_PY": -0.2086,
+              "CA_ROTOR2_PZ": 0.095,
+              "CA_ROTOR3_PX": -0.2086,
+              "CA_ROTOR3_PY": 0.2086,
+              "CA_ROTOR3_PZ": 0.095,
+              "EKF2_IMU_POS_X": 0.0,
+              "EKF2_IMU_POS_Y": 0.0,
+              "EKF2_IMU_POS_Z": 0.015,
+              "EKF2_GPS_POS_X": 0.0,
+              "EKF2_GPS_POS_Y": 0.0,
+              "EKF2_GPS_POS_Z": 0.015
+            },
+            "parameters": {
+              "CA_ROTOR0_PX": 0.20877626139553215,
+              "CA_ROTOR0_PY": 0.2085999965739466,
+              "CA_ROTOR0_PZ": 0.1093985048449454,
+              "CA_ROTOR1_PX": -0.20842373860446786,
+              "CA_ROTOR1_PY": -0.20860000342605342,
+              "CA_ROTOR1_PZ": 0.1093985048449454,
+              "CA_ROTOR2_PX": 0.20877626139553215,
+              "CA_ROTOR2_PY": -0.20860000342605342,
+              "CA_ROTOR2_PZ": 0.1093985048449454,
+              "CA_ROTOR3_PX": -0.20842373860446786,
+              "CA_ROTOR3_PY": 0.2085999965739466,
+              "CA_ROTOR3_PZ": 0.1093985048449454,
+              "EKF2_IMU_POS_X": 0.00017626139553215636,
+              "EKF2_IMU_POS_Y": -3.4260534197300605e-09,
+              "EKF2_IMU_POS_Z": 0.029398504844945394,
+              "EKF2_GPS_POS_X": 0.00017626139553215636,
+              "EKF2_GPS_POS_Y": -3.4260534197300605e-09,
+              "EKF2_GPS_POS_Z": 0.029398504844945394
+            }
+          },
+          "total_mass_kg": 5.0000000000003,
+          "px4_hover_thrust": 0.04452973995335947,
+          "hover_motor_velocity_rad_s": 370.751478855892,
+          "hover_motor_velocities_rad_s": [
+            370.751478855892,
+            370.751478855892,
+            370.751478855892,
+            370.751478855892
+          ],
+          "armed_idle_total_thrust_n": 0.89119,
+          "disarmed_velocity_rad_s": 0.0
+        },
+        "runtime_model_sha256": "6b66dbbc023c18ff4bb15ed4b1f1f53739d32a4cf135c723723ef0f5805b3684",
+        "world_pose": "10.25 5 -0.268718752 -0.00154310378985 0.0464051889947 0",
+        "physical_mesh_collisions": 9,
+        "contact_sensors": 26
+      }
+    ],
+    "mesh_collision_count": 18,
+    "preserved_msg_sha256": "c08c987c6fa9a556f3bb66ec2323415cecee567fb3875c37e8dbce106cb68b89"
+  },
+  "inheritance": {
+    "assets_revision": "5a29c7eef09a",
+    "aircraft": [
+      {
+        "id": 1,
+        "mass_kg": 5.000000000000302,
+        "links": 12,
+        "joints": 11,
+        "physical_mesh_collisions": 9,
+        "native_contact_sensors": 26,
+        "spawn": "5.25 5 -0.036526112 -0.00154310378985 0.0464051889947 0",
+        "source_fingerprints": {
+          "assembledmodels/rocket_two_axis_pod/parameters.json": "72a2c00c15fb2b9c9f4c8dd07a80c97dae898e03689602e39b0e360420b47bae",
+          "assembledmodels/rocket_two_axis_pod/tools/generate_model.py": "7366ab898e626490b9c21428992b7bb1013bad577de5a1ab69fd4431b76218a4",
+          "assembledmodels/rocket_two_axis_pod/tools/pod_kinematics.py": "c3cfb0a4709443d3a3f209ee6bfa952f26d1f2d25d47a131643d6a8b87830368",
+          "assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py": "84b9d50ed0593ab731e293f877c11bcf02353c1be95c227e2b26a47dac882a97",
+          "assembledmodels/rocket_two_axis_pod/tests/run_flight_check.sh": "5a16e39d6ba1838fa166a00621de74f570e9800a9a45d75f35611f1eb0576c97",
+          "models/vehicles/rocket_racing_quad/parameters.json": "d8a342faf0d98ec5e49a9de20319e80124d3a65d96f60cf4a654aebc30d8b333",
+          "models/vehicles/rocket_racing_quad/tools/prepare_runtime.py": "c91af9c700a90769fe9e3730a915ca87235a6b810b36da63ff069bbdae69e416",
+          "models/vehicles/rocket_racing_quad/tools/generate_meshes.py": "b39af90c98a264603f62dca588e9dca673e946ea1d33d98ffcecfd800f6b7462",
+          "models/vehicles/rocket_racing_quad/tests/flight_check.py": "e5c023b414698e47d71bec8df595c3ad1a7f5116a406f206398e21ce188c1e29",
+          "models/vehicles/rocket_racing_quad/tests/gazebo_truth.py": "5b714e5984754394373eea355c571b39836b941b853b4c8eeaa5658d9a6330df",
+          "models/gimbals/two_axis_pod/parameters.json": "bcc13ff476287fdfa3d3e6cac226b9160fa42f3fcff25de9a5eefdf57ea69061",
+          "models/gimbals/two_axis_pod/model.sdf": "73df2cf3aa27cce239b522cd3c42c2aece5e7f1309c765abea67485a8bc6dba7",
+          "models/vehicles/rocket_racing_quad/model.sdf": "aa1a13c96411baebc0e1401b4e592e9c1c4ee9662045b600204c9ddd70de2b8f",
+          "models/vehicles/rocket_racing_quad/model.config": "4c6d734e4282c31db46c20e4f6487a69c02c4860da5aaa360c618ea8ce4267df",
+          "models/vehicles/rocket_racing_quad/tests/world.sdf": "80ffea55d651da9ddf46ee9541bc37acd6a230c64dc528a21f3c4d7bedd3e912",
+          "models/vehicles/rocket_racing_quad/meshes/fuselage.stl": "e3d99db10f307426d291655cd4f6c83226c097f583635b5134174cd4fc25f338",
+          "models/vehicles/rocket_racing_quad/meshes/nacelle.stl": "98eef3ec9a370598a56dcb7c4c2ddc6278f724a755266a25a3cffe572106c099",
+          "models/vehicles/rocket_racing_quad/meshes/propeller_10in.stl": "cc2841227d7a8151a1e8180e6d1b5f16848d13420c0fb771df3c249e70a181b1",
+          "models/vehicles/rocket_racing_quad/meshes/tail.stl": "2d954e31e76b7845fe3b8bfda111b2a4ff786618bb1dc493d306aaa7a7b6cd1c",
+          "models/vehicles/rocket_racing_quad/meshes/tail_fins.stl": "c3a00c796cdc38a07088f5c939e751a7692040d5a8f31df0524ea87a2646d445",
+          "models/vehicles/rocket_racing_quad/px4/4022_gz_rocket_racing_quad": "e38f4d555055fdc82ce660ba13a556ea0cd5c11dbe8025c4e9e883659fd486af",
+          "models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae": "2952493154a4d2e0ec7e76eab47a147e17eba1126d16161a9e864f5f0f446093",
+          "models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae": "2dcfe51a843439490edda9784c6a6552da1640638a1a72064b8fe5738accf2e3",
+          "models/gimbals/two_axis_pod/meshes/fixed_cowling.dae": "1b118b806a8f27a1a82d7cdfd460876bef0c095e30d92c8352c9721a3a45614e",
+          "models/gimbals/two_axis_pod/meshes/lens_bezel.dae": "f51d33349899bd74e989dc542dc752e7d18a6de96a1dcfce4bf3fdebc5eca5a2",
+          "models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae": "c19e454611b62eb50eaa624d9351f2214f6101a826657ae28be5fac8bd1ce18a",
+          "models/gimbals/two_axis_pod/meshes/optical_window.dae": "6f3bc5f75d4b8a77837882460014b1bb249a7749aaeb49030f43dc779fcada8f",
+          "models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae": "f6639e15a5a6d40f50f7a2724e4abe84bb6bfc43739a5266604a0f81cc76b7de",
+          "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae": "664f5d5840ae5722c3ce05648446c74510bf6cd35fffcc1d2ee06caf5c4c1ae1",
+          "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae": "03d5f71cf0008229847e2d86a55fc450ce363981f0b74818fa83500e502fa351"
+        },
+        "world_content_matches_generated": true,
+        "noncolliding_marker": "POD_LOCATION_MARKER_1"
+      },
+      {
+        "id": 2,
+        "mass_kg": 5.000000000000302,
+        "links": 12,
+        "joints": 11,
+        "physical_mesh_collisions": 9,
+        "native_contact_sensors": 26,
+        "spawn": "10.25 5 -0.268718752 -0.00154310378985 0.0464051889947 0",
+        "source_fingerprints": {
+          "assembledmodels/rocket_two_axis_pod/parameters.json": "72a2c00c15fb2b9c9f4c8dd07a80c97dae898e03689602e39b0e360420b47bae",
+          "assembledmodels/rocket_two_axis_pod/tools/generate_model.py": "7366ab898e626490b9c21428992b7bb1013bad577de5a1ab69fd4431b76218a4",
+          "assembledmodels/rocket_two_axis_pod/tools/pod_kinematics.py": "c3cfb0a4709443d3a3f209ee6bfa952f26d1f2d25d47a131643d6a8b87830368",
+          "assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py": "84b9d50ed0593ab731e293f877c11bcf02353c1be95c227e2b26a47dac882a97",
+          "assembledmodels/rocket_two_axis_pod/tests/run_flight_check.sh": "5a16e39d6ba1838fa166a00621de74f570e9800a9a45d75f35611f1eb0576c97",
+          "models/vehicles/rocket_racing_quad/parameters.json": "d8a342faf0d98ec5e49a9de20319e80124d3a65d96f60cf4a654aebc30d8b333",
+          "models/vehicles/rocket_racing_quad/tools/prepare_runtime.py": "c91af9c700a90769fe9e3730a915ca87235a6b810b36da63ff069bbdae69e416",
+          "models/vehicles/rocket_racing_quad/tools/generate_meshes.py": "b39af90c98a264603f62dca588e9dca673e946ea1d33d98ffcecfd800f6b7462",
+          "models/vehicles/rocket_racing_quad/tests/flight_check.py": "e5c023b414698e47d71bec8df595c3ad1a7f5116a406f206398e21ce188c1e29",
+          "models/vehicles/rocket_racing_quad/tests/gazebo_truth.py": "5b714e5984754394373eea355c571b39836b941b853b4c8eeaa5658d9a6330df",
+          "models/gimbals/two_axis_pod/parameters.json": "bcc13ff476287fdfa3d3e6cac226b9160fa42f3fcff25de9a5eefdf57ea69061",
+          "models/gimbals/two_axis_pod/model.sdf": "73df2cf3aa27cce239b522cd3c42c2aece5e7f1309c765abea67485a8bc6dba7",
+          "models/vehicles/rocket_racing_quad/model.sdf": "aa1a13c96411baebc0e1401b4e592e9c1c4ee9662045b600204c9ddd70de2b8f",
+          "models/vehicles/rocket_racing_quad/model.config": "4c6d734e4282c31db46c20e4f6487a69c02c4860da5aaa360c618ea8ce4267df",
+          "models/vehicles/rocket_racing_quad/tests/world.sdf": "80ffea55d651da9ddf46ee9541bc37acd6a230c64dc528a21f3c4d7bedd3e912",
+          "models/vehicles/rocket_racing_quad/meshes/fuselage.stl": "e3d99db10f307426d291655cd4f6c83226c097f583635b5134174cd4fc25f338",
+          "models/vehicles/rocket_racing_quad/meshes/nacelle.stl": "98eef3ec9a370598a56dcb7c4c2ddc6278f724a755266a25a3cffe572106c099",
+          "models/vehicles/rocket_racing_quad/meshes/propeller_10in.stl": "cc2841227d7a8151a1e8180e6d1b5f16848d13420c0fb771df3c249e70a181b1",
+          "models/vehicles/rocket_racing_quad/meshes/tail.stl": "2d954e31e76b7845fe3b8bfda111b2a4ff786618bb1dc493d306aaa7a7b6cd1c",
+          "models/vehicles/rocket_racing_quad/meshes/tail_fins.stl": "c3a00c796cdc38a07088f5c939e751a7692040d5a8f31df0524ea87a2646d445",
+          "models/vehicles/rocket_racing_quad/px4/4022_gz_rocket_racing_quad": "e38f4d555055fdc82ce660ba13a556ea0cd5c11dbe8025c4e9e883659fd486af",
+          "models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae": "2952493154a4d2e0ec7e76eab47a147e17eba1126d16161a9e864f5f0f446093",
+          "models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae": "2dcfe51a843439490edda9784c6a6552da1640638a1a72064b8fe5738accf2e3",
+          "models/gimbals/two_axis_pod/meshes/fixed_cowling.dae": "1b118b806a8f27a1a82d7cdfd460876bef0c095e30d92c8352c9721a3a45614e",
+          "models/gimbals/two_axis_pod/meshes/lens_bezel.dae": "f51d33349899bd74e989dc542dc752e7d18a6de96a1dcfce4bf3fdebc5eca5a2",
+          "models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae": "c19e454611b62eb50eaa624d9351f2214f6101a826657ae28be5fac8bd1ce18a",
+          "models/gimbals/two_axis_pod/meshes/optical_window.dae": "6f3bc5f75d4b8a77837882460014b1bb249a7749aaeb49030f43dc779fcada8f",
+          "models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae": "f6639e15a5a6d40f50f7a2724e4abe84bb6bfc43739a5266604a0f81cc76b7de",
+          "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae": "664f5d5840ae5722c3ce05648446c74510bf6cd35fffcc1d2ee06caf5c4c1ae1",
+          "models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae": "03d5f71cf0008229847e2d86a55fc450ce363981f0b74818fa83500e502fa351"
+        },
+        "world_content_matches_generated": true,
+        "noncolliding_marker": "POD_LOCATION_MARKER_2"
+      }
+    ],
+    "mesh_bounds_count": 18,
+    "existing_scene_runtime_airframe_override": [
+      {
+        "generated": "param set-default EKF2_HGT_REF 0",
+        "actual": "param set-default EKF2_HGT_REF 1"
+      }
+    ],
+    "passed": true
+  },
+  "flight": {
+    "passed": true,
+    "started_at_unix_s": 1792593459.6129754,
+    "settings": {
+      "route_edge_m": 20.0,
+      "route_altitude_m": 15.0,
+      "route_speed_m_s": 5.0,
+      "original_min_horizontal_m": 12.0,
+      "original_min_altitude_m": 8.0,
+      "corner_tolerance_m": 6.0,
+      "final_return_tolerance_m": 3.0,
+      "final_ground_height_tolerance_m": 1.0,
+      "other_vehicle_motion_tolerance_m": 0.5,
+      "max_truth_gap_sim_s": 0.5,
+      "mavsdk_uri": "udpin://0.0.0.0:14440",
+      "actual_mavsdk_bind_port": 14540,
+      "guard_bind_port": 14030,
+      "route_wall_timeout_s": 720.0,
+      "recovery_wall_timeout_s": 180.0
+    },
+    "source_sha256": {
+      "/home/aeroarx/zsh/PX4-Autopilot/scenarios/02_rocket_two_axis_pod/build/mavsdk_route_test": "3b78a89d201d237e379e03ec1261edf8d0833047215644bf85cddf48c8dc740b",
+      "/home/aeroarx/zsh/MAVSDK/install/lib/libmavsdk.so.482aed05.482aed05.482aed05": "61f5902ca3c9e6d79febe3d4ee9f3216b1b54b102d46dfe543db59b49f99b6ab",
+      "/tmp/scenario02_motion_head_5a29c7e/flight/verify_flight.py": "f5dd065040db594ca9bc01a03b5f789685d10e05d21c70548993c0ca7466d745",
+      "/home/aeroarx/zsh/PX4-Autopilot/scenarios/02_rocket_two_axis_pod/mavsdk_route_test.cpp": "314002af28610d2699f22be215750b08dea50f19773c6ba83bc89604b19d72f6",
+      "/home/aeroarx/zsh/px4-gazebo-assets/models/vehicles/rocket_racing_quad/tests/gazebo_truth.py": "5b714e5984754394373eea355c571b39836b941b853b4c8eeaa5658d9a6330df",
+      "/tmp/px4-scenarios/02_rocket_two_axis_pod/world.sdf": "ea8c2e40e61dfd4041cc88c7b58622e9db0638d1ee687f1fad8762d0af270adc"
+    },
+    "sdk_commit": "482aed056b375e4eaf3dde9567043232515bc977",
+    "asset_commit": "5a29c7eef09a078fdae721a376dd2101c9832d73",
+    "measurement_references": {
+      "rocket_two_axis_pod_1": {
+        "config_path": "/tmp/px4-scenarios/02_rocket_two_axis_pod/generated/aircraft_1/rocket_two_axis_pod/parameters.json",
+        "config_sha256": "2eedc398dfb48b93101bf912cf10b761a065a29e1a5d31ae830736039c5f7a3c",
+        "kind": "nominal_cg",
+        "body_offset_flu_m": [
+          -0.00017626139553215636,
+          -3.4260534197300605e-09,
+          0.04439850484494542
+        ],
+        "reference_pose": "zero_joint_positions"
+      },
+      "rocket_two_axis_pod_2": {
+        "config_path": "/tmp/px4-scenarios/02_rocket_two_axis_pod/generated/aircraft_2/rocket_two_axis_pod/parameters.json",
+        "config_sha256": "2eedc398dfb48b93101bf912cf10b761a065a29e1a5d31ae830736039c5f7a3c",
+        "kind": "nominal_cg",
+        "body_offset_flu_m": [
+          -0.00017626139553215636,
+          -3.4260534197300605e-09,
+          0.04439850484494542
+        ],
+        "reference_pose": "zero_joint_positions"
+      }
+    },
+    "mavsdk_pid": 1305361,
+    "mavsdk_exit_code": 0,
+    "landing_confirmed": true,
+    "truth_validation": {
+      "passed": true,
+      "sample_counts": {
+        "rocket_two_axis_pod_1": 1514,
+        "rocket_two_axis_pod_2": 1514
+      },
+      "max_climb_m": 15.044529799576338,
+      "max_horizontal_distance_m": 27.13046644928203,
+      "ordered_corner_hits": [
+        {
+          "corner": 1,
+          "east_north_m": [
+            0.0,
+            20.0
+          ],
+          "sim_time_s": 69.2,
+          "error_m": 5.930749531375862
+        },
+        {
+          "corner": 2,
+          "east_north_m": [
+            20.0,
+            20.0
+          ],
+          "sim_time_s": 74.94,
+          "error_m": 5.934017841307101
+        },
+        {
+          "corner": 3,
+          "east_north_m": [
+            20.0,
+            0.0
+          ],
+          "sim_time_s": 80.62,
+          "error_m": 5.8313148040636245
+        },
+        {
+          "corner": 4,
+          "east_north_m": [
+            0.0,
+            0.0
+          ],
+          "sim_time_s": 87.52,
+          "error_m": 5.900165967339799
+        }
+      ],
+      "final_return_distance_m": 0.009340076503078703,
+      "final_relative_height_m": 0.0002357203010962053,
+      "second_vehicle_max_motion_m": 6.209877146437117e-06,
+      "max_truth_gap_sim_s": 0.060000000000002274,
+      "reference": "固定零关节名义CG；每条消息以实际机体四元数旋转偏移后取世界ENU位置"
+    },
+    "finished_at_unix_s": 1792593536.868841,
+    "abort_requested": false
+  },
+  "final_ground": {
+    "sim_time_range_s": [
+      41.632,
+      120.676
+    ],
+    "measured_sim_duration_s": 79.04400000000001,
+    "models": {
+      "rocket_two_axis_pod_1": {
+        "samples": 4217,
+        "final_position": [
+          5.244703906058155,
+          5.0076912364097845,
+          -0.04106544931741708
+        ],
+        "final_tilt_deg": 2.660473077778092,
+        "all_tilt_range_deg": [
+          0.0026414626598661676,
+          18.789884075615223
+        ],
+        "last_5s_tilt_range_deg": [
+          2.4144419699636077,
+          3.1299598209149155
+        ],
+        "last_5s_max_movement_m": 0.004577447363615998
+      },
+      "rocket_two_axis_pod_2": {
+        "samples": 4217,
+        "final_position": [
+          10.250050927608033,
+          4.9999962501553625,
+          -0.27349408533196845
+        ],
+        "final_tilt_deg": 2.662258040617707,
+        "all_tilt_range_deg": [
+          2.6605450893882807,
+          2.6623179049633725
+        ],
+        "last_5s_tilt_range_deg": [
+          2.662258040617707,
+          2.662258040617707
+        ],
+        "last_5s_max_movement_m": 0.0
+      }
+    },
+    "contact_pairs_last_5_sim_s": {
+      "rocket_two_axis_pod_1::base_link::body_collision vs tile_10_10::terrain::ground": {
+        "samples": 1253,
+        "max_depth_m": 0.0001512419548816979,
+        "max_force_n": 94.15427014355822,
+        "min_normal_z": 0.998788058757782,
+        "max_normal_z": 0.9990854859352112
+      },
+      "rocket_two_axis_pod_2::base_link::body_collision vs tile_10_10::terrain::ground": {
+        "samples": 1253,
+        "max_depth_m": 7.361663278970809e-08,
+        "max_force_n": 21.80155737057826,
+        "min_normal_z": 0.9988503456115723,
+        "max_normal_z": 0.9990264177322388
+      }
+    },
+    "all_rotor_contact_samples": 0,
+    "healthy_for_flight": true,
+    "required_20_sim_seconds_captured": true,
+    "source_sha256": {
+      "/tmp/scenario02_motion_head_5a29c7e/flight/assess_static_pose.py": "b43dd0d9ab5e064c654f8ee3ac516b66221c43de04947596fc503148a31d63b2",
+      "/tmp/px4-scenarios/02_rocket_two_axis_pod/world.sdf": "ea8c2e40e61dfd4041cc88c7b58622e9db0638d1ee687f1fad8762d0af270adc"
+    },
+    "listener_captured_at_unix_s": 1792593643.0436018,
+    "current_px4_listener": [
+      {
+        "instance": 0,
+        "topic": "vehicle_status",
+        "chunk_id": "a9d77b",
+        "wall_time_seconds": 1.9057e-05,
+        "exit_code": 0,
+        "original_token_count": 295,
+        "output": "\nTOPIC: vehicle_status\n vehicle_status\n    timestamp: 191980000 (0.172000 seconds ago)\n    armed_time: 0\n    takeoff_time: 0\n    nav_state_timestamp: 116368000\n    valid_nav_states_mask: 2147411327\n    can_set_nav_states_mask: 8308095\n    failure_detector_status: 0\n    arming_state: 1\n    latest_arming_reason: 4\n    latest_disarming_reason: 6\n    nav_state_user_intention: 4\n    nav_state: 4\n    executor_in_charge: 0\n    hil_state: 0\n    vehicle_type: 1\n    failsafe: False\n    failsafe_and_user_took_over: False\n    failsafe_defer_state: 0\n    gcs_connection_lost: False\n    gcs_connection_lost_counter: 0\n    high_latency_data_link_lost: False\n    is_vtol: False\n    is_vtol_tailsitter: False\n    in_transition_mode: False\n    in_transition_to_fw: False\n    system_type: 2\n    system_id: 1\n    component_id: 1\n    safety_button_available: True\n    safety_off: True\n    power_input_valid: True\n    usb_connected: False\n    open_drone_id_system_present: False\n    open_drone_id_system_healthy: False\n    parachute_system_present: False\n    parachute_system_healthy: False\n    rc_calibration_in_progress: False\n    calibration_enabled: False\n    pre_flight_checks_pass: True\n\n"
+      },
+      {
+        "instance": 0,
+        "topic": "vehicle_land_detected",
+        "chunk_id": "e00a0d",
+        "wall_time_seconds": 9.306e-06,
+        "exit_code": 0,
+        "original_token_count": 104,
+        "output": "\nTOPIC: vehicle_land_detected\n vehicle_land_detected\n    timestamp: 194156000 (0.684000 seconds ago)\n    freefall: False\n    ground_contact: True\n    maybe_landed: True\n    landed: True\n    in_ground_effect: True\n    in_descend: True\n    has_low_throttle: True\n    vertical_movement: False\n    horizontal_movement: False\n    rotational_movement: False\n    close_to_ground_or_skipped_check: True\n    at_rest: True\n\n"
+      },
+      {
+        "instance": 1,
+        "topic": "vehicle_status",
+        "chunk_id": "733b67",
+        "wall_time_seconds": 1.2371e-05,
+        "exit_code": 0,
+        "original_token_count": 294,
+        "output": "\nTOPIC: vehicle_status\n vehicle_status\n    timestamp: 194384000 (0.172000 seconds ago)\n    armed_time: 0\n    takeoff_time: 0\n    nav_state_timestamp: 7856000\n    valid_nav_states_mask: 2147411327\n    can_set_nav_states_mask: 8308095\n    failure_detector_status: 0\n    arming_state: 1\n    latest_arming_reason: 0\n    latest_disarming_reason: 0\n    nav_state_user_intention: 4\n    nav_state: 4\n    executor_in_charge: 0\n    hil_state: 0\n    vehicle_type: 1\n    failsafe: False\n    failsafe_and_user_took_over: False\n    failsafe_defer_state: 0\n    gcs_connection_lost: False\n    gcs_connection_lost_counter: 0\n    high_latency_data_link_lost: False\n    is_vtol: False\n    is_vtol_tailsitter: False\n    in_transition_mode: False\n    in_transition_to_fw: False\n    system_type: 2\n    system_id: 2\n    component_id: 1\n    safety_button_available: True\n    safety_off: True\n    power_input_valid: True\n    usb_connected: False\n    open_drone_id_system_present: False\n    open_drone_id_system_healthy: False\n    parachute_system_present: False\n    parachute_system_healthy: False\n    rc_calibration_in_progress: False\n    calibration_enabled: False\n    pre_flight_checks_pass: True\n\n"
+      },
+      {
+        "instance": 1,
+        "topic": "vehicle_land_detected",
+        "chunk_id": "40fbfd",
+        "wall_time_seconds": 7.597e-06,
+        "exit_code": 0,
+        "original_token_count": 104,
+        "output": "\nTOPIC: vehicle_land_detected\n vehicle_land_detected\n    timestamp: 193656000 (0.888000 seconds ago)\n    freefall: False\n    ground_contact: True\n    maybe_landed: True\n    landed: True\n    in_ground_effect: True\n    in_descend: True\n    has_low_throttle: True\n    vertical_movement: False\n    horizontal_movement: False\n    rotational_movement: False\n    close_to_ground_or_skipped_check: True\n    at_rest: True\n\n"
+      }
+    ],
+    "landed_disarmed": true,
+    "final_3_sim_seconds": {
+      "rocket_two_axis_pod_1": {
+        "tilt_range_deg": [
+          2.659954790428133,
+          2.660473077778092
+        ],
+        "max_position_change_m": 2.194321174193938e-06
+      },
+      "rocket_two_axis_pod_2": {
+        "tilt_range_deg": [
+          2.662258040617707,
+          2.662258040617707
+        ],
+        "max_position_change_m": 0.0
+      }
+    },
+    "stable_standing_after_landing": true
+  },
+  "gimbal": {
+    "passed": true,
+    "protocol_version": 6,
+    "angle_convention": "motion_head_joint",
+    "aircraft": [
+      {
+        "aircraft_id": 1,
+        "udp_port": 8770,
+        "video_path": "/two_axis_pod_1",
+        "optical_samples": [
+          {
+            "label": "zero",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.0
+            },
+            "actual_los_mount": [
+              -1.3724825637106974e-07,
+              2.3852797240046146e-08,
+              0.9999999999999905
+            ],
+            "actual_image_up_mount": [
+              -0.9999999999994562,
+              -1.0339436404471003e-06,
+              -1.3724823166860745e-07
+            ],
+            "actual_ball_center_mount_m": [
+              0.01500015640569059,
+              -1.0000532588494491e-08,
+              0.05600000370549953
+            ],
+            "actual_lens_center_mount_m": [
+              0.015000153152790886,
+              -9.435221451305122e-09,
+              0.07970000370549932
+            ],
+            "errors": {
+              "rotation_error_deg": 5.9715348242752004e-05,
+              "telemetry_rotation_error_deg": 9.792750226534164e-05,
+              "mount_rotation_error_deg": 4.670071607147995e-05,
+              "ball_center_error_m": 1.5676887901540155e-07,
+              "lens_center_error_m": 1.5348788709667853e-07,
+              "los_error": 1.3930556274992657e-07
+            }
+          },
+          {
+            "label": "combined_motion",
+            "joints_deg": {
+              "yaw": 13.444,
+              "pitch": 9.062
+            },
+            "actual_los_mount": [
+              -0.15751054577660834,
+              0.22958984390069082,
+              0.960457667753666
+            ],
+            "actual_image_up_mount": [
+              -0.9875173051480428,
+              -0.036621431577916,
+              -0.1531941342947944
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000280820980825,
+              -7.938824413258666e-09,
+              0.056000009447301026
+            ],
+            "actual_lens_center_mount_m": [
+              0.011267280885960431,
+              0.005441271361617891,
+              0.07876285617304508
+            ],
+            "errors": {
+              "rotation_error_deg": 0.00046491091325390676,
+              "telemetry_rotation_error_deg": 7.204149919262099e-05,
+              "mount_rotation_error_deg": 4.670071607147995e-05,
+              "ball_center_error_m": 2.81091977297943e-07,
+              "lens_center_error_m": 1.339845778398906e-07,
+              "los_error": 6.577436635762103e-07
+            }
+          },
+          {
+            "label": "yaw_-60",
+            "joints_deg": {
+              "yaw": -59.799,
+              "pitch": 0.028
+            },
+            "actual_los_mount": [
+              -0.0004916703305076209,
+              -0.8642711370420557,
+              0.5030260032407059
+            ],
+            "actual_image_up_mount": [
+              -0.9999998791296332,
+              0.0004244321413992558,
+              -0.00024818959821276687
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000318639246708,
+              -9.922152676551893e-09,
+              0.05600001117959741
+            ],
+            "actual_lens_center_mount_m": [
+              0.014988666052297595,
+              -0.020483235870049393,
+              0.06792172745640207
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0006210920145784462,
+              "telemetry_rotation_error_deg": 0.0008972117099238009,
+              "mount_rotation_error_deg": 4.670071607147995e-05,
+              "ball_center_error_m": 3.189896582256485e-07,
+              "lens_center_error_m": 3.46295183542101e-07,
+              "los_error": 1.6244652816036955e-05
+            }
+          },
+          {
+            "label": "yaw_60",
+            "joints_deg": {
+              "yaw": 59.797,
+              "pitch": 0.0
+            },
+            "actual_los_mount": [
+              -1.7981135674860482e-06,
+              0.8642446236983871,
+              0.5030717944838496
+            ],
+            "actual_image_up_mount": [
+              -0.9999999999979956,
+              -1.997243757045908e-06,
+              -1.4313342344696167e-07
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000368337909227,
+              -7.402322474334936e-09,
+              0.056000013525158446
+            ],
+            "actual_lens_center_mount_m": [
+              0.015000325722501833,
+              0.020482590179328974,
+              0.0679228150544257
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0004520294068226616,
+              "telemetry_rotation_error_deg": 0.00011135774610166547,
+              "mount_rotation_error_deg": 4.670071607147995e-05,
+              "ball_center_error_m": 3.686604666395001e-07,
+              "lens_center_error_m": 3.8028670739178746e-07,
+              "los_error": 1.8485270334923033e-06
+            }
+          },
+          {
+            "label": "pitch_-80",
+            "joints_deg": {
+              "yaw": -0.054,
+              "pitch": -79.8
+            },
+            "actual_los_mount": [
+              0.9841947206434404,
+              -0.00016564117729215782,
+              0.17708959433174318
+            ],
+            "actual_image_up_mount": [
+              -0.1770896717980199,
+              -0.0009218384109934738,
+              0.9841942889269446
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000051878592671,
+              -3.619018913622032e-10,
+              0.056000002368122394
+            ],
+            "actual_lens_center_mount_m": [
+              0.038325466757822044,
+              -3.926057804141806e-06,
+              0.06019702575389896
+            ],
+            "errors": {
+              "rotation_error_deg": 0.00044262708785836475,
+              "telemetry_rotation_error_deg": 0.00010794076224261244,
+              "mount_rotation_error_deg": 4.5563044700372294e-05,
+              "ball_center_error_m": 5.193387482411461e-08,
+              "lens_center_error_m": 1.266646477463168e-07,
+              "los_error": 1.4773953673013646e-06
+            }
+          },
+          {
+            "label": "pitch_30",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 29.798
+            },
+            "actual_los_mount": [
+              -0.49695741151132033,
+              -3.5978075865321085e-07,
+              0.8677749311565983
+            ],
+            "actual_image_up_mount": [
+              -0.8677749311565648,
+              -2.9328769731429164e-07,
+              -0.4969574115114227
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000069368780091,
+              -9.498069055886724e-08,
+              0.0559999956387239
+            ],
+            "actual_lens_center_mount_m": [
+              0.0032221787158611516,
+              -1.035074949812015e-07,
+              0.0765662615070776
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0009076830586277642,
+              "telemetry_rotation_error_deg": 0.0010968263590506147,
+              "mount_rotation_error_deg": 4.5563044700372294e-05,
+              "ball_center_error_m": 1.1769613400489756e-07,
+              "lens_center_error_m": 3.3591006273198296e-07,
+              "los_error": 1.875396135901204e-05
+            }
+          },
+          {
+            "label": "final_zero",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.057
+            },
+            "actual_los_mount": [
+              -0.0008442077680496096,
+              -2.818814965068688e-07,
+              0.9999996436565192
+            ],
+            "actual_image_up_mount": [
+              -0.9999996436564195,
+              -5.276825957500166e-07,
+              -0.000844207768198324
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000028381230105,
+              -1.6825967141929113e-07,
+              0.05599998451662966
+            ],
+            "actual_lens_center_mount_m": [
+              0.014980020657011386,
+              -1.7494026278118413e-07,
+              0.07969997607128906
+            ],
+            "errors": {
+              "rotation_error_deg": 0.008630519713550654,
+              "telemetry_rotation_error_deg": 0.008608703445234114,
+              "mount_rotation_error_deg": 4.5563044700372294e-05,
+              "ball_center_error_m": 1.7133752071747113e-07,
+              "lens_center_error_m": 3.6025767074299954e-06,
+              "los_error": 0.00015079291645974204
+            }
+          }
+        ],
+        "actual_limits_deg": {
+          "yaw_-60": -59.799,
+          "yaw_60": 59.797,
+          "pitch_-80": -79.8,
+          "pitch_30": 29.798
+        },
+        "all_aircraft_angle_changes_deg": [
+          {
+            "yaw": 13.444,
+            "pitch": 9.062
+          },
+          {
+            "yaw": 0.0,
+            "pitch": 0.0
+          }
+        ],
+        "passed": true
+      },
+      {
+        "aircraft_id": 2,
+        "udp_port": 8771,
+        "video_path": "/two_axis_pod_2",
+        "optical_samples": [
+          {
+            "label": "zero",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.0
+            },
+            "actual_los_mount": [
+              3.2187474907630076e-11,
+              4.654059196886339e-13,
+              1.0000000000000002
+            ],
+            "actual_image_up_mount": [
+              -1.0000000000000002,
+              1.8927339627875555e-19,
+              3.2187474907630076e-11
+            ],
+            "actual_ball_center_mount_m": [
+              0.01500000000000325,
+              1.632889786926106e-15,
+              0.056000000000000084
+            ],
+            "actual_lens_center_mount_m": [
+              0.015000000000649978,
+              1.2974511872862471e-14,
+              0.07970000000000009
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0,
+              "telemetry_rotation_error_deg": 6.48418460899035e-05,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 3.638877550144496e-15,
+              "lens_center_error_m": 6.501078225320595e-13,
+              "los_error": 3.219083943684447e-11
+            }
+          },
+          {
+            "label": "combined_motion",
+            "joints_deg": {
+              "yaw": 13.588,
+              "pitch": 9.158
+            },
+            "actual_los_mount": [
+              -0.15916434144681646,
+              0.23194077999271928,
+              0.9596198137742731
+            ],
+            "actual_image_up_mount": [
+              -0.9872521017509617,
+              -0.037393061530484835,
+              -0.1547095554181659
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000167520426464,
+              -9.24459057234154e-08,
+              0.056000053681699476
+            ],
+            "actual_lens_center_mount_m": [
+              0.01122797262802297,
+              0.005496904039917206,
+              0.07874304326813182
+            ],
+            "errors": {
+              "rotation_error_deg": 0.00043022059825125196,
+              "telemetry_rotation_error_deg": 5.2296684935611804e-05,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 1.9872358598412658e-07,
+              "lens_center_error_m": 1.7062816212610686e-07,
+              "los_error": 4.4684354467918155e-07
+            }
+          },
+          {
+            "label": "yaw_-60",
+            "joints_deg": {
+              "yaw": -59.794,
+              "pitch": 0.026
+            },
+            "actual_los_mount": [
+              -0.0004538605607634083,
+              -0.8642180964332341,
+              0.503117159126887
+            ],
+            "actual_image_up_mount": [
+              -0.9999998970052786,
+              0.00039231254383464975,
+              -0.00022821108780662902
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000176567062505,
+              -9.310565912677319e-08,
+              0.05600006170890538
+            ],
+            "actual_lens_center_mount_m": [
+              0.014989420071657118,
+              -0.02048206199112669,
+              0.06792393838021261
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0004482986479762918,
+              "telemetry_rotation_error_deg": 6.046742979648907e-05,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 2.0893199928845647e-07,
+              "lens_center_error_m": 2.8249747204435513e-07,
+              "los_error": 8.804462290887041e-07
+            }
+          },
+          {
+            "label": "yaw_60",
+            "joints_deg": {
+              "yaw": 59.797,
+              "pitch": 0.0
+            },
+            "actual_los_mount": [
+              5.360299864531903e-07,
+              0.8642444231364645,
+              0.503072139038958
+            ],
+            "actual_image_up_mount": [
+              -0.9999999999997617,
+              6.822024365971124e-07,
+              -1.064651779514314e-07
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000281262096236,
+              -1.2824400800422105e-07,
+              0.05600006877754673
+            ],
+            "actual_lens_center_mount_m": [
+              0.015000293965891713,
+              0.020482464584325854,
+              0.06792287847277009
+            ],
+            "errors": {
+              "rotation_error_deg": 0.00046176764202810356,
+              "telemetry_rotation_error_deg": 5.35092032880755e-05,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 3.166784541174687e-07,
+              "lens_center_error_m": 4.370234141182103e-07,
+              "los_error": 7.996446190693612e-07
+            }
+          },
+          {
+            "label": "pitch_-80",
+            "joints_deg": {
+              "yaw": -0.054,
+              "pitch": -79.794
+            },
+            "actual_los_mount": [
+              0.9841785461373656,
+              -0.00016687601527802499,
+              0.17717946121189385
+            ],
+            "actual_image_up_mount": [
+              -0.17717953979542825,
+              -0.0009218293870596865,
+              0.9841781144226188
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000418985488193,
+              -1.11288404495726e-07,
+              0.05600007387055995
+            ],
+            "actual_lens_center_mount_m": [
+              0.03832545052892266,
+              -4.066249966644129e-06,
+              0.060199227101396025
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0005827166193311271,
+              "telemetry_rotation_error_deg": 8.326810208050414e-05,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 4.3976221747490957e-07,
+              "lens_center_error_m": 4.826848355041419e-07,
+              "los_error": 1.0890869888710447e-06
+            }
+          },
+          {
+            "label": "pitch_30",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 29.798
+            },
+            "actual_los_mount": [
+              -0.4969408189677376,
+              3.5365723650320987e-07,
+              0.8677844331650284
+            ],
+            "actual_image_up_mount": [
+              -0.8677844331644191,
+              1.0505367578585244e-06,
+              -0.4969408189678169
+            ],
+            "actual_ball_center_mount_m": [
+              0.015000509420900381,
+              -1.1240631409461507e-07,
+              0.05600007812272398
+            ],
+            "actual_lens_center_mount_m": [
+              0.0032230120112637143,
+              -1.0402463786727162e-07,
+              0.07656656918867744
+            ],
+            "errors": {
+              "rotation_error_deg": 0.000198656084299718,
+              "telemetry_rotation_error_deg": 0.00010062945774999183,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 5.274921735869368e-07,
+              "lens_center_error_m": 5.978168065492536e-07,
+              "los_error": 5.877738194170439e-07
+            }
+          },
+          {
+            "label": "final_zero",
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.059
+            },
+            "actual_los_mount": [
+              -0.0009948526004505132,
+              -2.1068090924873752e-07,
+              0.9999995051340073
+            ],
+            "actual_image_up_mount": [
+              -0.9999995051333378,
+              1.1762897026862646e-06,
+              -0.0009948526002020452
+            ],
+            "actual_ball_center_mount_m": [
+              0.01500055055308937,
+              -1.1754130202350118e-07,
+              0.05600007972790238
+            ],
+            "actual_lens_center_mount_m": [
+              0.014976972546343338,
+              -1.225344392308226e-07,
+              0.07970006799957828
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0020003062011244264,
+              "telemetry_rotation_error_deg": 0.001962161309752342,
+              "mount_rotation_error_deg": 7.005107410722053e-05,
+              "ball_center_error_m": 5.685782270851019e-07,
+              "lens_center_error_m": 1.3852650308637378e-06,
+              "los_error": 3.3151917647462956e-05
+            }
+          }
+        ],
+        "actual_limits_deg": {
+          "yaw_-60": -59.794,
+          "yaw_60": 59.797,
+          "pitch_-80": -79.794,
+          "pitch_30": 29.798
+        },
+        "all_aircraft_angle_changes_deg": [
+          {
+            "yaw": 0.0,
+            "pitch": -0.033
+          },
+          {
+            "yaw": 13.588,
+            "pitch": 9.158
+          }
+        ],
+        "passed": true
+      }
+    ]
+  },
+  "gimbal_error_maxima": {
+    "rotation_error_deg": 0.008630519713550654,
+    "telemetry_rotation_error_deg": 0.008608703445234114,
+    "mount_rotation_error_deg": 7.005107410722053e-05,
+    "ball_center_error_m": 5.685782270851019e-07,
+    "lens_center_error_m": 3.6025767074299954e-06,
+    "los_error": 0.00015079291645974204
+  },
+  "video_isolation": {
+    "result": "passed",
+    "captured_unix_s": 1792593885.8380208,
+    "asymmetric_pose_path": "/tmp/scenario02_motion_head_5a29c7e/asymmetric_surface_pose.json",
+    "asymmetric_pose_sha256": "a30f44d1867f216da942a2e2d7222cdc32b6b4e779dfa82ed1cf9eadeb432e2b",
+    "streams": [
+      {
+        "aircraft_id": 1,
+        "rtsp_url": "rtsp://127.0.0.1:8555/two_axis_pod_1",
+        "wall_interval_unix_s": [
+          1792593810.2217233,
+          1792593818.1677263
+        ],
+        "binding_summary_path": "/tmp/scenario02_motion_head_5a29c7e/rtsp_surface_1/binding_summary.json",
+        "binding_summary_sha256": "cafcce1b34a9d3fd7e6c303bb0fa74c87f98f67f1e3968c247b57e92de877389",
+        "snapshot_path": "/tmp/scenario02_motion_head_5a29c7e/rtsp_surface_1/rtsp_snapshot.png",
+        "snapshot_sha256": "5d40202c500dc8247779b72b6698293b1b99293c0a97e2bec2629a937d6f52d5",
+        "yaw_range_deg": [
+          0,
+          0
+        ],
+        "pitch_range_deg": [
+          -79.778,
+          -79.778
+        ],
+        "mean_los_mount": [
+          0.9841262043164309,
+          0.0,
+          0.1774700368449122
+        ],
+        "binding_result": "passed",
+        "frames": 190,
+        "unique_video_sequences": 190,
+        "telemetry_count": 389,
+        "decoded_ratio": 1.0,
+        "frame_table_match_ratio": 1.0,
+        "source_fingerprints_current": true,
+        "attempted_control_datagrams": 0
+      },
+      {
+        "aircraft_id": 2,
+        "rtsp_url": "rtsp://127.0.0.1:8555/two_axis_pod_2",
+        "wall_interval_unix_s": [
+          1792593806.9731128,
+          1792593815.2229972
+        ],
+        "binding_summary_path": "/tmp/scenario02_motion_head_5a29c7e/rtsp_surface_2/binding_summary.json",
+        "binding_summary_sha256": "0a59b48da6d08f48ba9768d5d2b1c098950609dd28252a1e5dbd0c9eba045eeb",
+        "snapshot_path": "/tmp/scenario02_motion_head_5a29c7e/rtsp_surface_2/rtsp_snapshot.png",
+        "snapshot_sha256": "43a63fd830f998c06b3d7b689ed37e4ebb60c9a14b8c1cbd826bd04a8617b0b2",
+        "yaw_range_deg": [
+          0,
+          0
+        ],
+        "pitch_range_deg": [
+          0.024,
+          0.024
+        ],
+        "mean_los_mount": [
+          -0.00042399996188749326,
+          0.0,
+          0.9999999101120122
+        ],
+        "binding_result": "passed",
+        "frames": 200,
+        "unique_video_sequences": 200,
+        "telemetry_count": 405,
+        "decoded_ratio": 1.0,
+        "frame_table_match_ratio": 1.0,
+        "source_fingerprints_current": true,
+        "attempted_control_datagrams": 0
+      }
+    ],
+    "overlap_wall_s": 5.00127387046814,
+    "optical_axis_separation_deg": 79.80186225542968,
+    "image_mean_abs_channel_difference": 52.39087677001953,
+    "image_fraction_pixels_mean_difference_over_10": 0.908187460839599,
+    "image_gray_correlation": 0.11806383556213157,
+    "stamp_strip_excluded": true,
+    "excluded_bottom_rows_px": 16,
+    "original_pngs_unchanged": true,
+    "visual_observation": "飞机1接近−80°俯仰的实际解码画面含地平线、地表、2号飞机及黄色定位标志；飞机2零位画面为天空。两路身份、URL与帧表独立通过，图像明显不同。"
+  },
+  "final_home": {
+    "passed": true,
+    "captured_unix_s": 1792593839.8435397,
+    "source_sha256": {
+      "/home/aeroarx/zsh/PX4-Autopilot/scenarios/02_rocket_two_axis_pod/test_gimbal_interfaces.py": "0ea5394936fbf33b37b34897501b576216dd595f10fda7215e51bb06f7c59491",
+      "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/model.sdf": "73df2cf3aa27cce239b522cd3c42c2aece5e7f1309c765abea67485a8bc6dba7",
+      "/tmp/px4-scenarios/02_rocket_two_axis_pod/world.sdf": "ea8c2e40e61dfd4041cc88c7b58622e9db0638d1ee687f1fad8762d0af270adc"
+    },
+    "aircraft": [
+      {
+        "aircraft_id": 1,
+        "angles_deg": {
+          "yaw": 0.0,
+          "pitch": 0.059
+        },
+        "telemetry": {
+          "type": "telemetry",
+          "source": "gazebo_plugin",
+          "mount": {
+            "mode": "upright",
+            "static": false,
+            "quat_world": [
+              0.997007,
+              0.000948,
+              0.023193,
+              0.073743
+            ]
+          },
+          "ts_mono": 414.12,
+          "sim_uptime": 414.1,
+          "mode": "HOME",
+          "tracking": {
+            "state": "IDLE",
+            "fault": null,
+            "message": null,
+            "valid_frames": 0,
+            "invalid_frames": 0,
+            "constraint": "NONE"
+          },
+          "stability": {
+            "state": "UNDETERMINED",
+            "center_err_deg": 0
+          },
+          "target": {
+            "valid": false,
+            "box_px": null,
+            "box_norm": null,
+            "miss": {
+              "valid": false,
+              "center_px": null,
+              "offset_px": null,
+              "offset_deg": null,
+              "frame_seq": null
+            }
+          },
+          "protocol_version": 6,
+          "angle_convention": "motion_head_joint",
+          "singular": false,
+          "los_mount": [
+            -0.001034,
+            0,
+            0.999999
+          ],
+          "attitude_deg": {
+            "yaw": {
+              "pos": 0,
+              "vel": 0,
+              "acc": 0
+            },
+            "pitch": {
+              "pos": 0.059,
+              "vel": -0.245,
+              "acc": 1.109
+            }
+          },
+          "joints_deg": {
+            "yaw": {
+              "pos": 0,
+              "vel": 0,
+              "acc": 0
+            },
+            "pitch": {
+              "pos": 0.059,
+              "vel": -0.245,
+              "acc": 1.109
+            }
+          },
+          "camera": {
+            "quat_body": [
+              0.706741,
+              0,
+              -0.707472,
+              0
+            ],
+            "rpy_body_deg": [
+              0,
+              -89.941,
+              0
+            ],
+            "quat_world": [
+              0.721034,
+              0.052841,
+              -0.688964,
+              0.051447
+            ],
+            "rpy_world_deg": [
+              6.719,
+              -87.399,
+              1.741
+            ],
+            "frame_seq": 12548
+          },
+          "limits": {
+            "yaw": false,
+            "pitch": false,
+            "saturated": false
+          },
+          "cmd_dps": {
+            "yaw": 0,
+            "pitch": -0.245
+          },
+          "frame": {
+            "seq": 12548,
+            "sim_stamp": 414.088,
+            "t0_mono": 414.088,
+            "arrive_mono": 735342.645752
+          },
+          "aircraft_id": 1,
+          "video_rtsp_path": "/two_axis_pod_1",
+          "frame_table": [
+            [
+              12490,
+              735340.641306
+            ],
+            [
+              12491,
+              735340.674575
+            ],
+            [
+              12492,
+              735340.712089
+            ],
+            [
+              12493,
+              735340.746606
+            ],
+            [
+              12494,
+              735340.778622
+            ],
+            [
+              12495,
+              735340.810637
+            ],
+            [
+              12496,
+              735340.846654
+            ],
+            [
+              12497,
+              735340.878674
+            ],
+            [
+              12498,
+              735340.910692
+            ],
+            [
+              12499,
+              735340.942791
+            ],
+            [
+              12500,
+              735340.979276
+            ],
+            [
+              12501,
+              735341.011764
+            ],
+            [
+              12502,
+              735341.044144
+            ],
+            [
+              12503,
+              735341.076747
+            ],
+            [
+              12504,
+              735341.11421
+            ],
+            [
+              12505,
+              735341.147731
+            ],
+            [
+              12506,
+              735341.180521
+            ],
+            [
+              12507,
+              735341.217941
+            ],
+            [
+              12508,
+              735341.254356
+            ],
+            [
+              12509,
+              735341.289165
+            ],
+            [
+              12510,
+              735341.324391
+            ],
+            [
+              12511,
+              735341.358012
+            ],
+            [
+              12512,
+              735341.397172
+            ],
+            [
+              12513,
+              735341.42964
+            ],
+            [
+              12514,
+              735341.464594
+            ],
+            [
+              12515,
+              735341.4975
+            ],
+            [
+              12516,
+              735341.534142
+            ],
+            [
+              12517,
+              735341.568076
+            ],
+            [
+              12518,
+              735341.601562
+            ],
+            [
+              12519,
+              735341.633578
+            ],
+            [
+              12520,
+              735341.669605
+            ],
+            [
+              12521,
+              735341.701632
+            ],
+            [
+              12522,
+              735341.733682
+            ],
+            [
+              12523,
+              735341.765781
+            ],
+            [
+              12524,
+              735341.802069
+            ],
+            [
+              12525,
+              735341.834862
+            ],
+            [
+              12526,
+              735341.867627
+            ],
+            [
+              12527,
+              735341.900309
+            ],
+            [
+              12528,
+              735341.9374
+            ],
+            [
+              12529,
+              735341.971584
+            ],
+            [
+              12530,
+              735342.003962
+            ],
+            [
+              12531,
+              735342.036035
+            ],
+            [
+              12532,
+              735342.07413
+            ],
+            [
+              12533,
+              735342.10796
+            ],
+            [
+              12534,
+              735342.140815
+            ],
+            [
+              12535,
+              735342.172867
+            ],
+            [
+              12536,
+              735342.209912
+            ],
+            [
+              12537,
+              735342.24444
+            ],
+            [
+              12538,
+              735342.278216
+            ],
+            [
+              12539,
+              735342.314302
+            ],
+            [
+              12540,
+              735342.351029
+            ],
+            [
+              12541,
+              735342.386265
+            ],
+            [
+              12542,
+              735342.418856
+            ],
+            [
+              12543,
+              735342.45087
+            ],
+            [
+              12544,
+              735342.48691
+            ],
+            [
+              12545,
+              735342.518982
+            ],
+            [
+              12546,
+              735342.551862
+            ],
+            [
+              12547,
+              735342.584549
+            ],
+            [
+              12548,
+              735342.622179
+            ],
+            [
+              12549,
+              735342.656093
+            ]
+          ],
+          "video": {
+            "pushed": 12407,
+            "dropped": 0,
+            "clients": 0
+          },
+          "vision": {
+            "mode": "off",
+            "state": "OFF",
+            "target_count": 0,
+            "locked_track_id": null,
+            "error": null
+          },
+          "ts_wall": 1792593839.791768,
+          "server_uptime": 423.3
+        },
+        "optical": {
+          "joints_deg": {
+            "yaw": 0.0,
+            "pitch": 0.059
+          },
+          "actual_los_mount": [
+            -0.0009534111769770592,
+            -5.167537671895178e-07,
+            0.9999995455033273
+          ],
+          "actual_image_up_mount": [
+            -0.9999995455033122,
+            -5.446085229877684e-07,
+            -0.0009534111772584453
+          ],
+          "actual_ball_center_mount_m": [
+            0.015000349230496672,
+            -3.5815722719473645e-07,
+            0.05600001606270586
+          ],
+          "actual_lens_center_mount_m": [
+            0.01497775338548648,
+            -3.7040429108506443e-07,
+            0.07970000529113462
+          ],
+          "errors": {
+            "rotation_error_deg": 0.004373766313253602,
+            "telemetry_rotation_error_deg": 0.004664731061561855,
+            "mount_rotation_error_deg": 7.106351492591627e-05,
+            "ball_center_error_m": 5.004963034002636e-07,
+            "lens_center_error_m": 2.1899460877073026e-06,
+            "los_error": 8.059232596568267e-05
+          }
+        }
+      },
+      {
+        "aircraft_id": 2,
+        "angles_deg": {
+          "yaw": 0.0,
+          "pitch": 0.024
+        },
+        "telemetry": {
+          "type": "telemetry",
+          "source": "gazebo_plugin",
+          "mount": {
+            "mode": "upright",
+            "static": false,
+            "quat_world": [
+              0.999731,
+              -0.000769,
+              0.023199,
+              3e-06
+            ]
+          },
+          "ts_mono": 414.16,
+          "sim_uptime": 414.2,
+          "mode": "IDLE",
+          "tracking": {
+            "state": "IDLE",
+            "fault": null,
+            "message": null,
+            "valid_frames": 0,
+            "invalid_frames": 0,
+            "constraint": "NONE"
+          },
+          "stability": {
+            "state": "UNDETERMINED",
+            "center_err_deg": 0
+          },
+          "target": {
+            "valid": false,
+            "box_px": null,
+            "box_norm": null,
+            "miss": {
+              "valid": false,
+              "center_px": null,
+              "offset_px": null,
+              "offset_deg": null,
+              "frame_seq": null
+            }
+          },
+          "protocol_version": 6,
+          "angle_convention": "motion_head_joint",
+          "singular": false,
+          "los_mount": [
+            -0.000424,
+            0,
+            1
+          ],
+          "attitude_deg": {
+            "yaw": {
+              "pos": 0,
+              "vel": 0,
+              "acc": 0
+            },
+            "pitch": {
+              "pos": 0.024,
+              "vel": 0,
+              "acc": 0
+            }
+          },
+          "joints_deg": {
+            "yaw": {
+              "pos": 0,
+              "vel": 0,
+              "acc": 0
+            },
+            "pitch": {
+              "pos": 0.024,
+              "vel": 0,
+              "acc": 0
+            }
+          },
+          "camera": {
+            "quat_body": [
+              0.706957,
+              0,
+              -0.707257,
+              0
+            ],
+            "rpy_body_deg": [
+              0,
+              -89.976,
+              0
+            ],
+            "quat_world": [
+              0.723174,
+              -0.000542,
+              -0.690666,
+              0.000546
+            ],
+            "rpy_world_deg": [
+              -1.916,
+              -87.364,
+              1.916
+            ],
+            "frame_seq": 12549
+          },
+          "limits": {
+            "yaw": false,
+            "pitch": false,
+            "saturated": false
+          },
+          "cmd_dps": {
+            "yaw": 0,
+            "pitch": 0
+          },
+          "frame": {
+            "seq": 12549,
+            "sim_stamp": 414.12,
+            "t0_mono": 414.12,
+            "arrive_mono": 735342.692338
+          },
+          "aircraft_id": 2,
+          "video_rtsp_path": "/two_axis_pod_2",
+          "frame_table": [
+            [
+              12491,
+              735340.675323
+            ],
+            [
+              12492,
+              735340.714613
+            ],
+            [
+              12493,
+              735340.746629
+            ],
+            [
+              12494,
+              735340.778643
+            ],
+            [
+              12495,
+              735340.810657
+            ],
+            [
+              12496,
+              735340.846689
+            ],
+            [
+              12497,
+              735340.878733
+            ],
+            [
+              12498,
+              735340.910777
+            ],
+            [
+              12499,
+              735340.942803
+            ],
+            [
+              12500,
+              735340.979265
+            ],
+            [
+              12501,
+              735341.011964
+            ],
+            [
+              12502,
+              735341.04431
+            ],
+            [
+              12503,
+              735341.077704
+            ],
+            [
+              12504,
+              735341.116046
+            ],
+            [
+              12505,
+              735341.148328
+            ],
+            [
+              12506,
+              735341.183757
+            ],
+            [
+              12507,
+              735341.217977
+            ],
+            [
+              12508,
+              735341.25454
+            ],
+            [
+              12509,
+              735341.290296
+            ],
+            [
+              12510,
+              735341.324431
+            ],
+            [
+              12511,
+              735341.36109
+            ],
+            [
+              12512,
+              735341.397198
+            ],
+            [
+              12513,
+              735341.430161
+            ],
+            [
+              12514,
+              735341.465465
+            ],
+            [
+              12515,
+              735341.497521
+            ],
+            [
+              12516,
+              735341.535295
+            ],
+            [
+              12517,
+              735341.569544
+            ],
+            [
+              12518,
+              735341.601579
+            ],
+            [
+              12519,
+              735341.633589
+            ],
+            [
+              12520,
+              735341.66961
+            ],
+            [
+              12521,
+              735341.701641
+            ],
+            [
+              12522,
+              735341.733695
+            ],
+            [
+              12523,
+              735341.765791
+            ],
+            [
+              12524,
+              735341.802099
+            ],
+            [
+              12525,
+              735341.834683
+            ],
+            [
+              12526,
+              735341.867322
+            ],
+            [
+              12527,
+              735341.900404
+            ],
+            [
+              12528,
+              735341.938617
+            ],
+            [
+              12529,
+              735341.971966
+            ],
+            [
+              12530,
+              735342.004054
+            ],
+            [
+              12531,
+              735342.036253
+            ],
+            [
+              12532,
+              735342.07428
+            ],
+            [
+              12533,
+              735342.108818
+            ],
+            [
+              12534,
+              735342.140854
+            ],
+            [
+              12535,
+              735342.173015
+            ],
+            [
+              12536,
+              735342.210116
+            ],
+            [
+              12537,
+              735342.245836
+            ],
+            [
+              12538,
+              735342.278569
+            ],
+            [
+              12539,
+              735342.314304
+            ],
+            [
+              12540,
+              735342.350889
+            ],
+            [
+              12541,
+              735342.386183
+            ],
+            [
+              12542,
+              735342.418858
+            ],
+            [
+              12543,
+              735342.450883
+            ],
+            [
+              12544,
+              735342.486936
+            ],
+            [
+              12545,
+              735342.519025
+            ],
+            [
+              12546,
+              735342.551381
+            ],
+            [
+              12547,
+              735342.583906
+            ],
+            [
+              12548,
+              735342.621849
+            ],
+            [
+              12549,
+              735342.656122
+            ],
+            [
+              12550,
+              735342.688185
+            ]
+          ],
+          "video": {
+            "pushed": 12264,
+            "dropped": 0,
+            "clients": 0
+          },
+          "vision": {
+            "mode": "off",
+            "state": "OFF",
+            "target_count": 0,
+            "locked_track_id": null,
+            "error": null
+          },
+          "ts_wall": 1792593839.829983,
+          "server_uptime": 418.3
+        },
+        "optical": {
+          "joints_deg": {
+            "yaw": 0.0,
+            "pitch": 0.024
+          },
+          "actual_los_mount": [
+            -0.0004239589084037987,
+            -4.253842972800844e-12,
+            0.9999999101294182
+          ],
+          "actual_image_up_mount": [
+            -0.9999999101294182,
+            1.803609062753875e-15,
+            -0.0004239589084037987
+          ],
+          "actual_ball_center_mount_m": [
+            0.014999999999996648,
+            1.423496466101265e-15,
+            0.055999999999999925
+          ],
+          "actual_lens_center_mount_m": [
+            0.014989952173750723,
+            -9.929190580631672e-14,
+            0.07969999787006705
+          ],
+          "errors": {
+            "rotation_error_deg": 0.00029105042169533913,
+            "telemetry_rotation_error_deg": 3.577708896686902e-05,
+            "mount_rotation_error_deg": 5.466818727595052e-05,
+            "ball_center_error_m": 3.642063274709599e-15,
+            "lens_center_error_m": 1.2039376493099176e-07,
+            "los_error": 9.88192327500806e-08
+          }
+        }
+      }
+    ],
+    "errors": [],
+    "settled_verification": {
+      "passed": true,
+      "captured_unix_s": 1792593892.7447102,
+      "aircraft": [
+        {
+          "aircraft_id": 1,
+          "angles_deg": {
+            "yaw": 0.0,
+            "pitch": 0.024
+          },
+          "velocities_dps": {
+            "yaw": 0,
+            "pitch": 0
+          },
+          "optical": {
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.024
+            },
+            "actual_los_mount": [
+              -0.0004195876250563946,
+              -2.2024469832521744e-13,
+              0.9999999119731088
+            ],
+            "actual_image_up_mount": [
+              -0.9999999119731088,
+              1.2471060164627806e-16,
+              -0.0004195876250563946
+            ],
+            "actual_ball_center_mount_m": [
+              0.014999999999998187,
+              -6.117204182434777e-16,
+              0.05599999999999997
+            ],
+            "actual_lens_center_mount_m": [
+              0.01499005577316794,
+              -6.005612673831706e-15,
+              0.07969999791376257
+            ],
+            "errors": {
+              "rotation_error_deg": 4.0552001361956704e-05,
+              "telemetry_rotation_error_deg": 8.607461192674237e-05,
+              "mount_rotation_error_deg": 3.622254809177215e-05,
+              "ball_center_error_m": 1.9134172156962797e-15,
+              "lens_center_error_m": 1.6794338499373727e-08,
+              "los_error": 4.216655400807802e-07
+            }
+          }
+        },
+        {
+          "aircraft_id": 2,
+          "angles_deg": {
+            "yaw": 0.0,
+            "pitch": 0.024
+          },
+          "velocities_dps": {
+            "yaw": 0,
+            "pitch": 0
+          },
+          "optical": {
+            "joints_deg": {
+              "yaw": 0.0,
+              "pitch": 0.024
+            },
+            "actual_los_mount": [
+              -0.00042395890249380397,
+              -4.150081144783856e-12,
+              0.9999999101294206
+            ],
+            "actual_image_up_mount": [
+              -0.9999999101294206,
+              1.759780114136282e-15,
+              -0.00042395890249380397
+            ],
+            "actual_ball_center_mount_m": [
+              0.014999999999999571,
+              -1.4651230532611303e-15,
+              0.05599999999999982
+            ],
+            "actual_lens_center_mount_m": [
+              0.014989952173894164,
+              -1.0007341228477143e-13,
+              0.07969999787006703
+            ],
+            "errors": {
+              "rotation_error_deg": 0.0002910554306086572,
+              "telemetry_rotation_error_deg": 6.789513806193723e-05,
+              "mount_rotation_error_deg": 6.097163388881891e-05,
+              "ball_center_error_m": 1.5371161499612229e-15,
+              "lens_center_error_m": 1.2039362149020207e-07,
+              "los_error": 9.882168830040618e-08
+            }
+          }
+        }
+      ]
+    }
+  },
+  "rtsp": [
+    {
+      "aircraft_id": 1,
+      "udp_port": 8770,
+      "rtsp_url": "rtsp://127.0.0.1:8555/two_axis_pod_1",
+      "expected_path": "/two_axis_pod_1",
+      "source_sha256": {
+        "models/gimbals/two_axis_pod/controller/service/gimbal_bridge.py": "44d75deb3e4dbdf5ecfdf764e7862ee37f25a578453bbe5beb90a2d15f71e563",
+        "models/gimbals/two_axis_pod/controller/service/video.py": "beb0af7501ecc1b54254680081a7cf153e7bec3b2ff49b2922c628a156321a9d",
+        "models/gimbals/two_axis_pod/controller/service/rtsp_relay.py": "3a04bf3c66c493f95789800ff21c10a4217d537ec035f5642cddc4a91811e5e0",
+        "models/gimbals/two_axis_pod/ground_station/ground_station.py": "818c16eaf5d2b5be5e14a19f45649323b745e423706b980b9076680df4c6d490",
+        "scenarios/geographic_rocket_two_axis_pod/check_rtsp_binding.py": "29132c460fc78846cf0695d94b0d3ec0a6e1ace544f514225d2c9f66e4534646"
+      },
+      "result": "passed",
+      "frames": 190,
+      "telemetry_count": 389,
+      "hello_count": 1,
+      "identity_errors": [],
+      "station_identity_guard": {
+        "correct_identity_ready": true,
+        "correct_public_angles_ready": true,
+        "mismatched_identity_ready": false,
+        "mismatched_error": "飞机 ID 不一致：期望 2，网关 1，控制禁用",
+        "correct_hello": {
+          "type": "hello",
+          "proto": "gimbal-udp",
+          "version": 6,
+          "angle_convention": "motion_head_joint",
+          "clock_domain": "ca5afdaf-3d71-4053-b2a7-fff28b051f2f",
+          "telemetry_hz": 50,
+          "video_rtsp_path": "/two_axis_pod_1",
+          "aircraft_id": 1,
+          "capabilities": [
+            "vision_mode",
+            "server_video_overlay",
+            "auto_lock",
+            "frame_exact_track"
+          ]
+        },
+        "mismatched_hello": {
+          "type": "hello",
+          "proto": "gimbal-udp",
+          "version": 6,
+          "angle_convention": "motion_head_joint",
+          "clock_domain": "ca5afdaf-3d71-4053-b2a7-fff28b051f2f",
+          "telemetry_hz": 50,
+          "video_rtsp_path": "/two_axis_pod_1",
+          "aircraft_id": 1,
+          "capabilities": [
+            "vision_mode",
+            "server_video_overlay",
+            "auto_lock",
+            "frame_exact_track"
+          ]
+        },
+        "blocked_commands": [
+          "home",
+          "track",
+          "manual",
+          "reset_fault"
+        ],
+        "command_api_results": [
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "attempted_control_datagrams": 0
+      },
+      "describe_status": 200,
+      "absent_id": 3,
+      "absent_describe_status": 404,
+      "decoder": "nvdec",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "decoded_frames": 190,
+      "unique_video_sequences": 190,
+      "decoded_ratio": 1.0,
+      "matched_frame_table_sequences": 190,
+      "frame_table_match_ratio": 1.0,
+      "clock_domains": [
+        "ca5afdaf-3d71-4053-b2a7-fff28b051f2f"
+      ],
+      "source_fingerprints_current": true
+    },
+    {
+      "aircraft_id": 2,
+      "udp_port": 8771,
+      "rtsp_url": "rtsp://127.0.0.1:8555/two_axis_pod_2",
+      "expected_path": "/two_axis_pod_2",
+      "source_sha256": {
+        "models/gimbals/two_axis_pod/controller/service/gimbal_bridge.py": "44d75deb3e4dbdf5ecfdf764e7862ee37f25a578453bbe5beb90a2d15f71e563",
+        "models/gimbals/two_axis_pod/controller/service/video.py": "beb0af7501ecc1b54254680081a7cf153e7bec3b2ff49b2922c628a156321a9d",
+        "models/gimbals/two_axis_pod/controller/service/rtsp_relay.py": "3a04bf3c66c493f95789800ff21c10a4217d537ec035f5642cddc4a91811e5e0",
+        "models/gimbals/two_axis_pod/ground_station/ground_station.py": "818c16eaf5d2b5be5e14a19f45649323b745e423706b980b9076680df4c6d490",
+        "scenarios/geographic_rocket_two_axis_pod/check_rtsp_binding.py": "29132c460fc78846cf0695d94b0d3ec0a6e1ace544f514225d2c9f66e4534646"
+      },
+      "result": "passed",
+      "frames": 200,
+      "telemetry_count": 405,
+      "hello_count": 1,
+      "identity_errors": [],
+      "station_identity_guard": {
+        "correct_identity_ready": true,
+        "correct_public_angles_ready": true,
+        "mismatched_identity_ready": false,
+        "mismatched_error": "飞机 ID 不一致：期望 3，网关 2，控制禁用",
+        "correct_hello": {
+          "type": "hello",
+          "proto": "gimbal-udp",
+          "version": 6,
+          "angle_convention": "motion_head_joint",
+          "clock_domain": "ca5afdaf-3d71-4053-b2a7-fff28b051f2f",
+          "telemetry_hz": 50,
+          "video_rtsp_path": "/two_axis_pod_2",
+          "aircraft_id": 2,
+          "capabilities": [
+            "vision_mode",
+            "server_video_overlay",
+            "auto_lock",
+            "frame_exact_track"
+          ]
+        },
+        "mismatched_hello": {
+          "type": "hello",
+          "proto": "gimbal-udp",
+          "version": 6,
+          "angle_convention": "motion_head_joint",
+          "clock_domain": "ca5afdaf-3d71-4053-b2a7-fff28b051f2f",
+          "telemetry_hz": 50,
+          "video_rtsp_path": "/two_axis_pod_2",
+          "aircraft_id": 2,
+          "capabilities": [
+            "vision_mode",
+            "server_video_overlay",
+            "auto_lock",
+            "frame_exact_track"
+          ]
+        },
+        "blocked_commands": [
+          "home",
+          "track",
+          "manual",
+          "reset_fault"
+        ],
+        "command_api_results": [
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "attempted_control_datagrams": 0
+      },
+      "describe_status": 200,
+      "absent_id": 3,
+      "absent_describe_status": 404,
+      "decoder": "nvdec",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "decoded_frames": 200,
+      "unique_video_sequences": 200,
+      "decoded_ratio": 1.0,
+      "matched_frame_table_sequences": 200,
+      "frame_table_match_ratio": 1.0,
+      "clock_domains": [
+        "ca5afdaf-3d71-4053-b2a7-fff28b051f2f"
+      ],
+      "source_fingerprints_current": true
+    }
+  ],
+  "radar_target_log": "正式场景联合测试通过：truth=78，radar=8，tracked_scans=6，station=127.0.0.1:42063\n{\n  \"type\": \"radar_tracks\",\n  \"source\": \"radar_center\",\n  \"schema_version\": 1,\n  \"timestamp_ms\": 1792593648187,\n  \"scan_sequence\": 8,\n  \"scan_rate_hz\": 1.0,\n  \"radar\": {\n    \"latitude\": 32.21785737811048,\n    \"longitude\": 119.1058778440883,\n    \"altitude_msl_m\": 7.019968996242738\n  },\n  \"tracks\": [\n    {\n      \"range_m\": 1880.85,\n      \"azimuth_deg\": 359.988,\n      \"elevation_deg\": 3.367,\n      \"radial_speed_m_s\": -18.03,\n      \"latitude\": 32.21785398,\n      \"longitude\": 119.1258367,\n      \"altitude_msl_m\": 117.49,\n      \"track_id\": 1,\n      \"state\": \"confirmed\",\n      \"classification\": \"small_target\",\n      \"confidence\": 0.99\n    }\n  ]\n}\n",
+  "mesh_validation": {
+    "test_results": {
+      "python": "54 tests passed, no skips",
+      "cpp_collision_geometry": "1 CTest target passed",
+      "legacy_gazebo_collision": "7 cases passed",
+      "mesh_gazebo_collision": {
+        "result": "passed",
+        "world": "/tmp/scenario02_motion_head_5a29c7e/geometry/mesh_integration/world.sdf",
+        "tests": [
+          {
+            "case": "实际新CAD九个mesh交会",
+            "expected_aircraft": 9,
+            "events": [
+              {
+                "schema_version": 1,
+                "collision_type": "px4_target",
+                "simulation_time_s": 1.428,
+                "aircraft_ids": [
+                  9
+                ],
+                "entity_1": "rocket_two_axis_pod_9",
+                "entity_2": "xiaobianfu",
+                "relative_speed_m_s": 55901.7011906,
+                "damage_candidate": true,
+                "position_enu_m": {
+                  "x": 100,
+                  "y": 0,
+                  "z": 10.028
+                }
+              }
+            ],
+            "passed": true
+          },
+          {
+            "case": "实际新CAD九个mesh外侧不误判",
+            "expected_aircraft": null,
+            "events": [],
+            "passed": true
+          },
+          {
+            "case": "非零mesh局部中心不当作collision原点",
+            "expected_aircraft": null,
+            "events": [],
+            "passed": true
+          },
+          {
+            "case": "mesh节点变换/缩放/link及collision偏置交会",
+            "expected_aircraft": 1,
+            "events": [
+              {
+                "schema_version": 1,
+                "collision_type": "px4_target",
+                "simulation_time_s": 4.632,
+                "aircraft_ids": [
+                  1
+                ],
+                "entity_1": "rocket_two_axis_pod_1",
+                "entity_2": "xiaobianfu",
+                "relative_speed_m_s": 35605.6614178,
+                "damage_candidate": true,
+                "position_enu_m": {
+                  "x": 0.7,
+                  "y": 0,
+                  "z": 10.75
+                }
+              }
+            ],
+            "passed": true
+          },
+          {
+            "case": "关节零位尚未转入目标位置",
+            "expected_aircraft": null,
+            "events": [],
+            "passed": true
+          },
+          {
+            "case": "实际活动关节60度带动偏置mesh交会且持续接触去重",
+            "passed": true,
+            "target_joint_rad": 1.0471975511965976,
+            "actual_joint_rad": 1.0471975509871243,
+            "events": [
+              {
+                "schema_version": 1,
+                "collision_type": "px4_target",
+                "simulation_time_s": 6.72,
+                "aircraft_ids": [
+                  1
+                ],
+                "entity_1": "rocket_two_axis_pod_1",
+                "entity_2": "xiaobianfu",
+                "relative_speed_m_s": 0,
+                "damage_candidate": true,
+                "position_enu_m": {
+                  "x": 0.7,
+                  "y": 0.649519052838,
+                  "z": 10.375
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "mesh_parity": [
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae",
+        "center": [
+          -0.013375,
+          0.0,
+          0.056003021
+        ],
+        "half": [
+          0.0026250000000000006,
+          0.013498489,
+          0.013496979000000003
+        ],
+        "gazebo_common_min_max": [
+          -0.016,
+          -0.013498489,
+          0.042506042,
+          -0.01075,
+          0.013498489,
+          0.0695
+        ],
+        "max_abs_error_m": 6.938893903907228e-18
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae",
+        "center": [
+          0.00825,
+          0.0,
+          0.0
+        ],
+        "half": [
+          0.02425,
+          0.0235,
+          0.017493862
+        ],
+        "gazebo_common_min_max": [
+          -0.016,
+          -0.0235,
+          -0.017493862,
+          0.0325,
+          0.0235,
+          0.017493862
+        ],
+        "max_abs_error_m": 0.0
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/fixed_cowling.dae",
+        "center": [
+          -2.0000000024167353e-09,
+          -1.0879999999997836e-06,
+          0.0495
+        ],
+        "half": [
+          0.041999998,
+          0.041997095,
+          0.041499999999999995
+        ],
+        "gazebo_common_min_max": [
+          -0.042,
+          -0.041998183,
+          0.008,
+          0.041999996,
+          0.041996007,
+          0.091
+        ],
+        "max_abs_error_m": 6.938893903907228e-18
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/lens_bezel.dae",
+        "center": [
+          -2.5735000000002423e-06,
+          0.0,
+          0.0213
+        ],
+        "half": [
+          0.0114974265,
+          0.011498713,
+          0.0023
+        ],
+        "gazebo_common_min_max": [
+          -0.0115,
+          -0.011498713,
+          0.019,
+          0.011494853,
+          0.011498713,
+          0.0236
+        ],
+        "max_abs_error_m": 0.0
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae",
+        "center": [
+          -9.399000000000213e-06,
+          0.0,
+          0.004
+        ],
+        "half": [
+          0.041990601,
+          0.0419953,
+          0.004
+        ],
+        "gazebo_common_min_max": [
+          -0.042,
+          -0.0419953,
+          0.0,
+          0.041981202,
+          0.0419953,
+          0.008
+        ],
+        "max_abs_error_m": 0.0
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/optical_window.dae",
+        "center": [
+          -2.0095000000004692e-06,
+          0.0,
+          0.0224
+        ],
+        "half": [
+          0.0089779905,
+          0.008978995,
+          0.00040000000000000105
+        ],
+        "gazebo_common_min_max": [
+          -0.00898,
+          -0.008978995,
+          0.022,
+          0.008975981,
+          0.008978995,
+          0.0228
+        ],
+        "max_abs_error_m": 0.0
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae",
+        "center": [
+          8.339999999999043e-07,
+          0.0,
+          -0.0014999999999999996
+        ],
+        "half": [
+          0.023998799,
+          0.019,
+          0.0225
+        ],
+        "gazebo_common_min_max": [
+          -0.023997965,
+          -0.019,
+          -0.024,
+          0.023999633,
+          0.019,
+          0.021
+        ],
+        "max_abs_error_m": 3.469446951953614e-18
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae",
+        "center": [
+          0.0149994965,
+          0.02375,
+          0.0
+        ],
+        "half": [
+          0.0022494965000000007,
+          0.0002500000000000002,
+          0.002249748
+        ],
+        "gazebo_common_min_max": [
+          0.01275,
+          0.0235,
+          -0.002249748,
+          0.017248993,
+          0.024,
+          0.002249748
+        ],
+        "max_abs_error_m": 1.734723475976807e-18
+      },
+      {
+        "mesh": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae",
+        "center": [
+          0.015000503500000002,
+          -0.02375,
+          0.0
+        ],
+        "half": [
+          0.0022494965000000007,
+          0.0002500000000000002,
+          0.002249748
+        ],
+        "gazebo_common_min_max": [
+          0.012751007,
+          -0.024,
+          -0.002249748,
+          0.01725,
+          -0.0235,
+          0.002249748
+        ],
+        "max_abs_error_m": 1.734723475976807e-18
+      }
+    ],
+    "transformed_mesh_parity": {
+      "result": "passed",
+      "source": "Gazebo common MeshManager 5.9.0",
+      "fixture": "Z_UP, millimeter unit, node translate/rotate/scale, nonuniform SDF scale",
+      "python_min_max": [
+        0.008,
+        0.066,
+        0.126,
+        0.016,
+        0.07800000000000001,
+        0.138
+      ],
+      "common_min_max_after_sdf_scale": [
+        0.008,
+        0.066,
+        0.126,
+        0.016,
+        0.07800000000000001,
+        0.138
+      ],
+      "max_abs_error_m": 0.0,
+      "unsupported_up_axes": "Y_UP/X_UP rejected at scene generation"
+    },
+    "current_cad": {
+      "scope": "当前已冻结新飞机九个CAD DAE格式、法线与运行世界18项mesh bounds只读核查",
+      "meshes": [
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/azimuth_bearing_housing.dae",
+          "sha256": "2952493154a4d2e0ec7e76eab47a147e17eba1126d16161a9e864f5f0f446093",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 840,
+          "normal_indices": 2520,
+          "min_normal_length": 0.9999999993431913,
+          "max_normal_length": 1.000000000585582,
+          "parser_center": [
+            -0.013375,
+            0.0,
+            0.056003021
+          ],
+          "parser_half": [
+            0.0026250000000000006,
+            0.013498489,
+            0.013496979000000003
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/azimuth_yoke.dae",
+          "sha256": "2dcfe51a843439490edda9784c6a6552da1640638a1a72064b8fe5738accf2e3",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 2096,
+          "normal_indices": 6288,
+          "min_normal_length": 0.9999999993706119,
+          "max_normal_length": 1.0000000006422318,
+          "parser_center": [
+            0.00825,
+            0.0,
+            0.0
+          ],
+          "parser_half": [
+            0.02425,
+            0.0235,
+            0.017493862
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/fixed_cowling.dae",
+          "sha256": "1b118b806a8f27a1a82d7cdfd460876bef0c095e30d92c8352c9721a3a45614e",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 7028,
+          "normal_indices": 21084,
+          "min_normal_length": 0.9999999992737952,
+          "max_normal_length": 1.0000000007878602,
+          "parser_center": [
+            -2.0000000024167353e-09,
+            -1.0879999999997836e-06,
+            0.0495
+          ],
+          "parser_half": [
+            0.041999998,
+            0.041997095,
+            0.041499999999999995
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/lens_bezel.dae",
+          "sha256": "f51d33349899bd74e989dc542dc752e7d18a6de96a1dcfce4bf3fdebc5eca5a2",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 1260,
+          "normal_indices": 3780,
+          "min_normal_length": 0.9999999993431913,
+          "max_normal_length": 1.000000000585582,
+          "parser_center": [
+            -2.5735000000002423e-06,
+            0.0,
+            0.0213
+          ],
+          "parser_half": [
+            0.0114974265,
+            0.011498713,
+            0.0023
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/mount_ring_6xM3.dae",
+          "sha256": "c19e454611b62eb50eaa624d9351f2214f6101a826657ae28be5fac8bd1ce18a",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 4560,
+          "normal_indices": 13680,
+          "min_normal_length": 0.9999999992713877,
+          "max_normal_length": 1.0000000007132872,
+          "parser_center": [
+            -9.399000000000213e-06,
+            0.0,
+            0.004
+          ],
+          "parser_half": [
+            0.041990601,
+            0.0419953,
+            0.004
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/optical_window.dae",
+          "sha256": "6f3bc5f75d4b8a77837882460014b1bb249a7749aaeb49030f43dc779fcada8f",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 416,
+          "normal_indices": 1248,
+          "min_normal_length": 0.9999999993431913,
+          "max_normal_length": 1.000000000585582,
+          "parser_center": [
+            -2.0095000000004692e-06,
+            0.0,
+            0.0224
+          ],
+          "parser_half": [
+            0.0089779905,
+            0.008978995,
+            0.00040000000000000105
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_ball_shell.dae",
+          "sha256": "f6639e15a5a6d40f50f7a2724e4abe84bb6bfc43739a5266604a0f81cc76b7de",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 10250,
+          "normal_indices": 30750,
+          "min_normal_length": 0.9999999992733758,
+          "max_normal_length": 1.000000000750158,
+          "parser_center": [
+            8.339999999999043e-07,
+            0.0,
+            -0.0014999999999999996
+          ],
+          "parser_half": [
+            0.023998799,
+            0.019,
+            0.0225
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_left.dae",
+          "sha256": "664f5d5840ae5722c3ce05648446c74510bf6cd35fffcc1d2ee06caf5c4c1ae1",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 836,
+          "normal_indices": 2508,
+          "min_normal_length": 0.9999999993431913,
+          "max_normal_length": 1.000000000585582,
+          "parser_center": [
+            0.0149994965,
+            0.02375,
+            0.0
+          ],
+          "parser_half": [
+            0.0022494965000000007,
+            0.0002500000000000002,
+            0.002249748
+          ],
+          "passed": true
+        },
+        {
+          "path": "/home/aeroarx/zsh/px4-gazebo-assets/models/gimbals/two_axis_pod/meshes/pitch_pivot_cap_right.dae",
+          "sha256": "03d5f71cf0008229847e2d86a55fc450ce363981f0b74818fa83500e502fa351",
+          "up_axis": "Z_UP",
+          "unit_meter": 1.0,
+          "geometry_count": 1,
+          "flat_identity_instance_nodes": 1,
+          "triangles": 836,
+          "normal_indices": 2508,
+          "min_normal_length": 0.9999999993431913,
+          "max_normal_length": 1.000000000585582,
+          "parser_center": [
+            0.015000503500000002,
+            -0.02375,
+            0.0
+          ],
+          "parser_half": [
+            0.0022494965000000007,
+            0.0002500000000000002,
+            0.002249748
+          ],
+          "passed": true
+        }
+      ],
+      "current_assets": 9,
+      "world_path": "/tmp/px4-scenarios/02_rocket_two_axis_pod/world.sdf",
+      "world_sha256": "f5aafaf83b7b6db53c000afe3fb597090b6deded2383d871fdc39690ee05182d",
+      "world_models": [
+        {
+          "model": "rocket_two_axis_pod_1",
+          "mesh_collision_count": 9,
+          "contact_sensors": 26,
+          "max_bounds_error_m": 0
+        },
+        {
+          "model": "rocket_two_axis_pod_2",
+          "mesh_collision_count": 9,
+          "contact_sensors": 26,
+          "max_bounds_error_m": 0
+        }
+      ],
+      "mesh_bounds_keys": 18,
+      "format_finding": "九个当前DAE均为米制Z_UP单geometry平铺identity实例，位置及有效NORMAL源/索引均完备；当前解析逻辑与实际输入兼容。无NORMAL任意DAE属于本轮范围外，不修改冻结源码。",
+      "passed": true
+    }
+  },
+  "spawn_validation": {
+    "captured_unix_s": 1792593409.5394604,
+    "scope": "场景02当前默认地形法线放置/各机native参数继承/偏移避共边",
+    "sources_sha256": {
+      "prepare_world.py": "34bd4abf165546abc0c2faf82c49caedb8c116b2568bc4fa4b7ee97c6ac2b21a",
+      "README.md": "051fcfb3f59772c28589eda2be30be92217f607acd710855cecc5bd7b1dc3428",
+      "test_prepare_world.py": "f293cd0813b6f10038e397f98f88cc113cd50aefc08b41bb28cefa0aa5eed1eb",
+      "gui/CollisionGeometry.hh": "60bdfe14bf52399e360dc81675cdbf21ab5b55f7248a2b9915585c8a3999285e",
+      "gui/CollisionMonitor.cc": "ded02aa37d6229f8ce02244f45106794ca11102f5c742b3519928ef112c51bd7"
+    },
+    "current_default_world": "/tmp/scenario02_motion_head_5a29c7e/geometry/final_default_world.sdf",
+    "current_default_world_sha256": "c0cbd0a8472b06a8809023978b84b27eaf53743bf11be56fa468d5c25cfc3571",
+    "physically_tested_world": "/tmp/scenario02_motion_head_5a29c7e/geometry/terrain_normal_offset_world.sdf",
+    "physically_tested_world_sha256": "c0cbd0a8472b06a8809023978b84b27eaf53743bf11be56fa468d5c25cfc3571",
+    "canonical_world_equal": true,
+    "static_preflight_assessment": "/tmp/scenario02_motion_head_5a29c7e/ground_normal_offset_preflight/static_pose_assessment.json",
+    "static_preflight": {
+      "sim_time_range_s": [
+        0.0,
+        20.056
+      ],
+      "measured_sim_duration_s": 20.056,
+      "models": {
+        "rocket_two_axis_pod_1": {
+          "samples": 2379,
+          "final_position": [
+            5.25004172451642,
+            4.999999293265701,
+            -0.041301273494376685
+          ],
+          "final_tilt_deg": 2.66050442504942,
+          "all_tilt_range_deg": [
+            2.5881778443736496,
+            2.664707704857418
+          ],
+          "last_5s_tilt_range_deg": [
+            2.66050442504942,
+            2.66050442504942
+          ],
+          "last_5s_max_movement_m": 0.0
+        },
+        "rocket_two_axis_pod_2": {
+          "samples": 2379,
+          "final_position": [
+            10.250034418836306,
+            5.000000222714067,
+            -0.27349393656940596
+          ],
+          "final_tilt_deg": 2.6584358373479007,
+          "all_tilt_range_deg": [
+            2.5934132285880693,
+            2.7114300931579116
+          ],
+          "last_5s_tilt_range_deg": [
+            2.6584358373479007,
+            2.6584358373479007
+          ],
+          "last_5s_max_movement_m": 0.0
+        }
+      },
+      "contact_pairs_last_5_sim_s": {
+        "rocket_two_axis_pod_1::base_link::body_collision vs tile_10_10::terrain::ground": {
+          "samples": 1252,
+          "max_depth_m": 1.0615781320666429e-07,
+          "max_force_n": 19.23947790160422,
+          "min_normal_z": 0.9988671541213989,
+          "max_normal_z": 0.9990265369415283
+        },
+        "rocket_two_axis_pod_2::base_link::body_collision vs tile_10_10::terrain::ground": {
+          "samples": 1252,
+          "max_depth_m": 1.2804252946807537e-07,
+          "max_force_n": 31.071275263799404,
+          "min_normal_z": 0.9988503456115723,
+          "max_normal_z": 0.9990256428718567
+        }
+      },
+      "all_rotor_contact_samples": 0,
+      "healthy_for_flight": true,
+      "required_20_sim_seconds_captured": true,
+      "source_sha256": {
+        "/tmp/scenario02_motion_head_5a29c7e/flight/assess_static_pose.py": "b43dd0d9ab5e064c654f8ee3ac516b66221c43de04947596fc503148a31d63b2",
+        "/tmp/scenario02_motion_head_5a29c7e/geometry/terrain_normal_offset_world.sdf": "c0cbd0a8472b06a8809023978b84b27eaf53743bf11be56fa468d5c25cfc3571"
+      }
+    },
+    "python_unittest": "54 tests passed, no skips",
+    "python_log": "/tmp/scenario02_motion_head_5a29c7e/geometry/final_spawn_python_tests.log",
+    "git_diff_check": "passed",
+    "user_preexisting_msg_sha256": "c08c987c6fa9a556f3bb66ec2323415cecee567fb3875c37e8dbce106cb68b89",
+    "assets_worktree_status": "",
+    "limit": "这里只验证无PX4控制静止放置及当前源继承；正式02飞行需独立验收。"
+  },
+  "static_validation": {
+    "sim_time_range_s": [
+      0.0,
+      20.056
+    ],
+    "measured_sim_duration_s": 20.056,
+    "models": {
+      "rocket_two_axis_pod_1": {
+        "samples": 2379,
+        "final_position": [
+          5.25004172451642,
+          4.999999293265701,
+          -0.041301273494376685
+        ],
+        "final_tilt_deg": 2.66050442504942,
+        "all_tilt_range_deg": [
+          2.5881778443736496,
+          2.664707704857418
+        ],
+        "last_5s_tilt_range_deg": [
+          2.66050442504942,
+          2.66050442504942
+        ],
+        "last_5s_max_movement_m": 0.0
+      },
+      "rocket_two_axis_pod_2": {
+        "samples": 2379,
+        "final_position": [
+          10.250034418836306,
+          5.000000222714067,
+          -0.27349393656940596
+        ],
+        "final_tilt_deg": 2.6584358373479007,
+        "all_tilt_range_deg": [
+          2.5934132285880693,
+          2.7114300931579116
+        ],
+        "last_5s_tilt_range_deg": [
+          2.6584358373479007,
+          2.6584358373479007
+        ],
+        "last_5s_max_movement_m": 0.0
+      }
+    },
+    "contact_pairs_last_5_sim_s": {
+      "rocket_two_axis_pod_1::base_link::body_collision vs tile_10_10::terrain::ground": {
+        "samples": 1252,
+        "max_depth_m": 1.0615781320666429e-07,
+        "max_force_n": 19.23947790160422,
+        "min_normal_z": 0.9988671541213989,
+        "max_normal_z": 0.9990265369415283
+      },
+      "rocket_two_axis_pod_2::base_link::body_collision vs tile_10_10::terrain::ground": {
+        "samples": 1252,
+        "max_depth_m": 1.2804252946807537e-07,
+        "max_force_n": 31.071275263799404,
+        "min_normal_z": 0.9988503456115723,
+        "max_normal_z": 0.9990256428718567
+      }
+    },
+    "all_rotor_contact_samples": 0,
+    "healthy_for_flight": true,
+    "required_20_sim_seconds_captured": true,
+    "source_sha256": {
+      "/tmp/scenario02_motion_head_5a29c7e/flight/assess_static_pose.py": "b43dd0d9ab5e064c654f8ee3ac516b66221c43de04947596fc503148a31d63b2",
+      "/tmp/scenario02_motion_head_5a29c7e/geometry/terrain_normal_offset_world.sdf": "c0cbd0a8472b06a8809023978b84b27eaf53743bf11be56fa468d5c25cfc3571"
+    }
+  },
+  "limits": {
+    "yaw_deg": [
+      -60,
+      60
+    ],
+    "pitch_deg": [
+      -80,
+      30
+    ],
+    "default_far_target_image_lock_verified": false
+  },
+  "preserved_user_msg_sha256": "c08c987c6fa9a556f3bb66ec2323415cecee567fb3875c37e8dbce106cb68b89"
+}

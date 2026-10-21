@@ -49,6 +49,15 @@ int main()
   Check(!Intersects({transform * upright.pose, upright.halfExtents},
       {transform * nearTip.pose, nearTip.halfExtents}));
 
+  // 网格AABB的非零中心必须先经collision旋转，再加世界位置。
+  const auto offsetMesh = scenario02::WorldCollisionBox(
+      gz::math::Pose3d(10, 20, 30, 0, 0, M_PI_2),
+      {{1, 2, 3}, {0.1, 0.2, 0.3}});
+  Check(offsetMesh.pose.Pos().Equal({8, 21, 33}, 1e-12));
+  Check(offsetMesh.halfExtents.Equal({0.1, 0.2, 0.3}, 1e-12));
+  Check(Intersects(offsetMesh, {gz::math::Pose3d(8, 21, 33, 0, 0, 0), {0.01, 0.01, 0.01}}));
+  Check(!Intersects(offsetMesh, {gz::math::Pose3d(10, 20, 30, 0, 0, 0), {0.01, 0.01, 0.01}}));
+
   sdf::Geometry geometry;
   sdf::Cylinder cylinder;
   cylinder.SetRadius(0.045);
