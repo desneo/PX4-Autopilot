@@ -581,6 +581,8 @@ private:
 	{
 		dyt_aisheng_telemetry_s msg{};
 		msg.timestamp = hrt_absolute_time();
+		msg.self_check = 0x01;
+		msg.work_status = 0x01;
 		msg.track_status = fields.track_status;
 		msg.pitch_angle = fields.pitch_angle;
 		msg.yaw_angle = fields.yaw_angle;
