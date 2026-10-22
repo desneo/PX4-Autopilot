@@ -1,0 +1,7 @@
+menuconfig MODULES_SIMULATION_DYT_UDP_BRIDGE
+	bool "dyt_udp_bridge"
+	default n
+	depends on PLATFORM_POSIX
+	---help---
+		Receive Aisheng JSON telemetry over UDP and publish it as uORB data.
+		This bridge is intended for SITL only.

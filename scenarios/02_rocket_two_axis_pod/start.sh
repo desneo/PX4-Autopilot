@@ -5,6 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PX4_DIR=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 PX4_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4"
 PX4_ETC="${PX4_DIR}/build/px4_sitl_default/etc"
+DYT_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-dyt_udp_bridge"
 RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
 ASSETS_ROOT="${PX4_GAZEBO_ASSETS_ROOT:-${PX4_DIR}/../px4-gazebo-assets}"
 ASSETS_URL="${PX4_GAZEBO_ASSETS_URL:-https://github.com/desneo/px4-gazebo-assets.git}"
@@ -144,20 +145,22 @@ elif [[ ! -d $ASSETS_ROOT/.git ]]; then
 	exit 1
 fi
 
-if [[ -n $(git -C "$ASSETS_ROOT" status --porcelain) ]]; then
-	echo "ERROR: 资产仓存在未提交修改，无法安全同步最新 main：${ASSETS_ROOT}" >&2
-	git -C "$ASSETS_ROOT" status --short >&2
-	exit 1
-fi
 if [[ $(git -C "$ASSETS_ROOT" branch --show-current) != main ]]; then
-	echo "ERROR: 资产仓当前不是 main 分支，拒绝自动切换：${ASSETS_ROOT}" >&2
+	echo "ERROR: 资产仓当前不是 main 分支：${ASSETS_ROOT}" >&2
 	exit 1
 fi
-echo "同步资产仓最新 main：${ASSETS_ROOT}"
-git -C "$ASSETS_ROOT" pull --ff-only origin main || {
-	echo "ERROR: 无法快进同步资产仓 main，请检查网络或仓库分支状态。" >&2
+echo "检查资产仓远程 main：${ASSETS_ROOT}"
+git -C "$ASSETS_ROOT" fetch --quiet origin main || {
+	echo "ERROR: 无法获取资产仓 origin/main，不能确认本地版本是否过期。" >&2
 	exit 1
 }
+if ! git -C "$ASSETS_ROOT" merge-base --is-ancestor origin/main HEAD; then
+	echo "ERROR: 资产仓本地 main 未包含最新 origin/main，请先更新本地提交。" >&2
+	exit 1
+fi
+if [[ -n $(git -C "$ASSETS_ROOT" status --porcelain) ]]; then
+	echo "资产仓存在未提交修改；本地提交未落后 origin/main，继续使用当前工作区。"
+fi
 ASSETS_REV=$(git -C "$ASSETS_ROOT" rev-parse --short=12 HEAD)
 echo "资产仓版本：${ASSETS_REV}"
 
@@ -180,7 +183,7 @@ for command in gz setsid timeout git cmake make find; do
 	command -v "$command" >/dev/null || { echo "ERROR: 缺少命令：${command}" >&2; exit 1; }
 done
 
-if [[ ! -x $PX4_BIN || ! -d $PX4_ETC ]]; then
+if [[ ! -x $PX4_BIN || ! -x $DYT_UDP_BRIDGE_BIN || ! -d $PX4_ETC ]]; then
 	echo "PX4 SITL 尚未构建，开始构建 px4_sitl_default。"
 	make -C "$PX4_DIR" px4_sitl_default
 fi
@@ -412,13 +415,14 @@ if ((GUI)); then
 		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
 fi
 
-printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
 	entity="rocket_two_axis_pod_${aircraft_id}"
 	topic_prefix="/uav_${aircraft_id}/pod"
 	mavsdk_port=$((14280 + i))
 	udp_port=$((8770 + i))
+	dyt_udp_port=$((9000 + i))
 	rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
 	rootfs="${RUNTIME_DIR}/rootfs_${aircraft_id}"
 	mkdir -p "$rootfs"
@@ -449,6 +453,7 @@ for ((i = 0; i < COUNT; i++)); do
 	printf '\n'
 	echo "  MAVSDK：        udpout://${ADVERTISE_HOST}:${mavsdk_port}"
 	echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
+	echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
 	echo "  吊仓视频：      ${rtsp_url}"
 	printf '  地面站 command: '
 	printf '%q ' bash \
@@ -461,10 +466,21 @@ for ((i = 0; i < COUNT; i++)); do
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"
 	wait_for_log "px4_${aircraft_id}" 'Startup script returned successfully' 60 || exit 1
+	if ! "$DYT_UDP_BRIDGE_BIN" --instance "$i" start -p "$dyt_udp_port"; then
+		echo "ERROR: 飞机 ${aircraft_id} 的 Aisheng UDP bridge 启动失败" >&2
+		exit 1
+	fi
+	wait_for_log "px4_${aircraft_id}" "listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}" 10 || exit 1
+	sleep 0.2
+	if ! "$DYT_UDP_BRIDGE_BIN" --instance "$i" status >/dev/null; then
+		echo "ERROR: 飞机 ${aircraft_id} 的 Aisheng UDP bridge 启动后异常退出" >&2
+		exit 1
+	fi
 	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
 	wait_for_log "bridge_${aircraft_id}" '遥测/指令服务' 30 || exit 1
 	wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
-	printf '%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" "$rtsp_url" \
+	printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
+		"$dyt_udp_port" "$rtsp_url" \
 		>> "$RUNTIME_DIR/interfaces.tsv"
 done
 

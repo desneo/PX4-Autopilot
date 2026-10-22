@@ -56,7 +56,7 @@ sudo usermod -aG render,video "$USER"
 https://github.com/desneo/px4-gazebo-assets.git
 ```
 
-以后每次启动都会在干净的 `main` 分支执行 `git pull --ff-only origin main`，成功后才生成运行模型。下载或同步失败、分支不是 `main`、存在未提交修改，脚本都会报告原因并停止，不会执行 `reset` 或覆盖本地修改。
+以后每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
 
 可用环境变量覆盖位置和下载地址：
 
@@ -164,6 +164,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 - PX4/MAVSDK UDP：`14280 + i - 1`；
 - 吊仓指令与遥测 UDP：`8770 + i - 1`；
+- Aisheng JSON UDP：`9000 + i - 1`；
 - 共享 RTSP 端口：`8555`；
 - 视频路径：`/two_axis_pod_i`；
 - Gazebo 吊仓话题：`/uav_i/pod/*`。
@@ -172,12 +173,14 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 ```text
 飞机1：udp://192.168.1.56:8770
+       Aisheng JSON udp://192.168.1.56:9000
        rtsp://192.168.1.56:8555/two_axis_pod_1
 飞机2：udp://192.168.1.56:8771
+       Aisheng JSON udp://192.168.1.56:9001
        rtsp://192.168.1.56:8555/two_axis_pod_2
 ```
 
-每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
+02 场景会在每个 PX4 SITL 实例启动完成后，自动为该实例启动独立的 `dyt_udp_bridge`。模块只编译进 SITL；它监听本机全部接口上的对应 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系（包括 `dyt_udp`）保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
 吊仓网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。
 

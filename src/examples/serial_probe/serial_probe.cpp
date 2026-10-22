@@ -700,6 +700,7 @@ private:
 		msg.timestamp = hrt_absolute_time();
 		msg.self_check = _buffer[3];
 		msg.work_status = _buffer[4];
+		msg.track_status = msg.work_status & 0x01;
 		msg.pitch_angle = read_s16(&_buffer[5]) * 0.01f;
 		msg.yaw_angle = read_s16(&_buffer[7]) * 0.01f;
 		msg.gate_x = read_s16(&_buffer[9]);
