@@ -20,10 +20,11 @@ PARTITION=px4_scenario_02_rocket_two_axis_pod
 RTSP_PORT=8555
 TARGET_QGC_ADDRESS=127.0.0.1:14550
 TARGET_MAVLINK_SYSID=200
+TRACKING_BACKEND=sim_truth
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder nvenc]
+用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt]
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与两轴吊仓组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
@@ -33,6 +34,8 @@ usage() {
       --gui               启动 Gazebo GUI
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
+      --tracking-backend TYPE
+                           单目标跟踪后端：sim_truth（默认）或 csrt
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
@@ -73,6 +76,11 @@ while (($# > 0)); do
 			ENCODER=$2
 			shift 2
 			;;
+		--tracking-backend)
+			require_value "$@"
+			TRACKING_BACKEND=$2
+			shift 2
+			;;
 		--target-qgc-address)
 			require_value "$@"
 			TARGET_QGC_ADDRESS=$2
@@ -101,6 +109,10 @@ if [[ ! $COUNT =~ ^[0-9]+$ ]] || ((COUNT < 1 || COUNT > 10)); then
 fi
 if [[ $ENCODER != nvenc ]]; then
 	echo "ERROR: 最新资产仓的 --encoder 只接受 nvenc" >&2
+	exit 2
+fi
+if [[ $TRACKING_BACKEND != sim_truth && $TRACKING_BACKEND != csrt ]]; then
+	echo "ERROR: --tracking-backend 只接受 sim_truth 或 csrt" >&2
 	exit 2
 fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
@@ -261,7 +273,8 @@ done
 
 WORLD_FILE="${RUNTIME_DIR}/world.sdf"
 prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
-	--source-world "$WORLD_SOURCE" --output "$WORLD_FILE" "${model_args[@]}")
+	--source-world "$WORLD_SOURCE" --output "$WORLD_FILE"
+	--tracking-backend "$TRACKING_BACKEND" "${model_args[@]}")
 ((GUI)) && prepare_world_command+=(--target-control)
 "${prepare_world_command[@]}"
 gz sdf -k "$WORLD_FILE"
@@ -499,6 +512,7 @@ trap - EXIT
 echo
 echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
 echo "飞机保持待命，不自动解锁或飞行。"
+echo "吊仓单目标跟踪：${TRACKING_BACKEND}。"
 echo "碰撞致损：      PX4 飞机碰撞后关闭全部电机；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
 if ((GUI)); then
 	echo "雷达/靶机控制：使用 Gazebo 地图右侧的固定控制面板。"

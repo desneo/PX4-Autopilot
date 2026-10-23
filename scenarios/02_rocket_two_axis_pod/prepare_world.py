@@ -13,6 +13,8 @@ import xml.etree.ElementTree as ET
 
 WORLD_NAME = "geo_32_217857_119_105878"
 MODEL_BASENAME = "rocket_two_axis_pod"
+TRACKING_BACKENDS = {"sim_truth", "csrt"}
+SIM_TRUTH_DYNAMIC_TARGETS = ("xiaomotuo", "xiaobianfu")
 TARGET_COMMAND_TOPIC = "/scenario/02/target/command"
 TARGET_STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"
@@ -307,6 +309,28 @@ def add_contact_sensors(model: ET.Element) -> int:
     if count == 0:
         raise ValueError(f"飞机模型缺少碰撞体：{model.get('name', '')}")
     return count
+
+
+def configure_gimbal_tracking(
+    model: ET.Element,
+    tracking_backend: str,
+    target_names: list[str],
+) -> None:
+    """配置单目标跟踪后端与场景内可锁定的飞机实体。"""
+    plugins = model.findall("./plugin[@name='two_axis::GimbalController']")
+    if len(plugins) != 1:
+        raise ValueError(
+            f"飞机模型必须且只能包含一个 two_axis::GimbalController："
+            f"{model.get('name', '')}"
+        )
+    plugin = plugins[0]
+    for tag in ("tracking_backend", "sim_truth_target_name"):
+        for old in plugin.findall(tag):
+            plugin.remove(old)
+    set_text(plugin, "tracking_backend", tracking_backend)
+    for target_name in target_names:
+        candidate = ET.SubElement(plugin, "sim_truth_target_name")
+        candidate.text = target_name
 
 
 def add_collision_systems(world: ET.Element) -> ET.Element:
@@ -608,6 +632,7 @@ def prepare(
     spacing: float = 5.0,
     altitude: float | None = None,
     target_control: bool = False,
+    tracking_backend: str = "sim_truth",
 ) -> Path:
     if not models:
         raise ValueError("至少需要一架飞机")
@@ -617,6 +642,8 @@ def prepare(
         raise ValueError("飞机间距必须为有限正数")
     if altitude is not None and (not math.isfinite(altitude) or altitude <= 0):
         raise ValueError("飞机原点相对地形高度必须为有限正数")
+    if tracking_backend not in TRACKING_BACKENDS:
+        raise ValueError("单目标跟踪后端只支持 sim_truth 或 csrt")
 
     source_world = source_world.resolve()
     tree = ET.parse(source_world)
@@ -629,8 +656,13 @@ def prepare(
     columns = math.ceil(math.sqrt(len(models)))
     positions = [((index % columns + 1)*spacing + .25, (index // columns + 1)*spacing) for index in range(len(models))]
     ground_surfaces = terrain_surfaces(world, positions)
+    target_names = [
+        *(f"{MODEL_BASENAME}_{aircraft_id}" for aircraft_id, _ in models),
+        *SIM_TRUTH_DYNAMIC_TARGETS,
+    ]
     for (aircraft_id, model_path), (x, y), (ground_z, normal) in zip(models, positions, ground_surfaces):
         model = load_model(aircraft_id, model_path.resolve())
+        configure_gimbal_tracking(model, tracking_backend, target_names)
         add_contact_sensors(model)
         spawn_z = ground_z + spawn_altitude(model_path.resolve(), altitude)
         roll, pitch = ground_roll_pitch(normal)
@@ -680,6 +712,12 @@ def main() -> int:
     parser.add_argument("--spacing", type=float, default=5.0)
     parser.add_argument("--altitude", type=float, help="显式覆盖飞机原点距当地地形的竖直高度（m）；默认继承各模型parameters.json simulation.spawn_pose的Z")
     parser.add_argument(
+        "--tracking-backend",
+        choices=sorted(TRACKING_BACKENDS),
+        default="sim_truth",
+        help="单目标跟踪后端（默认：sim_truth）",
+    )
+    parser.add_argument(
         "--target-control",
         action="store_true",
         help="加入 Gazebo 靶机控制面板和场景航迹插件",
@@ -695,6 +733,7 @@ def main() -> int:
                 args.spacing,
                 args.altitude,
                 args.target_control,
+                args.tracking_backend,
             )
         )
     except (OSError, ValueError, ET.ParseError) as error:

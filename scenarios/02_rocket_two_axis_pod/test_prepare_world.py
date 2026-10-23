@@ -184,6 +184,19 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(
             first.findtext(".//command_topic"), "/uav_1/pod/command"
         )
+        expected_targets = [
+            "rocket_two_axis_pod_1",
+            "rocket_two_axis_pod_2",
+            "xiaomotuo",
+            "xiaobianfu",
+        ]
+        for model in (first, second):
+            controller = model.find("./plugin[@name='two_axis::GimbalController']")
+            self.assertEqual(controller.findtext("tracking_backend"), "sim_truth")
+            self.assertEqual(
+                [item.text for item in controller.findall("sim_truth_target_name")],
+                expected_targets,
+            )
         self.assertTrue(Path(first.findtext(".//uri")).is_absolute())
         contact_sensor = first.find(".//sensor[@type='contact']")
         self.assertIsNotNone(contact_sensor)
@@ -256,6 +269,31 @@ class PrepareWorldTest(unittest.TestCase):
                 self.root / "world" / "world.sdf",
                 self.root / "run" / "world.sdf",
                 [(2, self.make_model(1))],
+            )
+
+    def test_explicit_csrt_backend_is_written_and_invalid_backend_is_rejected(self):
+        output = self.root / "run" / "world.sdf"
+        model = self.make_model(1)
+        MODULE.prepare(
+            self.root / "world" / "world.sdf",
+            output,
+            [(1, model)],
+            tracking_backend="csrt",
+        )
+        controller = ET.parse(output).getroot().find(
+            "world/model[@name='rocket_two_axis_pod_1']/plugin[@name='two_axis::GimbalController']"
+        )
+        self.assertEqual(controller.findtext("tracking_backend"), "csrt")
+        self.assertEqual(
+            [item.text for item in controller.findall("sim_truth_target_name")],
+            ["rocket_two_axis_pod_1", "xiaomotuo", "xiaobianfu"],
+        )
+        with self.assertRaisesRegex(ValueError, "sim_truth 或 csrt"):
+            MODULE.prepare(
+                self.root / "world" / "world.sdf",
+                output,
+                [(1, model)],
+                tracking_backend="unknown",
             )
 
     def test_target_default_altitude_uses_world_center_elevation(self):

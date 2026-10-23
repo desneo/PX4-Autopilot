@@ -10,6 +10,9 @@
 # 默认一架
 bash scenarios/02_rocket_two_axis_pod/start.sh
 
+# 显式切换为 CSRT 图像跟踪
+bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
+
 # 四架，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 4 --gui
 
@@ -25,6 +28,8 @@ bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
 `-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。
+
+吊仓单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部 `rocket_two_axis_pod_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
 
 每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
 
