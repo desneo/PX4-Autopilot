@@ -7,7 +7,7 @@
 # Status bytes are kept raw with their vendor bitfield meaning.
 # Scaled physical values are converted with the vendor scale factors.
 # Target longitude/latitude stay raw int32 (1e-7 deg) to keep full precision.
-uint64 timestamp		# publication time
+uint64 timestamp		# time since system start (microseconds)
 
 uint8 self_check		# 0x01 ok, 0x02 fault, 0x03 self-testing
 uint8 work_status		# bit0 tracking, bit2 defog, bit4-3 video source, bit6-5 algorithm, bit7 RTP
