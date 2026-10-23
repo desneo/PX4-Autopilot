@@ -474,7 +474,7 @@ for ((i = 0; i < COUNT; i++)); do
 		--no-manage-bridge \
 		--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
 		--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
-		--mount /two_axis_pod --decoder nvdec --window-title "飞机${aircraft_id}吊仓"
+		--mount /two_axis_pod --decoder nvdec --window-title "Aircraft${aircraft_id}Gimbal"
 	printf '\n'
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"
