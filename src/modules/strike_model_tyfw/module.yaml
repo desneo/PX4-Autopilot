@@ -1,0 +1,46 @@
+module_name: strike_mode_tyfw
+parameters:
+  - group: Strike
+    definitions:
+      STRIKE_SEARCH:
+        description:
+          short: 请求搜寻开关 (0=off, 1=on)
+        type: int32
+        default: 0
+        min: 0
+        max: 1
+      STRIKE_REQUEST:
+        description:
+          short: 请求打击开关 (0=off, 1=on)
+        type: int32
+        default: 0
+        min: 0
+        max: 1
+      STRIKE_ROLL_KP:
+        description:
+          short: 制导滚转通道比例增益Kp
+        type: float
+        default: 0.2
+        min: 0.005
+        max: 2.0
+      STRIKE_ROLL_KI:
+        description:
+          short: 制导滚转通道积分增益Ki
+        type: float
+        default: 0.1
+        min: 0.005
+        max: 2.0
+      STRIKE_PITCH_KP:
+        description:
+          short: 制导俯仰通道比例增益Kp
+        type: float
+        default: 0.2
+        min: 0.005
+        max: 2.0
+      STRIKE_PITCH_KI:
+        description:
+          short: 制导俯仰通道积分增益Ki
+        type: float
+        default: 0.1
+        min: 0.005
+        max: 2.0

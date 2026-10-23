@@ -1,0 +1,5 @@
+menuconfig MODULES_STRIKE_MODEL_TYFW
+	bool "STRIKE_MODEL_TYFW"
+	default y
+	---help---
+		Enable support for STRIKE_MODEL_TYFW
