@@ -715,7 +715,7 @@ private:
 		msg.status = _buffer[26];
 		msg.autonomous = _buffer[27];
 
-		for (unsigned i = 0; i < 5; ++i) {
+		for (unsigned i = 0; i < 4; ++i) {
 			const uint8_t *target = &_buffer[28 + i * 12];
 			msg.target_type[i] = target[0];
 			msg.target_confidence[i] = target[1] * 0.01f;
@@ -724,6 +724,13 @@ private:
 			msg.target_alt[i] = read_u16(&target[10]) * 0.1f;
 		}
 
+		msg.status2 = _buffer[76];
+		msg.tracking_gate_w = read_u16(&_buffer[77]);
+		msg.tracking_gate_h = read_u16(&_buffer[79]);
+		msg.pitch_attitude = read_s16(&_buffer[81]) * 0.01f;
+		msg.yaw_attitude = read_s16(&_buffer[83]) * 0.01f;
+		msg.roll_attitude = read_s16(&_buffer[85]) * 0.01f;
+		msg.tracking_target_type = _buffer[87];
 		msg.laser_range = read_u16(&_buffer[88]) * 0.1f;
 		msg.laser_update = _buffer[90];
 		msg.aircraft_pitch = read_s16(&_buffer[91]) * 0.01f;

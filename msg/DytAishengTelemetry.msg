@@ -25,11 +25,18 @@ float32 pitch_los_rate		# 俯仰视线角速度，pitch LOS rate [deg/s], raw * 
 float32 yaw_los_rate		# 偏航实现角速度，yaw LOS rate [deg/s], raw * 0.01
 uint8 status			# bit0 blind zone, bit1 attack, bit2 level, bit4-3 gyro calib, bit7-5 servo state
 uint8 autonomous		# 0 manual, 1 autonomous
-uint8[5] target_type		# 目标类别，target 1..5 type: 0 none, 1 tank, 2 vehicle, 3 ship, 4 aircraft, 5 cross
-float32[5] target_confidence	# 目标置信度，target 1..5 confidence, raw * 0.01
-int32[5] target_lon		# target 1..5 longitude [1e-7 deg], east positive
-int32[5] target_lat		# target 1..5 latitude [1e-7 deg], north positive
-float32[5] target_alt		# target 1..5 altitude [m], raw * 0.1
+uint8[4] target_type		# 目标类别，target 1..4 type: 0 none, 1 tank, 2 vehicle, 3 ship, 4 aircraft, 5 cross
+float32[4] target_confidence	# 目标置信度，target 1..4 confidence, raw * 0.01
+int32[4] target_lon		# target 1..4 longitude [1e-7 deg], east positive
+int32[4] target_lat		# target 1..4 latitude [1e-7 deg], north positive
+float32[4] target_alt		# target 1..4 altitude [m], raw * 0.1
+uint8 status2			# bit1-0 zoom: 1=1x, 2=2x, 3=4x; bit3-2 seeker mode: 1 background lock, 2 recognition, 3 auto lock
+uint16 tracking_gate_w		# 跟踪波门宽度 [pixel], raw
+uint16 tracking_gate_h		# 跟踪波门高度 [pixel], raw
+float32 pitch_attitude		# 导引头俯仰姿态 [deg], raw * 0.01
+float32 yaw_attitude		# 导引头偏航姿态 [deg], raw * 0.01
+float32 roll_attitude		# 导引头横滚姿态 [deg], raw * 0.01
+uint8 tracking_target_type	# 跟踪目标类型: 0 none, 1 cross, 2 vehicle, 3 person, 4 aircraft, 5 tank
 float32 laser_range		# laser range [m], raw * 0.1; 0 = invalid
 uint8 laser_update		# bit0 updated, bit1-5 positioning condition states
 float32 aircraft_pitch		# aircraft pitch [deg], raw * 0.01
