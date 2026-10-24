@@ -68,8 +68,6 @@ set(msg_files
 	DistanceSensorModeChangeRequest.msg
 	DronecanNodeStatus.msg
 	DytAishengTelemetry.msg
-	DytGimbalRateCommand.msg
-	DytTraceCommand.msg
 	DytZhongkeTelemetry.msg
 	Ekf2Timestamps.msg
 	EscReport.msg

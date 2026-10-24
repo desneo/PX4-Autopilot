@@ -1,6 +1,5 @@
 #!/bin/sh
-# TELEM2 is reserved for the custom DYT telemetry parser in this test firmware.
+# TELEM2 is reserved for the receive-only DYT telemetry parser.
 # It publishes dyt_zhongke_telemetry / dyt_aisheng_telemetry according to the
-# frame header, and translates dyt_gimbal_rate_command into vendor commands.
-# DYT_BRAND selects the vendor (and therefore the baud rate and TX protocol).
+# frame header. DYT_BRAND selects the receive baud rate for the connected DYT.
 serial_probe start
