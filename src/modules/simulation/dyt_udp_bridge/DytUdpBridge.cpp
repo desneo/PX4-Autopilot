@@ -29,8 +29,9 @@
 namespace
 {
 constexpr uint16_t kDefaultPort = 9000;
-constexpr size_t kUdpBufferSize = 512;
+constexpr size_t kUdpBufferSize = 2048;
 constexpr uint16_t kRequiredFields = (1u << 9) - 1u;
+constexpr uint16_t kOmegaFields = (1u << 11) | (1u << 12) | (1u << 13);
 
 enum class Field : uint8_t {
 	TrackStatus = 0,
@@ -42,6 +43,11 @@ enum class Field : uint8_t {
 	TargetConfidence,
 	PitchLosRate,
 	YawLosRate,
+	GyroPitchRate,
+	GyroYawRate,
+	LosOmegaN,
+	LosOmegaE,
+	LosOmegaD,
 };
 
 struct AishengFields {
@@ -54,6 +60,12 @@ struct AishengFields {
 	float target_confidence{0.f};
 	float pitch_los_rate{0.f};
 	float yaw_los_rate{0.f};
+	float gyro_pitch_rate{0.f};
+	float gyro_yaw_rate{0.f};
+	// 旧报文缺少向量时明确标记未提供，不能伪造零角速度。
+	float los_omega_n{NAN};
+	float los_omega_e{NAN};
+	float los_omega_d{NAN};
 };
 
 class JsonParser
@@ -112,7 +124,10 @@ public:
 		}
 
 		skip_whitespace();
-		return _cursor == _end && seen == kRequiredFields;
+		// 陀螺仪字段可选；三维LOS向量须全部出现或全部缺省，保持旧9/13字段报文兼容。
+		const uint16_t omega_seen = seen & kOmegaFields;
+		return _cursor == _end && (seen & kRequiredFields) == kRequiredFields
+		       && (omega_seen == 0 || omega_seen == kOmegaFields);
 	}
 
 private:
@@ -344,6 +359,16 @@ private:
 
 		if (strcmp(key, "yaw_los_rate") == 0) { return static_cast<int>(Field::YawLosRate); }
 
+		if (strcmp(key, "gyro_pitch_rate") == 0) { return static_cast<int>(Field::GyroPitchRate); }
+
+		if (strcmp(key, "gyro_yaw_rate") == 0) { return static_cast<int>(Field::GyroYawRate); }
+
+		if (strcmp(key, "los_omega_n") == 0) { return static_cast<int>(Field::LosOmegaN); }
+
+		if (strcmp(key, "los_omega_e") == 0) { return static_cast<int>(Field::LosOmegaE); }
+
+		if (strcmp(key, "los_omega_d") == 0) { return static_cast<int>(Field::LosOmegaD); }
+
 		return -1;
 	}
 
@@ -371,6 +396,11 @@ private:
 		case Field::TargetConfidence: fields.target_confidence = value; break;
 		case Field::PitchLosRate: fields.pitch_los_rate = value; break;
 		case Field::YawLosRate: fields.yaw_los_rate = value; break;
+		case Field::GyroPitchRate: fields.gyro_pitch_rate = value; break;
+		case Field::GyroYawRate: fields.gyro_yaw_rate = value; break;
+		case Field::LosOmegaN: fields.los_omega_n = value; break;
+		case Field::LosOmegaE: fields.los_omega_e = value; break;
+		case Field::LosOmegaD: fields.los_omega_d = value; break;
 		}
 
 		return true;
@@ -592,6 +622,11 @@ private:
 		msg.target_confidence[0] = fields.target_confidence;
 		msg.pitch_los_rate = fields.pitch_los_rate;
 		msg.yaw_los_rate = fields.yaw_los_rate;
+		msg.gyro_pitch_rate = fields.gyro_pitch_rate;
+		msg.gyro_yaw_rate = fields.gyro_yaw_rate;
+		msg.los_omega_n = fields.los_omega_n;
+		msg.los_omega_e = fields.los_omega_e;
+		msg.los_omega_d = fields.los_omega_d;
 
 		if (_publisher.publish(msg)) {
 			++_publications;

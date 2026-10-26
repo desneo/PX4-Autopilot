@@ -45,3 +45,9 @@ float32 aircraft_yaw		# aircraft heading [deg], raw * 0.01
 uint8 ip_segment		# DYT IP 192.168.ip_segment.ip_node
 uint8 ip_node			# DYT IP 192.168.ip_segment.ip_node
 uint32 device_timestamp		# DYT power-on time [ms]
+
+# 目标相对无人机名义重心的NED视线角速度向量，单位°/s，无倍率、不限幅；不含绕视线自转。
+# 旧JSON报文未提供向量时为NaN；新报文明确无效时按约定发送三个0。
+float32 los_omega_n		# 北向视线角速度分量，NED N轴，°/s
+float32 los_omega_e		# 东向视线角速度分量，NED E轴，°/s
+float32 los_omega_d		# 地向视线角速度分量，NED D轴，°/s

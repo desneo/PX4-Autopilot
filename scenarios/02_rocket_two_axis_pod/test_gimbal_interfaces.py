@@ -11,6 +11,13 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 
+PROTOCOL_VERSION = 8
+ANGLE_CONVENTION = 'motion_head_joint_right_positive'
+AISHENG_FIELDS = {'track_status', 'pitch_angle', 'yaw_angle', 'pitch_misalignment',
+                  'yaw_misalignment', 'tracking_confidence', 'target_confidence',
+                  'gyro_pitch_rate', 'gyro_yaw_rate', 'pitch_los_rate', 'yaw_los_rate',
+                  'tracking_gate_w', 'tracking_gate_h', 'los_omega_n', 'los_omega_e', 'los_omega_d'}
+
 LIMITS = {"yaw": (-60., 60.), "pitch": (-80., 30.)}
 BALL_CENTER = (.015, 0., .056)
 SENSOR_OFFSET = .0237
@@ -68,7 +75,7 @@ def rotation_error_deg(a, b):
 
 
 def joint_rotation(yaw_deg, pitch_deg):
-    y, p = -math.radians(yaw_deg)/2, -math.radians(pitch_deg)/2
+    y, p = math.radians(yaw_deg)/2, -math.radians(pitch_deg)/2
     return qmul((math.cos(y), math.sin(y), 0., 0.),
                 (math.cos(p), 0., math.sin(p), 0.))
 
@@ -86,8 +93,8 @@ def optical_check(telemetry, model, mount, camera, sensor):
     """实际pose_v模型/link链与固定机械定义独立比对；link位姿相对model。"""
     yaw = float(telemetry['joints_deg']['yaw']['pos'])
     pitch = float(telemetry['joints_deg']['pitch']['pos'])
-    if telemetry.get('protocol_version') != 6 or telemetry.get('angle_convention') != 'motion_head_joint':
-        raise ValueError('实际吊舱必须使用协议6 / motion_head_joint')
+    if telemetry.get('protocol_version') != PROTOCOL_VERSION or telemetry.get('angle_convention') != ANGLE_CONVENTION:
+        raise ValueError('实际吊舱必须使用协议8 / motion_head_joint_right_positive')
     if telemetry.get('mount', {}).get('static') is not False:
         raise ValueError('实际吊舱必须启用动态安装姿态')
     mount_world = compose(model, mount)
@@ -115,6 +122,38 @@ def optical_check(telemetry, model, mount, camera, sensor):
                 actual_image_up_mount=rotate(optical_mount, (0., 0., 1.)),
                 actual_ball_center_mount_m=actual_center, actual_lens_center_mount_m=lens_center,
                 errors=checks)
+
+
+def aisheng_check(telemetry):
+    """核对生产16字段转换；机械gyro和目标惯性LOS必须独立映射。"""
+    from telemetry_forward import aisheng_message
+    packet = aisheng_message(telemetry)
+    if set(packet) != AISHENG_FIELDS:
+        raise ValueError('艾晟报文必须包含当前16字段')
+    for axis in ('yaw', 'pitch'):
+        mechanical = telemetry['attitude_deg'][axis]['vel']
+        expected_gyro = max(-20., min(20., mechanical))
+        los = telemetry['target_los']
+        expected_los = max(-20., min(20., los[axis+'_rate_dps'])) if los['valid'] else 0.
+        if (abs(packet['gyro_'+axis+'_rate']-expected_gyro) > 1e-6
+                or abs(packet[axis+'_los_rate']-expected_los) > 1e-6):
+            raise ValueError('艾晟机械gyro/惯性LOS映射不符')
+    los = telemetry['target_los']
+    if type(los.get('omega_valid')) is not bool or not isinstance(los.get('omega_reason'), str):
+        raise ValueError('缺少明确的三维LOS向量有效性')
+    omega = los.get('omega_ned_dps')
+    if los['omega_valid']:
+        if not isinstance(omega, (list, tuple)) or len(omega) != 3:
+            raise ValueError('有效三维LOS缺少NED向量')
+        expected_omega = omega
+    else:
+        if omega is not None:
+            raise ValueError('无效三维LOS必须明确为null')
+        expected_omega = (0., 0., 0.)
+    for name, expected in zip(('los_omega_n', 'los_omega_e', 'los_omega_d'), expected_omega):
+        if abs(packet[name]-expected) > 1e-6:
+            raise ValueError('艾晟NED三维LOS向量不应限幅或取自两角导数')
+    return packet
 
 
 def angles(client):
@@ -191,7 +230,7 @@ def runtime_model_check(world_file, count):
         model = world.find(f"model[@name='rocket_two_axis_pod_{aircraft_id}']")
         if model is None:
             raise ValueError(f'运行world缺少飞机{aircraft_id}')
-        for name, expected in (('yaw_joint', (-1., 0., 0.)), ('pitch_joint', (0., -1., 0.))):
+        for name, expected in (('yaw_joint', (1., 0., 0.)), ('pitch_joint', (0., -1., 0.))):
             joint = model.find(f"joint[@name='{name}']")
             actual = tuple(map(float, joint.findtext('axis/xyz').split()))
             limits = tuple(math.degrees(float(joint.findtext('axis/limit/'+bound))) for bound in ('lower', 'upper'))
@@ -217,7 +256,7 @@ def main():
     sys.path.insert(0, str(args.assets_root.resolve()/'models/gimbals/two_axis_pod/ground_station'))
     from ground_station import UdpClient
     clients = [UdpClient(args.host, 8770+i, aircraft_id=i+1) for i in range(args.n)]
-    report = dict(passed=False, protocol_version=6, angle_convention='motion_head_joint', aircraft=[])
+    report = dict(passed=False, protocol_version=PROTOCOL_VERSION, angle_convention=ANGLE_CONVENTION, aircraft=[])
     monitor, failure = None, None
 
     def settled(client, before):
@@ -253,7 +292,7 @@ def main():
         for i, client in enumerate(clients):
             wait_for(lambda: client.public_angles_ready, f'飞机{i+1}身份与遥测')
             t = client.snapshot()
-            if (client.hello.get('version') != 6 or client.hello.get('angle_convention') != 'motion_head_joint'
+            if (client.hello.get('version') != PROTOCOL_VERSION or client.hello.get('angle_convention') != ANGLE_CONVENTION
                     or client.hello.get('video_rtsp_path') != f'/two_axis_pod_{i+1}'
                     or t.get('aircraft_id') != i+1):
                 raise RuntimeError(f'飞机{i+1}身份/协议/视频路径不符')
@@ -263,6 +302,7 @@ def main():
             entry = dict(aircraft_id=active+1, udp_port=8770+active,
                          video_path=client.hello['video_rtsp_path'], optical_samples=[], actual_limits_deg={})
             report['aircraft'].append(entry)
+            entry['aisheng_at_zero'] = aisheng_check(client.snapshot())
             entry['optical_samples'].append(dict(label='zero', **monitor.capture(active+1, client.snapshot())))
             before = [angles(c) for c in clients]
             try:
@@ -272,6 +312,7 @@ def main():
                         raise RuntimeError('双轴速度指令被拒绝')
                     check_bounds(clients)
                     time.sleep(.1)
+                entry['aisheng_during_motion'] = aisheng_check(client.snapshot())
             finally:
                 stop(client)
             changes = isolated(before, active)

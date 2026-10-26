@@ -191,9 +191,29 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 最新资产仓的吊仓网关仅支持 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
 
+## 目标惯性 LOS 遥测采集
+
+`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟16字段实际UDP。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
+
+```bash
+../px4-gazebo-assets/.venv-linux/bin/python scenarios/02_rocket_two_axis_pod/check_target_los.py \
+  --duration 120 --finish-file /tmp/scenario02-los.finish \
+  --output /tmp/scenario02-los-evidence
+# 另一个终端中创建finish文件，正常提前结束；开始前该文件应不存在
+# touch /tmp/scenario02-los.finish
+```
+
+默认连接首机 UDP `127.0.0.1:8770`、`/uav_1/pod/telemetry` 和本场景 Gazebo 分区。生产 `UdpClient` 与 `TelemetryForwarder` 将新遥测转换并实际发送至临时回环 UDP 接收端；脚本核对16个字段、`gyro_pitch_rate/gyro_yaw_rate` 与 `pitch_los_rate/yaw_los_rate` 的独立来源和 ±20°/s 限幅，新增`los_omega_n/e/d`取独立`omega_ned_dps`，单位°/s且不限幅；原两角度导数及gyro仍限±20°/s。向量无效时发0/0/0，竖直时可保持向量有效。并分别统计插件、网关、艾晟的真实时间Hz。显式加 `--px4-udp-port 9000` 可将实际收到的艾晟原始字节复制给首机 `dyt_udp_bridge`，用于配合 PX4 `listener dyt_aisheng_telemetry` 检查；默认不复制。
+
+独立真值取自带仿真时间戳的 Gazebo `pose/info` 与 `dynamic_pose/info`，仅合并完全同刻的位置，不使用无时间戳的 trajectory 输出。从运行 SDF 各 link 的零位惯性点独立求名义重心，以模型世界位姿旋转该固定偏移，再由目标位置重建 NED 方位角和仰角的中心差分；不将插件给出的相对位置/速度当作独立角速度真值。当前 world 的 `heading_deg=0`；其它 heading 明确拒绝。三维向量另由同刻位置及独立位置差分计算`r×v/|r|²`，按自身`omega_valid`评分；不要求方位角有效。默认差分半窗 `0.04 s`、相对位置最大误差 `0.1 m`、角速度最大误差 `0.8°/s`，可通过 `--difference-window`、`--position-tolerance`、`--rate-tolerance` 显式设置。
+
+采集窗口应包含至少 20 份可独立对照的有效运动目标 LOS，以及停止后 LOS 无效、外部值 `0.0/0.0` 的样本。界面仍沿用已有 track 状态。工具仅在显式提供 `--action-file /tmp/scenario02-los.actions.jsonl` 时执行逐行 JSON 吊舱验收动作，例如 `{"cmd":"aim","yaw":0,"pitch":-60,"timeout":20}` 通过现有手动速度接口反馈对准机械角；`{"cmd":"manual","yaw":0,"pitch":-10,"duration":2}` 连续发送有限时长的速度流后归零；`{"phase":"stop","cmd":"stop"}` 退出跟踪。`set_vision_mode`、`track`、`home` 和 `reset_axis` 沿用生产协议；未指定动作文件时只采集，不主动改变吊舱状态。动作文件应从空文件开始，尚未锁定时不能将采集结果解释为跟踪验收通过。
+
+输出目录包含每秒更新的 `latest.json`、压缩原始记录 `samples.json.gz`、独立逐样本误差 `independent_scores.json` 和最终 `summary.json`；每 20 秒输出进度。工具正常结束或受控异常时先保存原始证据，再生成结果；只有最终 `summary.json` 明确为 `passed` 才表示本次检查通过，历史或中断采集不代替当前结果。
+
 ## 测试
 
-当前新组合飞机的双机接口、视频隔离、原生MAVSDK航线与落地验证结果见[验证报告](docs/validation.md)；数据、版本指纹和原始证据包位于 `docs/`。
+当前v8单机组合飞机的目标惯性LOS、机械gyro、UDP→uORB、原生MAVSDK航线、落地、机械/光学接口及RTSP验证见[验证报告](docs/validation.md)；摘要在`docs/target_los_validation.json`，原始记录与源码快照保存在同级资产仓的装配模型测试目录。
 
 ```bash
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
