@@ -82,6 +82,12 @@ class PrepareWorldTest(unittest.TestCase):
         output = self.root / "run" / "world.sdf"
         MODULE.prepare(source, output, [(1, self.make_model(1)), (2, self.make_model(2))])
         world = ET.parse(output).getroot().find("world")
+        self.assertIsNone(
+            world.find(
+                "model[@name='tile_test']/link/collision/"
+                "surface/contact/collide_bitmask"
+            )
+        )
         for number, expected_z in ((1, 1.215), (2, .715)):
             model_z = float(world.findtext(f"model[@name='rocket_two_axis_pod_{number}']/pose").split()[2])
             marker_z = float(world.findtext(f"model[@name='POD_LOCATION_MARKER_{number}']/pose").split()[2])
@@ -175,6 +181,20 @@ class PrepareWorldTest(unittest.TestCase):
         second = world.find("model[@name='rocket_two_axis_pod_2']")
         self.assertEqual(first.findtext("pose"), "5.25 5 0.24 0 0 0")
         self.assertEqual(second.findtext("pose"), "10.25 5 0.24 0 0 0")
+        self.assertEqual(
+            {
+                collision.findtext("surface/contact/category_bitmask")
+                for collision in first.findall(".//link/collision")
+            },
+            {"1"},
+        )
+        self.assertEqual(
+            {
+                collision.findtext("surface/contact/collide_bitmask")
+                for collision in second.findall(".//link/collision")
+            },
+            {"2"},
+        )
         for number in (1, 2):
             marker = world.find(f"model[@name='POD_LOCATION_MARKER_{number}']")
             self.assertIsNotNone(marker)
@@ -261,6 +281,22 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(
             trajectory.findtext("command_topic"),
             "/scenario/02/target/trajectory/command",
+        )
+
+    def test_enable_collision_preserves_unfiltered_aircraft_collisions(self):
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(
+            self.root / "world" / "world.sdf",
+            output,
+            [(1, self.make_model(1)), (2, self.make_model(2))],
+            enable_aircraft_collision=True,
+        )
+        aircraft = ET.parse(output).getroot().findall(
+            "world/model[@name='rocket_two_axis_pod_1']/link/collision"
+        )
+        self.assertTrue(aircraft)
+        self.assertTrue(
+            all(collision.find("surface/contact/collide_bitmask") is None for collision in aircraft)
         )
 
     def test_rejects_wrong_topic_prefix(self):

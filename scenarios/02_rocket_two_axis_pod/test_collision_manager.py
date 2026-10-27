@@ -46,9 +46,15 @@ class CollisionManagerTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def processor(self, controller):
+    def processor(self, controller, enable_aircraft_collision=False):
         return MODULE.CollisionProcessor(
-            4, controller, self.log, 32.217857, 119.105878, 4.019969
+            4,
+            controller,
+            self.log,
+            32.217857,
+            119.105878,
+            4.019969,
+            enable_aircraft_collision,
         )
 
     @staticmethod
@@ -64,13 +70,21 @@ class CollisionManagerTest(unittest.TestCase):
 
     def test_px4_pair_stops_all_motors_on_both_aircraft(self):
         controller = FakeController()
-        result = self.processor(controller).process(
+        result = self.processor(controller, enable_aircraft_collision=True).process(
             self.event("px4_px4", [2, 1])
         )
         self.assertEqual(controller.stopped, [1, 2])
         self.assertTrue(result["damage_triggered"])
         self.assertEqual(result["damage_action"], "all_motors_off")
         self.assertIn("position_wgs84", result)
+
+    def test_px4_pair_is_ignored_when_aircraft_collision_is_disabled(self):
+        controller = FakeController()
+        result = self.processor(controller).process(self.event("px4_px4", [2, 1]))
+        self.assertEqual(controller.stopped, [])
+        self.assertFalse(result["damage_triggered"])
+        self.assertEqual(result["reason"], "aircraft_collision_disabled")
+        self.assertEqual(result["damage_results"], [])
 
     def test_target_contact_causes_damage_at_any_relative_speed(self):
         for speed in (0.0, 0.1, 9.999, 10.0, 35.0):
@@ -126,7 +140,9 @@ class CollisionManagerTest(unittest.TestCase):
         for kind, ids in (("px4_target", [1]), ("px4_px4", [1, 2])):
             with self.subTest(kind=kind):
                 controller = FakeController(nav_state=5, setpoint={"valid": True, "type": 4})
-                result = self.processor(controller).process(self.event(kind, ids, 0.0))
+                result = self.processor(
+                    controller, enable_aircraft_collision=(kind == "px4_px4")
+                ).process(self.event(kind, ids, 0.0))
                 self.assertTrue(result["damage_triggered"])
                 self.assertEqual(controller.stopped, ids)
 

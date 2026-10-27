@@ -21,10 +21,11 @@ RTSP_PORT=8555
 TARGET_QGC_ADDRESS=127.0.0.1:14550
 TARGET_MAVLINK_SYSID=200
 TRACKING_BACKEND=sim_truth
+ENABLE_COLLISION=0
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt]
+用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt]
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与两轴吊仓组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
@@ -32,6 +33,7 @@ usage() {
 选项：
   -n, --count COUNT       飞机数量，1～10（默认：1）
       --gui               启动 Gazebo GUI
+      --enable-collision  启用飞机之间的刚体碰撞和互相致损（默认关闭）
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
       --tracking-backend TYPE
@@ -64,6 +66,10 @@ while (($# > 0)); do
 			;;
 		--gui)
 			GUI=1
+			shift
+			;;
+		--enable-collision)
+			ENABLE_COLLISION=1
 			shift
 			;;
 		--advertise-host)
@@ -276,6 +282,7 @@ prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
 	--source-world "$WORLD_SOURCE" --output "$WORLD_FILE"
 	--tracking-backend "$TRACKING_BACKEND" "${model_args[@]}")
 ((GUI)) && prepare_world_command+=(--target-control)
+((ENABLE_COLLISION)) && prepare_world_command+=(--enable-collision)
 "${prepare_world_command[@]}"
 gz sdf -k "$WORLD_FILE"
 
@@ -501,6 +508,7 @@ collision_manager_command=(python3 -u "$SCRIPT_DIR/collision_manager.py"
 	--aircraft-count "$COUNT" --px4-bin "$PX4_BIN"
 	--metadata "$ASSETS_ROOT/worlds/$WORLD/metadata.json"
 	--event-log "$RUNTIME_DIR/logs/collision-events.jsonl")
+((ENABLE_COLLISION)) && collision_manager_command+=(--enable-collision)
 printf '碰撞致损服务 command: '
 printf '%q ' "${collision_manager_command[@]}"
 printf '\n'
@@ -513,7 +521,12 @@ echo
 echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
 echo "飞机保持待命，不自动解锁或飞行。"
 echo "吊仓单目标跟踪：${TRACKING_BACKEND}。"
-echo "碰撞致损：      PX4 飞机碰撞后关闭全部电机；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
+if ((ENABLE_COLLISION)); then
+	echo "机间碰撞：      已启用刚体接触；相撞飞机关闭全部电机。"
+else
+	echo "机间碰撞：      已关闭刚体接触和互相致损；可用 --enable-collision 启用。"
+fi
+echo "其他碰撞：      飞机与地形/建筑物/靶机的检测和致损保持启用；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
 if ((GUI)); then
 	echo "雷达/靶机控制：使用 Gazebo 地图右侧的固定控制面板。"
 	echo "地面站 JSON：   雷达航迹默认 1 Hz（可设 1～2 Hz），靶机真值 10 Hz；共享面板地址。"

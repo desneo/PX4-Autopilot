@@ -159,6 +159,7 @@ class CollisionProcessor:
         center_latitude: float,
         center_longitude: float,
         origin_elevation: float,
+        enable_aircraft_collision: bool = False,
     ):
         self.aircraft_count = aircraft_count
         self.controller = controller
@@ -166,6 +167,7 @@ class CollisionProcessor:
         self.center_latitude = center_latitude
         self.center_longitude = center_longitude
         self.origin_elevation = origin_elevation
+        self.enable_aircraft_collision = enable_aircraft_collision
         self.damaged: set[int] = set()
         self.event_log.parent.mkdir(parents=True, exist_ok=True)
 
@@ -202,6 +204,13 @@ class CollisionProcessor:
         self._add_global_position(event)
         collision_type = event["collision_type"]
         candidates = list(event["aircraft_ids"])
+
+        if collision_type == "px4_px4" and not self.enable_aircraft_collision:
+            event["damage_triggered"] = False
+            event["reason"] = "aircraft_collision_disabled"
+            event["damage_results"] = []
+            self._write(event)
+            return event
 
         if collision_type == "px4_surface":
             nav_state = self.controller.navigation_state(candidates[0])
@@ -267,6 +276,7 @@ class CollisionManager:
             float(center["latitude_deg"]),
             float(center["longitude_deg"]),
             float(metadata["origin_elevation_source_m"]),
+            args.enable_collision,
         )
         self.events: queue.Queue[dict] = queue.Queue()
         self.shutdown_event = threading.Event()
@@ -303,6 +313,11 @@ def main() -> int:
     parser.add_argument("--px4-bin", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--event-log", type=Path, required=True)
+    parser.add_argument(
+        "--enable-collision",
+        action="store_true",
+        help="启用飞机之间的互相致损；默认忽略 px4_px4 事件",
+    )
     args = parser.parse_args()
     if args.aircraft_count < 1:
         parser.error("--aircraft-count 必须是正整数")
@@ -315,7 +330,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_shutdown)
     print(
         f"碰撞致损服务已就绪：topic={COLLISION_TOPIC} "
-        f"aircraft={args.aircraft_count} policy=damage-on-contact",
+        f"aircraft={args.aircraft_count} "
+        f"aircraft_collision={'enabled' if args.enable_collision else 'disabled'} "
+        "surface_target_policy=damage-on-contact",
         flush=True,
     )
     manager.run()

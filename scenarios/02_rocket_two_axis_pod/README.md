@@ -16,6 +16,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
 # 四架，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 4 --gui
 
+# 需要恢复飞机之间的刚体碰撞和互相致损时显式启用
+bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 --enable-collision
+
 # QGC 在远程机器时，显式指定 QGC 的 UDP 地址
 bash scenarios/02_rocket_two_axis_pod/start.sh --gui \
   --target-qgc-address 192.168.1.100:14550
@@ -143,10 +146,12 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 
 ## 碰撞致损
 
-场景默认启用确定性的 `damage-on-contact`，用于发现集群路径规划中的碰撞问题。致损服务直接调用对应 SITL 实例的 PX4 内置故障注入命令，将全部电机设为关闭；它不占用 MAVSDK UDP 端口，也不会改变外部控制程序的连接。
+场景默认关闭飞机之间的刚体接触和互相致损，避免两架飞机相遇后因接触约束物理耦合。每架飞机的所有碰撞体使用独立的 SDFormat `category_bitmask` / `collide_bitmask`；地形和建筑物保留默认位掩码，所以飞机与环境的原生碰撞不受影响。使用 `start.sh --enable-collision` 可启用飞机之间的原生刚体碰撞和互相致损。
 
-- PX4 与 PX4：使用 Gazebo 原生碰撞体和接触检测；发生实际接触后，两架飞机都关闭全部电机。
-- PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND`、`AUTO_PRECLAND`，或处于 `AUTO_RTL` 且当前有效位置设定点为 `LAND` 时，正常降落触地被豁免。RTL 的爬升、返航和盘旋阶段不豁免，其他飞行中表面接触仍关闭全部电机。降落豁免不适用于飞机之间或飞机与靶机的接触。
+飞机与地形、建筑物、靶机仍采用确定性的 `damage-on-contact`。致损服务直接调用对应 SITL 实例的 PX4 内置故障注入命令，将全部电机设为关闭；它不占用 MAVSDK UDP 端口，也不会改变外部控制程序的连接。
+
+- PX4 与 PX4：默认不产生刚体接触，也不关闭电机；使用 `--enable-collision` 时恢复 Gazebo 原生接触检测，发生接触后两架飞机都关闭全部电机。
+- PX4 与地面或建筑物：使用 Gazebo 原生碰撞检测；飞机确认离地1米后才启用该规则，避免出生点的地面接触触发故障。明确处于 `AUTO_LAND`、`AUTO_PRECLAND`，或处于 `AUTO_RTL` 且当前有效位置设定点为 `LAND` 时，正常降落触地被豁免。RTL 的爬升、返航和盘旋阶段不豁免，其他飞行中表面接触仍关闭全部电机。降落豁免不适用于已显式启用的飞机间接触或飞机与靶机的接触。
 - PX4 与靶机：靶机继续采用轻量场景航迹，不参与刚体碰撞。**碰撞即损毁，不设置相对速度门槛，包括零相对速度接触。** 监控器从运行中的 PX4 模型读取各物理碰撞体的尺寸、中心和实时姿态，逐个与靶机的简化定向包围盒检查相交；支持俯仰、横滚、偏航和吊仓关节运动，不使用固定整机尺寸。圆柱、球等形状使用局部外接盒近似。当前9个CAD网格碰撞体的实际DAE顶点、实例节点变换、米制单位与mesh缩放在生成世界时读取，分别保存局部包围盒中心和半尺寸；运行时将局部中心经该collision的实时世界姿态变换，随载机和活动关节运动。物理mesh和原生接触传感器完整保留，不以这些检测盒替换。检测盒包含网格空腔及盒角，因此靶机交会判定仍是保守近似。相对速度 `|V_px4 - V_target|` 仅用于记录事件。
 
 mesh检测配置以实际 `model/link/collision` 唯一键绑定。当前支持资产仓导出的具备有效法线的Z_UP、三角面、平铺实例节点DAE，以及节点平移、旋转、缩放和仿射矩阵；支持非单位mesh缩放与非零局部中心。缺失、空、非有限或退化网格、未知格式、其他up_axis、嵌套节点、submesh选择或重置中心等情况在生成世界前明确拒绝。插件配置缺失或重复同样报错，不静默忽略碰撞体。
@@ -161,7 +166,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 /tmp/px4-scenarios/02_rocket_two_axis_pod/logs/collision-events.jsonl
 ```
 
-每行是一个 JSON 对象，包含碰撞类型、仿真时间、飞机编号、相对速度、ENU/WGS84 位置、是否触发致损以及各 PX4 实例的故障注入结果。致损事件记录 `reason=collision_damage_policy`，直接降落豁免记录 `reason=normal_landing_mode`，RTL 最后降落阶段记录 `reason=rtl_landing_setpoint` 和当前设定点的有效标记、类型。
+每行是一个 JSON 对象，包含碰撞类型、仿真时间、飞机编号、相对速度、ENU/WGS84 位置、是否触发致损以及各 PX4 实例的故障注入结果。致损事件记录 `reason=collision_damage_policy`，直接降落豁免记录 `reason=normal_landing_mode`，RTL 最后降落阶段记录 `reason=rtl_landing_setpoint` 和当前设定点的有效标记、类型；关闭机间碰撞时收到的防御性 `px4_px4` 事件记录 `reason=aircraft_collision_disabled` 且不注入故障。
 
 ## 多机接口
 

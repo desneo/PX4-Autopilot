@@ -311,6 +311,33 @@ def add_contact_sensors(model: ET.Element) -> int:
     return count
 
 
+def configure_aircraft_collision_filter(
+    model: ET.Element, aircraft_id: int, enable_aircraft_collision: bool
+) -> int:
+    """默认按飞机分配独立碰撞位，只屏蔽不同飞机之间的刚体接触。"""
+    collisions = model.findall(".//collision")
+    if not collisions:
+        raise ValueError(f"飞机模型缺少碰撞体：{model.get('name', '')}")
+    if enable_aircraft_collision:
+        return len(collisions)
+    if not 1 <= aircraft_id <= 16:
+        raise ValueError("关闭机间碰撞时，飞机 ID 必须在 1～16 范围内")
+
+    bitmask = str(1 << (aircraft_id - 1))
+    for collision in collisions:
+        surface = collision.find("surface")
+        if surface is None:
+            surface = ET.SubElement(collision, "surface")
+        contact = surface.find("contact")
+        if contact is None:
+            contact = ET.SubElement(surface, "contact")
+        # 地形和建筑物保留默认 0xffff，因此仍会与每架飞机碰撞；不同
+        # 飞机使用互不相交的位，Gazebo 不再生成飞机间接触约束。
+        set_text(contact, "collide_bitmask", bitmask)
+        set_text(contact, "category_bitmask", bitmask)
+    return len(collisions)
+
+
 def configure_gimbal_tracking(
     model: ET.Element,
     tracking_backend: str,
@@ -633,6 +660,7 @@ def prepare(
     altitude: float | None = None,
     target_control: bool = False,
     tracking_backend: str = "sim_truth",
+    enable_aircraft_collision: bool = False,
 ) -> Path:
     if not models:
         raise ValueError("至少需要一架飞机")
@@ -663,6 +691,9 @@ def prepare(
     for (aircraft_id, model_path), (x, y), (ground_z, normal) in zip(models, positions, ground_surfaces):
         model = load_model(aircraft_id, model_path.resolve())
         configure_gimbal_tracking(model, tracking_backend, target_names)
+        configure_aircraft_collision_filter(
+            model, aircraft_id, enable_aircraft_collision
+        )
         add_contact_sensors(model)
         spawn_z = ground_z + spawn_altitude(model_path.resolve(), altitude)
         roll, pitch = ground_roll_pitch(normal)
@@ -722,6 +753,11 @@ def main() -> int:
         action="store_true",
         help="加入 Gazebo 靶机控制面板和场景航迹插件",
     )
+    parser.add_argument(
+        "--enable-collision",
+        action="store_true",
+        help="启用飞机之间的刚体碰撞；默认只关闭机间碰撞",
+    )
     args = parser.parse_args()
     try:
         models = [parse_model(value) for value in args.model]
@@ -730,10 +766,11 @@ def main() -> int:
                 args.source_world,
                 args.output,
                 models,
-                args.spacing,
-                args.altitude,
-                args.target_control,
-                args.tracking_backend,
+                spacing=args.spacing,
+                altitude=args.altitude,
+                target_control=args.target_control,
+                tracking_backend=args.tracking_backend,
+                enable_aircraft_collision=args.enable_collision,
             )
         )
     except (OSError, ValueError, ET.ParseError) as error:
