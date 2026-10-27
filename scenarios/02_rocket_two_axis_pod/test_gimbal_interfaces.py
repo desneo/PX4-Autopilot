@@ -16,7 +16,7 @@ ANGLE_CONVENTION = 'motion_head_joint_right_positive'
 AISHENG_FIELDS = {'track_status', 'pitch_angle', 'yaw_angle', 'pitch_misalignment',
                   'yaw_misalignment', 'tracking_confidence', 'target_confidence',
                   'gyro_pitch_rate', 'gyro_yaw_rate', 'pitch_los_rate', 'yaw_los_rate',
-                  'tracking_gate_w', 'tracking_gate_h', 'los_omega_n', 'los_omega_e', 'los_omega_d'}
+                  'tracking_gate_w', 'tracking_gate_h', 'los_omega_n', 'los_omega_e', 'los_omega_d', 'gate_x', 'gate_y'}
 
 LIMITS = {"yaw": (-60., 60.), "pitch": (-80., 30.)}
 BALL_CENTER = (.015, 0., .056)
@@ -125,11 +125,11 @@ def optical_check(telemetry, model, mount, camera, sensor):
 
 
 def aisheng_check(telemetry):
-    """核对生产16字段转换；机械gyro和目标惯性LOS必须独立映射。"""
+    """核对生产18字段转换；机械gyro和目标惯性LOS必须独立映射。"""
     from telemetry_forward import aisheng_message
     packet = aisheng_message(telemetry)
     if set(packet) != AISHENG_FIELDS:
-        raise ValueError('艾晟报文必须包含当前16字段')
+        raise ValueError('艾晟报文必须包含当前18字段')
     for axis in ('yaw', 'pitch'):
         mechanical = telemetry['attitude_deg'][axis]['vel']
         expected_gyro = max(-20., min(20., mechanical))
@@ -153,6 +153,10 @@ def aisheng_check(telemetry):
     for name, expected in zip(('los_omega_n', 'los_omega_e', 'los_omega_d'), expected_omega):
         if abs(packet[name]-expected) > 1e-6:
             raise ValueError('艾晟NED三维LOS向量不应限幅或取自两角导数')
+    from check_target_los import tracking_gate_center
+    for name,expected in zip(('gate_x', 'gate_y'),tracking_gate_center(telemetry)):
+        if type(packet.get(name)) is not int or packet[name]!=expected:
+            raise ValueError('艾晟波门中心必须取原图框中心并half-up为非负整数')
     return packet
 
 

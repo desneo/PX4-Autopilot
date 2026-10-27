@@ -32,6 +32,7 @@ constexpr uint16_t kDefaultPort = 9000;
 constexpr size_t kUdpBufferSize = 2048;
 constexpr uint16_t kRequiredFields = (1u << 9) - 1u;
 constexpr uint16_t kOmegaFields = (1u << 11) | (1u << 12) | (1u << 13);
+constexpr uint16_t kGateFields = (1u << 14) | (1u << 15);
 
 enum class Field : uint8_t {
 	TrackStatus = 0,
@@ -48,7 +49,11 @@ enum class Field : uint8_t {
 	LosOmegaN,
 	LosOmegaE,
 	LosOmegaD,
+	GateX,
+	GateY,
 };
+static_assert(static_cast<unsigned>(Field::GateX) == 14 && static_cast<unsigned>(Field::GateY) == 15,
+	      "波门坐标字段使用uint16位掩码的14/15位");
 
 struct AishengFields {
 	uint8_t track_status{0};
@@ -66,6 +71,8 @@ struct AishengFields {
 	float los_omega_n{NAN};
 	float los_omega_e{NAN};
 	float los_omega_d{NAN};
+	int16_t gate_x{0};
+	int16_t gate_y{0};
 };
 
 class JsonParser
@@ -102,10 +109,22 @@ public:
 
 				if ((seen & bit) != 0) { return false; }
 
-				float value = 0.f;
+				const Field kind = static_cast<Field>(field);
 
-				if (!parse_number(value) || !assign_field(static_cast<Field>(field), value, fields)) {
-					return false;
+				if (kind == Field::GateX || kind == Field::GateY) {
+					int16_t value = 0;
+
+					if (!parse_gate(value)) { return false; }
+
+					if (kind == Field::GateX) { fields.gate_x = value; }
+					else { fields.gate_y = value; }
+
+				} else {
+					float value = 0.f;
+
+					if (!parse_number(value) || !assign_field(kind, value, fields)) {
+						return false;
+					}
 				}
 
 				seen |= bit;
@@ -124,10 +143,12 @@ public:
 		}
 
 		skip_whitespace();
-		// 陀螺仪字段可选；三维LOS向量须全部出现或全部缺省，保持旧9/13字段报文兼容。
+		// 向量与波门坐标各须成组出现或整组缺省，保持旧9/13/16字段报文兼容。
 		const uint16_t omega_seen = seen & kOmegaFields;
+		const uint16_t gate_seen = seen & kGateFields;
 		return _cursor == _end && (seen & kRequiredFields) == kRequiredFields
-		       && (omega_seen == 0 || omega_seen == kOmegaFields);
+		       && (omega_seen == 0 || omega_seen == kOmegaFields)
+		       && (gate_seen == 0 || gate_seen == kGateFields);
 	}
 
 private:
@@ -232,6 +253,29 @@ private:
 		}
 
 		return false;
+	}
+
+	bool parse_gate(int16_t &value)
+	{
+		// 直接解析整数字面量，不能先转float而将极小小数误舍入为整数。
+		if (_cursor >= _end || !is_digit(*_cursor)) { return false; }
+
+		if (*_cursor == '0' && _cursor + 1 < _end && is_digit(_cursor[1])) { return false; }
+
+		uint32_t result = 0;
+
+		while (_cursor < _end && is_digit(*_cursor)) {
+			result = result * 10u + static_cast<uint32_t>(*_cursor - '0');
+
+			if (result > 32767u) { return false; }
+
+			++_cursor;
+		}
+
+		if (_cursor < _end && (*_cursor == '.' || *_cursor == 'e' || *_cursor == 'E')) { return false; }
+
+		value = static_cast<int16_t>(result);
+		return true;
 	}
 
 	bool parse_number(float &value)
@@ -369,6 +413,10 @@ private:
 
 		if (strcmp(key, "los_omega_d") == 0) { return static_cast<int>(Field::LosOmegaD); }
 
+		if (strcmp(key, "gate_x") == 0) { return static_cast<int>(Field::GateX); }
+
+		if (strcmp(key, "gate_y") == 0) { return static_cast<int>(Field::GateY); }
+
 		return -1;
 	}
 
@@ -401,6 +449,8 @@ private:
 		case Field::LosOmegaN: fields.los_omega_n = value; break;
 		case Field::LosOmegaE: fields.los_omega_e = value; break;
 		case Field::LosOmegaD: fields.los_omega_d = value; break;
+		case Field::GateX:
+		case Field::GateY: return false; // 波门坐标由严格整数字面量路径处理。
 		}
 
 		return true;
@@ -614,6 +664,8 @@ private:
 		msg.self_check = 0x01;
 		msg.work_status = 0x01;
 		msg.track_status = fields.track_status;
+		msg.gate_x = fields.gate_x;
+		msg.gate_y = fields.gate_y;
 		msg.pitch_angle = fields.pitch_angle;
 		msg.yaw_angle = fields.yaw_angle;
 		msg.pitch_misalignment = fields.pitch_misalignment;

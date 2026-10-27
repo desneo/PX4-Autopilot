@@ -14,8 +14,8 @@ uint8 work_status		# bit0 tracking, bit2 defog, bit4-3 video source, bit6-5 algo
 uint8 track_status		# 取work_status的bit0的值，0x0--目标丢失，0x01--跟踪有效
 float32 pitch_angle		# 俯仰框架角，pitch frame angle [deg], raw * 0.01
 float32 yaw_angle		# 偏航框架角，yaw frame angle [deg], raw * 0.01
-int16 gate_x			# tracking gate X [pixel], raw
-int16 gate_y			# tracking gate Y [pixel], raw
+int16 gate_x			# JSON波门中心X原图像素，左上原点向右正；0..32767，失效0
+int16 gate_y			# JSON波门中心Y原图像素，左上原点向下正；0..32767，失效0
 float32 gyro_pitch_rate		# gyro pitch rate [deg/s], raw * 0.01
 float32 gyro_yaw_rate		# gyro yaw rate [deg/s], raw * 0.01
 float32 pitch_misalignment	# 俯仰失调角，pitch misalignment angle [deg], raw * 0.01

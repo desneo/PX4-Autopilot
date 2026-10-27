@@ -52,6 +52,27 @@ def relative(row,model,target,cg):
 def angles(r):
     return math.atan2(r[1],r[0]),math.atan2(-r[2],math.hypot(r[0],r[1]))
 
+def tracking_gate_center(source):
+    """从原图跟踪框独立计算half-up整数中心；失效为0/0。"""
+    target=source.get('target') or {};tracking=source.get('tracking') or {};vision=source.get('vision') or {}
+    enabled=(not vision.get('error') and (vision.get('mode')=='manual_track' or
+        (vision.get('mode')=='auto_lock' and vision.get('state')=='AUTO_LOCKED' and
+         type(vision.get('locked_track_id')) is int)))
+    valid=(enabled and source.get('mode')=='TRACK' and tracking.get('state')=='TRACK' and
+           target.get('valid') is True and (target.get('miss') or {}).get('valid') is True)
+    if not valid:return (0,0)
+    box=target.get('box_px')
+    if (not isinstance(box,(list,tuple)) or len(box)!=4 or
+            not all(type(value) in (int,float) and math.isfinite(value) for value in box) or
+            box[0]<0 or box[1]<0 or box[2]<=0 or box[3]<=0):
+        raise ValueError('有效原图框必须包含四个有限数值及正宽高')
+    center=(box[0]+box[2]/2,box[1]+box[3]/2)
+    if any(value<0 or not math.isfinite(value) for value in center):
+        raise ValueError('有效原图框中心必须非负且有限')
+    pixels=tuple(math.floor(value+.5) for value in center)
+    if any(value>32767 for value in pixels):raise ValueError('波门中心超过PX4 int16非负范围')
+    return pixels
+
 def omega_rates(r,v):
     """独立位置差分得到r/v，以r×v/|r|²计算NED向量；不使用两角导数。"""
     if len(r)!=3 or len(v)!=3 or not all(math.isfinite(x) for x in (*r,*v)):
@@ -179,7 +200,7 @@ class Capture:
         try:
             packet=self.convert(value)
             data=json.dumps(packet,separators=(',',':'),allow_nan=False).encode()
-            with self.lock:self.expected.append((data,value))
+            with self.lock:self.expected.append((data,value,time.time_ns()//1_000_000))
             self.forward.offer(raw)
         except Exception as e:
             with self.lock:self.errors.append('转换失败: '+repr(e))
@@ -188,6 +209,7 @@ class Capture:
         while self.running:
             try:
                 data,_=self.receiver.recvfrom(65535)
+                received_ms=time.time_ns()//1_000_000
             except socket.timeout:continue
             except OSError:break
             try:
@@ -199,8 +221,14 @@ class Capture:
                         self.px4_socket.sendto(data,('127.0.0.1',self.a.px4_udp_port))
                         self.px4_copies.append(self.record('px4_udp_copy',value))
                     expected=self.expected.popleft() if self.expected else None
-                    if expected is None or data!=expected[0]:
-                        self.errors.append('实际UDP与按收到遥测构造的生产转换不一致')
+                    measurements={key:field for key,field in value.items() if key!='timestamp'}
+                    measurement_data=json.dumps(measurements,separators=(',',':'),allow_nan=False).encode()
+                    if expected is None or measurement_data!=expected[0]:
+                        self.errors.append('实际UDP的18个测量字段与按收到遥测构造的生产转换不一致')
+                    stamp=value.get('timestamp')
+                    if (type(stamp) is not int or stamp<=0 or expected is None or
+                            not expected[2]<=stamp<=received_ms):
+                        self.errors.append('艾晟timestamp必须为本机送入转发队列至收包期间的Unix整数毫秒')
                     if expected is not None:
                         source=expected[1]
                         for axis in ('pitch','yaw'):
@@ -209,6 +237,10 @@ class Capture:
                             target_rate=max(-20.,min(20.,round(los[axis+'_rate_dps'],6))) if los['valid'] else 0.
                             if value['gyro_'+axis+'_rate']!=gyro or value[axis+'_los_rate']!=target_rate:
                                 self.errors.append('独立gyro/LOS字段源或限幅检查失败')
+                        center=tracking_gate_center(source)
+                        for name,expected_value in zip(('gate_x','gate_y'),center):
+                            if type(value.get(name)) is not int or value[name]!=expected_value:
+                                self.errors.append('独立原图框中心half-up整数检查失败')
                         los=source['target_los']
                         if type(los.get('omega_valid')) is not bool or not isinstance(los.get('omega_reason'),str):
                             self.errors.append('源遥测缺少三维LOS有效性，不能伪造零向量')
@@ -417,9 +449,11 @@ class Capture:
         if scores and max(r['rate_error_dps'] for r in scores)>self.a.rate_tolerance:errors.append('独立bearing/elevation差分误差超限')
         if not self.packets:errors.append('没有收到实际艾晟UDP')
         if self.expected:errors.append('存在未收到的艾晟报文')
-        fields={'track_status','pitch_angle','yaw_angle','pitch_misalignment','yaw_misalignment','tracking_confidence','target_confidence','tracking_gate_w','tracking_gate_h','gyro_pitch_rate','gyro_yaw_rate','pitch_los_rate','yaw_los_rate','los_omega_n','los_omega_e','los_omega_d'}
-        if any(set(r['value'])!=fields for r in self.packets):errors.append('艾晟字段集合不是固定16字段')
+        fields={'track_status','pitch_angle','yaw_angle','pitch_misalignment','yaw_misalignment','tracking_confidence','target_confidence','tracking_gate_w','tracking_gate_h','gyro_pitch_rate','gyro_yaw_rate','pitch_los_rate','yaw_los_rate','los_omega_n','los_omega_e','los_omega_d','gate_x','gate_y','timestamp'}
+        if any(set(r['value'])!=fields for r in self.packets):errors.append('艾晟字段集合不是固定19字段')
         if any(abs(r['value'][field])>20 for r in self.packets for field in ('gyro_pitch_rate','gyro_yaw_rate','pitch_los_rate','yaw_los_rate')):errors.append('艾晟角速度限幅超限')
+        if any(type(row['value'].get(name)) is not int or not 0<=row['value'][name]<=32767 for row in self.packets for name in ('gate_x','gate_y')):
+            errors.append('艾晟波门中心必须为0..32767的JSON整数')
         by_phase={}
         for phase in sorted(set(r['phase'] for r in self.sources)):
             ss=[r for r in scores if r['phase']==phase]
@@ -437,7 +471,7 @@ class Capture:
                  'independent_omega_samples':len(omega_scores),
                  'max_omega_error_dps':max((row['omega_error_dps'] for row in omega_scores),default=None),
                  'valid_los_samples':len(valid_sources),'invalid_los_samples':len(invalid_sources),'stopped_invalid_samples':len(stopped),
-                 'plugin_to_gateway_exact_samples':forwarded_matches,'independent_samples':len(scores),'max_position_error_m':max((r['position_error_m'] for r in scores),default=None),
+                 'gate_center_checked_packets':len(self.packets),'send_timestamp_checked_packets':len(self.packets),'plugin_to_gateway_exact_samples':forwarded_matches,'independent_samples':len(scores),'max_position_error_m':max((r['position_error_m'] for r in scores),default=None),
                  'max_rate_error_dps':max((r['rate_error_dps'] for r in scores),default=None),'skipped':dict(skipped),'phases':by_phase,
                  'forwarder':self.forward.snapshot(),'client_stats':self.client.stats(),'actual_aisheng_endpoint':self.receiver_endpoint,
                  'pose_message_sources':dict(self.pose_sources),'pose_duplicate_same_stamp':self.pose_duplicate_same_stamp,

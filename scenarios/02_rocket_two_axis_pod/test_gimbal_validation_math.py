@@ -110,7 +110,7 @@ class OpticalValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '协议8'):
                 check.optical_check(*values)
 
-    def test_aisheng_16_fields_keep_mechanical_gyro_and_inertial_los_separate(self):
+    def test_aisheng_18_fields_keep_mechanical_gyro_and_inertial_los_separate(self):
         telemetry = sample()[0]
         packet = check.aisheng_check(telemetry)
         self.assertEqual(set(packet), check.AISHENG_FIELDS)
@@ -129,6 +129,33 @@ class OpticalValidationTest(unittest.TestCase):
         telemetry['target_los'].update(omega_valid=False, omega_reason='target_unbound', omega_ned_dps=None)
         packet = check.aisheng_check(telemetry)
         self.assertEqual((packet['los_omega_n'], packet['los_omega_e'], packet['los_omega_d']), (0., 0., 0.))
+
+    def test_gate_center_uses_original_box_half_up_and_resets_when_invalid(self):
+        telemetry=sample()[0]
+        telemetry.update(mode='TRACK',vision=dict(mode='manual_track'),tracking=dict(state='TRACK'),
+            target=dict(valid=True,box_px=[100.,200.,31.,41.],
+                        miss=dict(valid=True,offset_deg=[0.,0.])))
+        packet=check.aisheng_check(telemetry)
+        self.assertEqual((packet['gate_x'],packet['gate_y']),(116,221))
+        self.assertIs(type(packet['gate_x']),int);self.assertIs(type(packet['gate_y']),int)
+        telemetry['target']['box_px']=[0.,2.,1.,1.]
+        packet=check.aisheng_check(telemetry)
+        self.assertEqual((packet['gate_x'],packet['gate_y']),(1,3))
+        telemetry['target']['box_px']=[.25,.25,.5,.5]
+        packet=check.aisheng_check(telemetry)
+        self.assertEqual((packet['gate_x'],packet['gate_y']),(1,1))
+        telemetry['tracking']['state']='TEMP_LOST'
+        packet=check.aisheng_check(telemetry)
+        self.assertEqual((packet['gate_x'],packet['gate_y']),(0,0))
+
+    def test_independent_gate_center_rejects_bad_active_boxes(self):
+        source=dict(mode='TRACK',vision=dict(mode='manual_track'),tracking=dict(state='TRACK'),
+                    target=dict(valid=True,miss=dict(valid=True)))
+        for box in ((0.,0.,0.,1.),(-1.,0.,1.,1.),(32767.,0.,1.,1.),(0.,0.,float('nan'),1.)):
+            source['target']['box_px']=box
+            with self.subTest(box=box), self.assertRaises(ValueError):
+                los_check.tracking_gate_center(source)
+        self.assertEqual(los_check.tracking_gate_center({}),(0,0))
 
     def test_missing_vector_contract_is_rejected_instead_of_zero_filled(self):
         for field in ('omega_valid', 'omega_reason', 'omega_ned_dps'):

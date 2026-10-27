@@ -193,7 +193,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 ## 目标惯性 LOS 遥测采集
 
-`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟16字段实际UDP。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
+`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟19字段实际UDP。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
 
 ```bash
 ../px4-gazebo-assets/.venv-linux/bin/python scenarios/02_rocket_two_axis_pod/check_target_los.py \
@@ -203,7 +203,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 # touch /tmp/scenario02-los.finish
 ```
 
-默认连接首机 UDP `127.0.0.1:8770`、`/uav_1/pod/telemetry` 和本场景 Gazebo 分区。生产 `UdpClient` 与 `TelemetryForwarder` 将新遥测转换并实际发送至临时回环 UDP 接收端；脚本核对16个字段、`gyro_pitch_rate/gyro_yaw_rate` 与 `pitch_los_rate/yaw_los_rate` 的独立来源和 ±20°/s 限幅，新增`los_omega_n/e/d`取独立`omega_ned_dps`，单位°/s且不限幅；原两角度导数及gyro仍限±20°/s。向量无效时发0/0/0，竖直时可保持向量有效。并分别统计插件、网关、艾晟的真实时间Hz。显式加 `--px4-udp-port 9000` 可将实际收到的艾晟原始字节复制给首机 `dyt_udp_bridge`，用于配合 PX4 `listener dyt_aisheng_telemetry` 检查；默认不复制。
+默认连接首机 UDP `127.0.0.1:8770`、`/uav_1/pod/telemetry` 和本场景 Gazebo 分区。生产 `UdpClient` 与 `TelemetryForwarder` 将新遥测转换并实际发送至临时回环 UDP 接收端；脚本核对19个字段、`gyro_pitch_rate/gyro_yaw_rate` 与 `pitch_los_rate/yaw_los_rate` 的独立来源和 ±20°/s 限幅，新增`los_omega_n/e/d`取独立`omega_ned_dps`，单位°/s且不限幅；原两角度导数及gyro仍限±20°/s。向量无效时发0/0/0，竖直时可保持向量有效。`gate_x/gate_y`独立取最终原始跟踪框中心，左上原点、右/下正，half-up四舍五入为JSON整数；失效发送0/0。接收端映射至已有int16字段，接受0..32767的整数字面量，旧9/13/16字段缺整对时默认0/0；残缺或非法坐标拒绝。`timestamp`为地面站发送线程在实际发送前生成的Unix整数毫秒时间戳，不采用仿真时间或遥测采样时间；采集工具独立校验其位于本机送入转发队列至收包的时间区间，并去掉该动态字段后比对其余18个测量字段。PX4将该扩展字段跳过，uORB自身`timestamp`仍为本机hrt微秒。并分别统计插件、网关、艾晟的真实时间Hz。显式加 `--px4-udp-port 9000` 可将实际收到的艾晟原始字节复制给首机 `dyt_udp_bridge`，用于配合 PX4 `listener dyt_aisheng_telemetry` 检查；默认不复制。
 
 独立真值取自带仿真时间戳的 Gazebo `pose/info` 与 `dynamic_pose/info`，仅合并完全同刻的位置，不使用无时间戳的 trajectory 输出。从运行 SDF 各 link 的零位惯性点独立求名义重心，以模型世界位姿旋转该固定偏移，再由目标位置重建 NED 方位角和仰角的中心差分；不将插件给出的相对位置/速度当作独立角速度真值。当前 world 的 `heading_deg=0`；其它 heading 明确拒绝。三维向量另由同刻位置及独立位置差分计算`r×v/|r|²`，按自身`omega_valid`评分；不要求方位角有效。默认差分半窗 `0.04 s`、相对位置最大误差 `0.1 m`、角速度最大误差 `0.8°/s`，可通过 `--difference-window`、`--position-tolerance`、`--rate-tolerance` 显式设置。
 

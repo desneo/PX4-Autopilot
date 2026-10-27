@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""直接编译生产JSON解析器，核对旧包兼容、三维LOS完整性与数值边界。"""
+"""直接编译生产JSON解析器，核对旧包兼容、三维LOS、整数波门坐标与发送时间戳扩展。"""
 import itertools
 import json
 import math
@@ -26,6 +26,10 @@ def fields13():
 
 def fields16():
     return dict(fields13(), los_omega_n=40., los_omega_e=-30., los_omega_d=25.)
+
+
+def fields18():
+    return dict(fields16(), gate_x=960, gate_y=540)
 
 
 class ProductionJsonParserTest(unittest.TestCase):
@@ -59,7 +63,8 @@ int main() {
                   << fields.los_omega_n << ' ' << fields.los_omega_e << ' '
                   << fields.los_omega_d << ' ' << fields.gyro_pitch_rate << ' '
                   << fields.gyro_yaw_rate << ' ' << fields.pitch_los_rate << ' '
-                  << fields.yaw_los_rate << '\n';
+                  << fields.yaw_los_rate << ' ' << fields.gate_x << ' '
+                  << fields.gate_y << '\n';
     }
 }
 """.replace('PARSER_SOURCE', parser)
@@ -72,8 +77,9 @@ int main() {
         if isinstance(payload, dict):payload=json.dumps(payload,separators=(',',':'))
         output=subprocess.run([str(self.executable)],input=payload+'\n',check=True,
                               capture_output=True,text=True).stdout.strip().split()
-        self.assertEqual(len(output),8,output)
-        return bool(int(output[0])),list(map(float,output[1:]))
+        self.assertEqual(len(output),10,output)
+        self.last_gates=tuple(map(int,output[8:]))
+        return bool(int(output[0])),list(map(float,output[1:8]))
 
     def assertRejected(self, payload):
         self.assertFalse(self.parse(payload)[0],payload)
@@ -140,6 +146,52 @@ int main() {
         packet=fields16();packet.pop('yaw_los_rate');self.assertRejected(packet)
         for raw in ('{}','[]',json.dumps(fields16())+' trailing','{"track_status":1,}'):
             with self.subTest(raw=raw):self.assertRejected(raw)
+
+    def test_legacy_9_13_16_fields_default_gate_center_to_zero(self):
+        for fields in (old_fields,fields13,fields16):
+            with self.subTest(fields=fields.__name__):
+                self.assertTrue(self.parse(fields())[0]);self.assertEqual(self.last_gates,(0,0))
+
+    def test_eighteen_fields_keep_integer_gate_center_and_high_mask_bit(self):
+        self.assertTrue(self.parse(fields18())[0]);self.assertEqual(self.last_gates,(960,540))
+        for x,y in ((0,0),(32767,32767),(0,32767),(32767,0)):
+            with self.subTest(x=x,y=y):
+                self.assertTrue(self.parse(dict(fields18(),gate_x=x,gate_y=y))[0])
+                self.assertEqual(self.last_gates,(x,y))
+        self.assertTrue(self.parse(dict(old_fields(),gate_x=1,gate_y=2))[0])
+        self.assertEqual(self.last_gates,(1,2))
+
+    def test_eighteen_field_inactive_tracking_zero_center_is_accepted(self):
+        self.assertTrue(self.parse(dict(fields18(),track_status=0,gate_x=0,gate_y=0))[0])
+        self.assertEqual(self.last_gates,(0,0))
+
+    def test_gate_partial_group_is_rejected(self):
+        for key in ('gate_x','gate_y'):
+            with self.subTest(key=key):self.assertRejected(dict(fields16(),**{key:1}))
+
+    def test_gate_duplicates_at_mask_bits_14_and_15_are_rejected(self):
+        raw=json.dumps(fields18(),separators=(',',':'))
+        for key in ('gate_x','gate_y'):
+            with self.subTest(key=key):self.assertRejected(raw[:-1]+','+json.dumps(key)+':2}')
+
+    def test_gate_rejects_negative_fractional_out_of_range_and_noninteger_tokens(self):
+        raw=json.dumps(fields18(),separators=(',',':'))
+        for key,old in (('gate_x','960'),('gate_y','540')):
+            for value in ('-1','-0','32768','999999999999999999999999999999','1.5','1.000000001',
+                          '32767.000001','1.0','1e0','1e50','null','true','false','"2"','[]','NaN','Infinity','01','+1'):
+                with self.subTest(key=key,value=value):
+                    self.assertRejected(raw.replace('"'+key+'":'+old,'"'+key+'":'+value))
+
+    def test_nineteen_fields_ignore_unix_millisecond_timestamp_without_changing_measurements(self):
+        expected_ok,expected_values=self.parse(fields18())
+        expected_gates=self.last_gates
+        self.assertTrue(expected_ok)
+        # Unix毫秒数远超float32精确整数范围；未知扩展字段不能影响测量发布。
+        packet=dict(fields18(),timestamp=1793012345678)
+        self.assertEqual(len(packet),19)
+        ok,values=self.parse(packet)
+        self.assertTrue(ok);self.assertEqual(values,expected_values)
+        self.assertEqual(self.last_gates,expected_gates)
 
     def test_unknown_nested_extension_is_still_compatible(self):
         packet=dict(fields16(),extension={'a':[1,True,None,{'b':'x'}]})
