@@ -216,6 +216,10 @@ void LoggedTopics::add_default_topics()
 	add_topic_multi("vehicle_thrust_setpoint", 20, 2);
 	add_topic_multi("vehicle_torque_setpoint", 20, 2);
 
+	// 添加打击模块数据记录
+	add_topic("strike_mode_status",0);
+	add_topic("dyt_aisheng_telemetry",0);
+
 	// SYS_HITL: default ground truth logging for simulation
 	int32_t sys_hitl = 0;
 	param_get(param_find("SYS_HITL"), &sys_hitl);

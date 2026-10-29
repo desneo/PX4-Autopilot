@@ -3,9 +3,9 @@
  *
  * Code generated for Simulink model 'Intercepe_Strike_Model_AS'.
  *
- * Model version                  : 1.136
+ * Model version                  : 1.148
  * Simulink Coder version         : 25.2 (R2025b) 28-Jul-2025
- * C/C++ source code generated on : Thu Oct 22 17:32:43 2026
+ * C/C++ source code generated on : Thu Oct 29 14:32:06 2026
  *
  * Target selection: ert.tlc
  * Embedded hardware selection: ARM Compatible->ARM Cortex

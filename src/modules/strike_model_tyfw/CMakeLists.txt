@@ -39,13 +39,14 @@ px4_add_module(
 	SRCS
 		strike_mode_app.cpp
 		user_mbd_strike_model/Intercepe_Strike_Model_AS.c
+		user_mbd_strike_model/Intercepe_Strike_Model_AS_data.c
 	MODULE_CONFIG
-		module.yaml
+	       	module.yaml
 	DEPENDS
 	)
 target_include_directories(modules__strike_model_tyfw
 	PRIVATE
-		${CMAKE_CURRENT_SOURCE_DIR}/user_mbd_strike_model
+    	${CMAKE_CURRENT_SOURCE_DIR}/user_mbd_strike_model
 )
 set_source_files_properties(
     user_mbd_strike_model/Intercepe_Strike_Model_Without_Rader.c

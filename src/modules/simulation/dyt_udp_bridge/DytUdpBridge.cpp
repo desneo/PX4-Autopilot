@@ -30,9 +30,9 @@ namespace
 {
 constexpr uint16_t kDefaultPort = 9000;
 constexpr size_t kUdpBufferSize = 2048;
-constexpr uint16_t kRequiredFields = (1u << 9) - 1u;
-constexpr uint16_t kOmegaFields = (1u << 11) | (1u << 12) | (1u << 13);
-constexpr uint16_t kGateFields = (1u << 14) | (1u << 15);
+constexpr uint32_t kRequiredFields = (1u << 9) - 1u;
+constexpr uint32_t kOmegaFields = (1u << 11) | (1u << 12) | (1u << 13);
+constexpr uint32_t kGateFields = (1u << 14) | (1u << 15);
 
 enum class Field : uint8_t {
 	TrackStatus = 0,
@@ -51,9 +51,12 @@ enum class Field : uint8_t {
 	LosOmegaD,
 	GateX,
 	GateY,
+	TrackingGateW,
+	TrackingGateH,
 };
 static_assert(static_cast<unsigned>(Field::GateX) == 14 && static_cast<unsigned>(Field::GateY) == 15,
-	      "波门坐标字段使用uint16位掩码的14/15位");
+	      "波门中心坐标字段使用位掩码的14/15位");
+static_assert(static_cast<unsigned>(Field::TrackingGateH) < 32, "字段位掩码不能超出uint32范围");
 
 struct AishengFields {
 	uint8_t track_status{0};
@@ -73,6 +76,8 @@ struct AishengFields {
 	float los_omega_d{NAN};
 	int16_t gate_x{0};
 	int16_t gate_y{0};
+	uint16_t tracking_gate_w{0};
+	uint16_t tracking_gate_h{0};
 };
 
 class JsonParser
@@ -90,7 +95,7 @@ public:
 
 		if (consume('}')) { return false; }
 
-		uint16_t seen = 0;
+		uint32_t seen = 0;
 
 		while (_cursor < _end) {
 			char key[32] {};
@@ -105,7 +110,7 @@ public:
 			const int field = field_index(key);
 
 			if (field >= 0) {
-				const uint16_t bit = static_cast<uint16_t>(1u << field);
+				const uint32_t bit = 1u << field;
 
 				if ((seen & bit) != 0) { return false; }
 
@@ -118,6 +123,14 @@ public:
 
 					if (kind == Field::GateX) { fields.gate_x = value; }
 					else { fields.gate_y = value; }
+
+				} else if (kind == Field::TrackingGateW || kind == Field::TrackingGateH) {
+					uint16_t value = 0;
+
+					if (!parse_size(value)) { return false; }
+
+					if (kind == Field::TrackingGateW) { fields.tracking_gate_w = value; }
+					else { fields.tracking_gate_h = value; }
 
 				} else {
 					float value = 0.f;
@@ -144,8 +157,8 @@ public:
 
 		skip_whitespace();
 		// 向量与波门坐标各须成组出现或整组缺省，保持旧9/13/16字段报文兼容。
-		const uint16_t omega_seen = seen & kOmegaFields;
-		const uint16_t gate_seen = seen & kGateFields;
+		const uint32_t omega_seen = seen & kOmegaFields;
+		const uint32_t gate_seen = seen & kGateFields;
 		return _cursor == _end && (seen & kRequiredFields) == kRequiredFields
 		       && (omega_seen == 0 || omega_seen == kOmegaFields)
 		       && (gate_seen == 0 || gate_seen == kGateFields);
@@ -275,6 +288,23 @@ private:
 		if (_cursor < _end && (*_cursor == '.' || *_cursor == 'e' || *_cursor == 'E')) { return false; }
 
 		value = static_cast<int16_t>(result);
+		return true;
+	}
+
+	bool parse_size(uint16_t &value)
+	{
+		const char *start = _cursor;
+		float unused = 0.f;
+
+		if (!parse_number(unused)) { return false; }
+
+		// 复用数值语法校验，以double保留半像素和uint16边界附近的小数。
+		char *end = nullptr;
+		const double pixels = strtod(start, &end);
+
+		if (end != _cursor || pixels < 0.0 || pixels > 65535.0) { return false; }
+
+		value = static_cast<uint16_t>(std::round(pixels));
 		return true;
 	}
 
@@ -417,6 +447,10 @@ private:
 
 		if (strcmp(key, "gate_y") == 0) { return static_cast<int>(Field::GateY); }
 
+		if (strcmp(key, "tracking_gate_w") == 0) { return static_cast<int>(Field::TrackingGateW); }
+
+		if (strcmp(key, "tracking_gate_h") == 0) { return static_cast<int>(Field::TrackingGateH); }
+
 		return -1;
 	}
 
@@ -450,7 +484,9 @@ private:
 		case Field::LosOmegaE: fields.los_omega_e = value; break;
 		case Field::LosOmegaD: fields.los_omega_d = value; break;
 		case Field::GateX:
-		case Field::GateY: return false; // 波门坐标由严格整数字面量路径处理。
+		case Field::GateY:
+		case Field::TrackingGateW:
+		case Field::TrackingGateH: return false; // 波门坐标与尺寸由专用路径处理。
 		}
 
 		return true;
@@ -666,6 +702,8 @@ private:
 		msg.track_status = fields.track_status;
 		msg.gate_x = fields.gate_x;
 		msg.gate_y = fields.gate_y;
+		msg.tracking_gate_w = fields.tracking_gate_w;
+		msg.tracking_gate_h = fields.tracking_gate_h;
 		msg.pitch_angle = fields.pitch_angle;
 		msg.yaw_angle = fields.yaw_angle;
 		msg.pitch_misalignment = fields.pitch_misalignment;

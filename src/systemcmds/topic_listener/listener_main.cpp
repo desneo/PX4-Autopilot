@@ -41,6 +41,12 @@
 #include <px4_platform_common/getopt.h>
 
 #include <poll.h>
+#include <cerrno>
+
+#if defined(__PX4_POSIX)
+#include <px4_daemon/server_io.h>
+#include <ctime>
+#endif
 
 #include <uORB/topics/uORBTopics.hpp>
 #include "topic_listener.hpp"
@@ -101,10 +107,33 @@ void listener(const orb_id_t &id, unsigned num_msgs, int topic_instance,
 		}
 
 		int sub = orb_subscribe_multi(id, topic_instance);
-		orb_set_interval(sub, topic_interval);
+
+		if (sub < 0) {
+			PX4_ERR("订阅主题失败");
+			return;
+		}
+
+		if (orb_set_interval(sub, topic_interval) != PX4_OK) {
+			PX4_ERR("设置订阅间隔失败");
+			orb_unsubscribe(sub);
+			return;
+		}
 
 		unsigned msgs_received = 0;
 
+#if defined(__PX4_POSIX)
+		// CDev订阅句柄与操作系统fd独立；仅对输入使用原生poll。
+		int input_fd = get_stdin();
+		const bool remote_input = input_fd >= 0 && input_fd != STDIN_FILENO;
+		int wait_ms = 0;
+		const auto wall_time_ms = []() {
+			struct timespec ts {};
+			clock_gettime(CLOCK_MONOTONIC, &ts);
+			return static_cast<uint64_t>(ts.tv_sec) * 1000 + static_cast<uint64_t>(ts.tv_nsec) / 1000000;
+		};
+		constexpr uint64_t message_timeout_ms = static_cast<uint64_t>(MESSAGE_TIMEOUT_S * 1000.f);
+		uint64_t last_message_ms = wall_time_ms();
+#else
 		struct pollfd fds[2] {};
 		// Poll for user input (for q or escape)
 		fds[0].fd = 0; /* stdin */
@@ -112,53 +141,130 @@ void listener(const orb_id_t &id, unsigned num_msgs, int topic_instance,
 		// Poll the UOrb subscription
 		fds[1].fd = sub;
 		fds[1].events = POLLIN;
+#endif
 
 		while (msgs_received < num_msgs) {
 
-			if (poll(&fds[0], 2, int(MESSAGE_TIMEOUT_S * 1000)) > 0) {
+#if defined(__PX4_POSIX)
+			// 超时使用墙钟，仿真暂停时也能退出。
+			const uint64_t elapsed_ms = wall_time_ms() - last_message_ms;
 
-				// Received character from stdin
-				if (fds[0].revents & POLLIN) {
-					char c = 0;
-					int ret = read(0, &c, 1);
-
-					if (ret) {
-						return;
-					}
-
-					switch (c) {
-					case 0x03: // ctrl-c
-					case 0x1b: // esc
-					case 'q':
-						return;
-						/* not reached */
-					}
-				}
-
-				// Received message from subscription
-				if (fds[1].revents & POLLIN) {
-					msgs_received++;
-
-					if (num_msgs > 1) {
-						// Clear screen
-						dprintf(1, "\033[2J\n");
-						// Move cursor to home position
-						dprintf(1, "\033[H");
-					}
-
-					PX4_INFO_RAW("\nTOPIC: %s instance %d #%d\n", id->o_name, topic_instance, msgs_received);
-
-					int ret = listener_print_topic(id, sub);
-
-					if (ret != PX4_OK) {
-						PX4_ERR("listener callback failed (%i)", ret);
-					}
-				}
-
-			} else {
-				PX4_INFO_RAW("Waited for %.1f seconds without a message. Giving up.\n", (double) MESSAGE_TIMEOUT_S);
+			if (elapsed_ms >= message_timeout_ms) {
+				PX4_INFO_RAW("等待 %.1f 秒未收到消息，停止监听。\n", (double) MESSAGE_TIMEOUT_S);
 				break;
 			}
+
+			const int remaining_ms = static_cast<int>(message_timeout_ms - elapsed_ms);
+			struct pollfd input {};
+			input.fd = input_fd;
+			input.events = POLLIN;
+			const int ready = poll(&input, 1, wait_ms < remaining_ms ? wait_ms : remaining_ms);
+
+			if (ready < 0) {
+				if (errno == EINTR) { continue; }
+
+				PX4_ERR("输入poll失败: %d", errno);
+				break;
+			}
+
+			if (input.revents & (POLLERR | POLLNVAL)) {
+				PX4_ERR("输入fd不可用: %d", input_fd);
+				break;
+			}
+
+			if (remote_input && (input.revents & POLLHUP)) { break; }
+
+			if (input.revents & (POLLIN | POLLHUP)) {
+				char c = 0;
+				const ssize_t count = read(input_fd, &c, 1);
+
+				if (count == 0) {
+					if (remote_input) { break; }
+
+					// 本地EOF后禁用输入，避免/dev/null持续唤醒。
+					input_fd = -1;
+
+				} else if (count > 0) {
+					if (c == 0x03 || c == 0x1b || c == 'q' || c == 'Q') { break; }
+
+				} else if (errno != EINTR && errno != EAGAIN) {
+					PX4_ERR("读取输入失败: %d", errno);
+					break;
+				}
+			}
+
+			bool updated = false;
+
+			if (orb_check(sub, &updated) != PX4_OK) {
+				PX4_ERR("检查主题更新失败");
+				break;
+			}
+
+			if (!updated) {
+				wait_ms = topic_interval == 0 ? 1 : static_cast<int>(topic_interval < 20 ? topic_interval : 20);
+				continue;
+			}
+
+			wait_ms = 0;
+			last_message_ms = wall_time_ms();
+#else
+			const int ready = poll(&fds[0], 2, int(MESSAGE_TIMEOUT_S * 1000));
+
+			if (ready < 0) {
+				if (errno == EINTR) { continue; }
+
+				PX4_ERR("监听poll失败: %d", errno);
+				break;
+			}
+
+			if (ready == 0) {
+				PX4_INFO_RAW("等待 %.1f 秒未收到消息，停止监听。\n", (double) MESSAGE_TIMEOUT_S);
+				break;
+			}
+
+			// NuttX的订阅与stdin都是真实fd；关闭或故障须退出，不能持续重试。
+			if ((fds[0].revents | fds[1].revents) & (POLLHUP | POLLERR | POLLNVAL)) {
+				PX4_ERR("监听fd已关闭或不可用");
+				break;
+			}
+
+			if (fds[0].revents & POLLIN) {
+				char c = 0;
+				const ssize_t count = read(STDIN_FILENO, &c, 1);
+
+				if (count == 0) { break; }
+
+				if (count < 0) {
+					if (errno == EINTR || errno == EAGAIN) { continue; }
+
+					PX4_ERR("读取输入失败: %d", errno);
+					break;
+				}
+
+				if (c == 0x03 || c == 0x1b || c == 'q' || c == 'Q') { break; }
+			}
+
+			if (!(fds[1].revents & POLLIN)) { continue; }
+#endif
+
+			msgs_received++;
+
+			if (num_msgs > 1) {
+				// 清屏与正文使用同一线程输出流。
+				PX4_INFO_RAW("\033[2J\n\033[H");
+			}
+
+			PX4_INFO_RAW("\nTOPIC: %s instance %d #%d\n", id->o_name, topic_instance, msgs_received);
+
+			int ret = listener_print_topic(id, sub);
+
+			if (ret != PX4_OK) {
+				PX4_ERR("listener callback failed (%i)", ret);
+			}
+
+#if defined(__PX4_POSIX)
+			fflush(get_stdout(nullptr));
+#endif
 		}
 
 		orb_unsubscribe(sub);

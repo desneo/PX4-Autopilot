@@ -67,7 +67,7 @@ bool StrikeModeAPP::init()
 {
 	PX4_INFO("打击制导初始化!");
 	// 调度 Run() 以 10ms（100Hz）的间隔执行
-	ScheduleOnInterval(10000_us);
+    	ScheduleOnInterval(10000_us);
 
 	Intercepe_Strike_Model_Without_Rader_initialize();
 	return true;

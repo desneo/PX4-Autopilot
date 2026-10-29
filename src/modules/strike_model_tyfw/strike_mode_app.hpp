@@ -95,6 +95,12 @@ private:
 	param_t _param_strike_roll_ki{PARAM_INVALID};
 	param_t _param_strike_pitch_kp{PARAM_INVALID};
 	param_t _param_strike_pitch_ki{PARAM_INVALID};
+	param_t _param_strike_lowpass_hz{PARAM_INVALID};
+	param_t _param_param1{PARAM_INVALID};
+	param_t _param_param2{PARAM_INVALID};
+	param_t _param_param3{PARAM_INVALID};
+	param_t _param_param4{PARAM_INVALID};
+	param_t _param_param5{PARAM_INVALID};
 
 	int32_t _bool_search{0};
 	int32_t _bool_request{0};
@@ -103,4 +109,10 @@ private:
 	float _strike_roll_ki{0.1f};
 	float _strike_pitch_kp{0.2f};
 	float _strike_pitch_ki{0.1f};
+	float  _strike_lowpass_hz{10.0f};
+	float  _param1{0.0f};
+	float  _param2{0.0f};
+	float  _param3{0.0f};
+	float  _param4{0.0f};
+	float  _param5{0.0f};
 };

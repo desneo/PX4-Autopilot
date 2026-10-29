@@ -57,9 +57,39 @@
 
 using namespace px4_daemon;
 
+namespace
+{
+thread_local int command_input = STDIN_FILENO;
+thread_local FILE *command_output = nullptr;
+}
+
+ScopedStdio::ScopedStdio(int input_fd, FILE *output) :
+	_previous_input(command_input),
+	_previous_output(command_output)
+{
+	command_input = input_fd;
+	command_output = output;
+}
+
+ScopedStdio::~ScopedStdio()
+{
+	command_input = _previous_input;
+	command_output = _previous_output;
+}
+
+int get_stdin(void)
+{
+	return command_input;
+}
 
 FILE *get_stdout(bool *isatty_)
 {
+	if (command_output != nullptr) {
+		if (isatty_) { *isatty_ = isatty(fileno(command_output)); }
+
+		return command_output;
+	}
+
 	Server::CmdThreadSpecificData *thread_data_ptr;
 
 	// If we are not in a thread that has been started by a client, we don't

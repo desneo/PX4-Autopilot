@@ -3,9 +3,9 @@
  *
  * Code generated for Simulink model 'Intercepe_Strike_Model_AS'.
  *
- * Model version                  : 1.136
+ * Model version                  : 1.148
  * Simulink Coder version         : 25.2 (R2025b) 28-Jul-2025
- * C/C++ source code generated on : Thu Oct 22 17:32:43 2026
+ * C/C++ source code generated on : Thu Oct 29 14:32:06 2026
  *
  * Target selection: ert.tlc
  * Embedded hardware selection: ARM Compatible->ARM Cortex
@@ -34,18 +34,15 @@ STRIKE_PARAM_t STRIKE_PARAM = {
   0.1F,
   0.2F,
   0.1F,
-  10.0F
+  10.0F,
+  1.0F,
+  0.2F,
+  0.15F,
+  0.0045F,
+  0.0F
 } ;                                    /* Variable: STRIKE_PARAM
-                                        * Referenced by:
-                                        *   '<S46>/Integral Gain'
-                                        *   '<S54>/Proportional Gain'
-                                        *   '<S98>/Integral Gain'
-                                        *   '<S106>/Proportional Gain'
-                                        *   '<S212>/Integral Gain'
-                                        *   '<S220>/Proportional Gain'
-                                        *   '<S264>/Integral Gain'
-                                        *   '<S272>/Proportional Gain'
-                                        * ´ò»÷Ä£Ê½¿ØÖÆÆ÷²ÎÊý½á¹¹Ìå£¬Ö§³ÖÔËÐÐÊ±µ÷²Î
+                                        * Referenced by: '<S2>/Chart'
+                                        * ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½á¹¹ï¿½å£¬Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
                                         */
 
 /* Block signals (default storage) */
@@ -76,6 +73,43 @@ const VehicleCommandBus Intercepe_Strike_Model_AS_rtZVe = { 0ULL,/* timestamp */
 };
 
 /*
+ * Output and update for atomic system:
+ *    '<S3>/MATLAB Function'
+ *    '<S14>/MATLAB Function'
+ *    '<S78>/MATLAB Function'
+ */
+void Intercepe_Strike_MATLABFunction(real32_T rtu_angles_rad, real32_T
+  rtu_angles_rad_k, real32_T rtu_angles_rad_j, real32_T rty_DCM[9])
+{
+  real32_T c1;
+  real32_T c2;
+  real32_T c3;
+  real32_T s1;
+  real32_T s2;
+  real32_T s3;
+  real32_T tmp;
+
+  /* SignalConversion generated from: '<S9>/ SFunction ' */
+  c1 = cosf(rtu_angles_rad);
+  s1 = sinf(rtu_angles_rad);
+  c2 = cosf(rtu_angles_rad_k);
+  s2 = sinf(rtu_angles_rad_k);
+  c3 = cosf(rtu_angles_rad_j);
+  s3 = sinf(rtu_angles_rad_j);
+  rty_DCM[0] = c2 * c1;
+  rty_DCM[3] = c2 * s1;
+  rty_DCM[6] = -s2;
+  tmp = s3 * s2;
+  rty_DCM[1] = tmp * c1 - c3 * s1;
+  rty_DCM[4] = tmp * s1 + c3 * c1;
+  rty_DCM[7] = s3 * c2;
+  tmp = c3 * s2;
+  rty_DCM[2] = tmp * c1 + s3 * s1;
+  rty_DCM[5] = tmp * s1 - s3 * c1;
+  rty_DCM[8] = c3 * c2;
+}
+
+/*
  * Output and update for action system:
  *    '<S1>/Subsystem6'
  *    '<S1>/Subsystem1'
@@ -85,22 +119,22 @@ void Intercepe_Strike_Mod_Subsystem6(boolean_T rtu_cmd_valid, VehicleCommandBus 
 {
   real_T tmp;
 
-  /* DataTypeConversion: '<S7>/Data Type Conversion' incorporates:
-   *  DiscreteIntegrator: '<S7>/Discrete-Time Integrator'
+  /* DataTypeConversion: '<S8>/Data Type Conversion' incorporates:
+   *  DiscreteIntegrator: '<S8>/Discrete-Time Integrator'
    */
   tmp = fmod(floor(localDW->DiscreteTimeIntegrator_DSTATE),
              1.8446744073709552E+19);
 
-  /* BusAssignment: '<S7>/Bus Assignment' incorporates:
-   *  Constant: '<S7>/Constant4'
-   *  Constant: '<S7>/Constant5'
-   *  Constant: '<S7>/Constant6'
-   *  Constant: '<S7>/Constant7'
-   *  Constant: '<S7>/Constant8'
-   *  Constant: '<S7>/Constant9'
-   *  Constant: '<S7>/NAVIGATION_STATE_AUTO_LOITER'
-   *  Constant: '<S7>/VEHICLE_CMD_SET_NAV_STATE'
-   *  DataTypeConversion: '<S7>/Data Type Conversion'
+  /* BusAssignment: '<S8>/Bus Assignment' incorporates:
+   *  Constant: '<S8>/Constant4'
+   *  Constant: '<S8>/Constant5'
+   *  Constant: '<S8>/Constant6'
+   *  Constant: '<S8>/Constant7'
+   *  Constant: '<S8>/Constant8'
+   *  Constant: '<S8>/Constant9'
+   *  Constant: '<S8>/NAVIGATION_STATE_AUTO_LOITER'
+   *  Constant: '<S8>/VEHICLE_CMD_SET_NAV_STATE'
+   *  DataTypeConversion: '<S8>/Data Type Conversion'
    */
   rty_Out1->timestamp = tmp < 0.0 ? (uint64_T)-(int64_T)(uint64_T)-tmp :
     (uint64_T)tmp;
@@ -114,16 +148,201 @@ void Intercepe_Strike_Mod_Subsystem6(boolean_T rtu_cmd_valid, VehicleCommandBus 
   rty_Out1->param7 = 0.0F;
   rty_Out1->cmd_valid = rtu_cmd_valid;
 
-  /* Update for DiscreteIntegrator: '<S7>/Discrete-Time Integrator' incorporates:
-   *  Constant: '<S7>/Constant1'
+  /* Update for DiscreteIntegrator: '<S8>/Discrete-Time Integrator' incorporates:
+   *  Constant: '<S8>/Constant1'
    */
   localDW->DiscreteTimeIntegrator_DSTATE += 10000.0;
+}
+
+/*
+ * System initialize for atomic system:
+ *    '<S11>/MATLAB Function'
+ *    '<S76>/MATLAB Function'
+ */
+void Intercepe_MATLABFunction_h_Init(DW_MATLABFunction_Intercepe_h_T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * System reset for atomic system:
+ *    '<S11>/MATLAB Function'
+ *    '<S76>/MATLAB Function'
+ */
+void Intercep_MATLABFunction_k_Reset(DW_MATLABFunction_Intercepe_h_T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * Output and update for atomic system:
+ *    '<S11>/MATLAB Function'
+ *    '<S76>/MATLAB Function'
+ */
+void Intercepe_Stri_MATLABFunction_f(real32_T rtu_u, real_T rtu_fc, real_T
+  rtu_Ts, real32_T *rty_y, DW_MATLABFunction_Intercepe_h_T *localDW)
+{
+  real_T C;
+  real32_T tmp;
+  C = rtu_fc;
+  if (!localDW->x_prev_not_empty) {
+    localDW->x_prev = rtu_u;
+    localDW->x_prev_not_empty = true;
+    localDW->y_prev = rtu_u;
+  }
+
+  if (rtu_fc < 0.1) {
+    C = 0.1;
+  }
+
+  C = 6.2831853071795862 * C * rtu_Ts;
+  tmp = (real32_T)(C / (C + 2.0));
+  *rty_y = (tmp * rtu_u + tmp * localDW->x_prev) - (real32_T)((C - 2.0) / (C +
+    2.0)) * localDW->y_prev;
+  localDW->x_prev = rtu_u;
+  localDW->y_prev = *rty_y;
+}
+
+/*
+ * Output and update for atomic system:
+ *    '<S14>/MATLAB Function1'
+ *    '<S78>/MATLAB Function1'
+ */
+void Intercepe_Strik_MATLABFunction1(const real32_T rtu_angles_rad[3], real32_T
+  rty_DCM[9])
+{
+  real32_T c1;
+  real32_T c2;
+  real32_T c3;
+  real32_T s1;
+  real32_T s2;
+  real32_T s3;
+  c1 = cosf(rtu_angles_rad[0]);
+  s1 = sinf(rtu_angles_rad[0]);
+  c2 = cosf(rtu_angles_rad[1]);
+  s2 = sinf(rtu_angles_rad[1]);
+  c3 = cosf(rtu_angles_rad[2]);
+  s3 = sinf(rtu_angles_rad[2]);
+  rty_DCM[0] = c3 * c2;
+  rty_DCM[3] = c3 * s2 * s1 + s3 * c1;
+  rty_DCM[6] = -c3 * s2 * c1 + s3 * s1;
+  rty_DCM[1] = -s3 * c2;
+  rty_DCM[4] = -s3 * s2 * s1 + c3 * c1;
+  rty_DCM[7] = s3 * s2 * c1 + c3 * s1;
+  rty_DCM[2] = s2;
+  rty_DCM[5] = -c2 * s1;
+  rty_DCM[8] = c2 * c1;
+}
+
+/*
+ * System initialize for atomic system:
+ *    '<S16>/MATLAB Function1'
+ *    '<S16>/MATLAB Function2'
+ *    '<S80>/MATLAB Function1'
+ *    '<S80>/MATLAB Function2'
+ */
+void Intercep_MATLABFunction1_a_Init(DW_MATLABFunction1_Intercep_g_T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * System reset for atomic system:
+ *    '<S16>/MATLAB Function1'
+ *    '<S16>/MATLAB Function2'
+ *    '<S80>/MATLAB Function1'
+ *    '<S80>/MATLAB Function2'
+ */
+void Interce_MATLABFunction1_j_Reset(DW_MATLABFunction1_Intercep_g_T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * Output and update for atomic system:
+ *    '<S16>/MATLAB Function1'
+ *    '<S16>/MATLAB Function2'
+ *    '<S80>/MATLAB Function1'
+ *    '<S80>/MATLAB Function2'
+ */
+void Intercepe_Str_MATLABFunction1_g(real32_T rtu_u, real32_T rtu_fc, real32_T
+  rtu_Ts, real32_T *rty_y, DW_MATLABFunction1_Intercep_g_T *localDW)
+{
+  real32_T C;
+  real32_T tmp;
+  C = rtu_fc;
+  if (!localDW->x_prev_not_empty) {
+    localDW->x_prev = rtu_u;
+    localDW->x_prev_not_empty = true;
+    localDW->y_prev = rtu_u;
+  }
+
+  if (rtu_fc < 0.1F) {
+    C = 0.1F;
+  }
+
+  C = 6.28318548F * C * rtu_Ts;
+  tmp = C / (C + 2.0F);
+  *rty_y = (tmp * rtu_u + tmp * localDW->x_prev) - (C - 2.0F) / (C + 2.0F) *
+    localDW->y_prev;
+  localDW->x_prev = rtu_u;
+  localDW->y_prev = *rty_y;
+}
+
+/*
+ * System initialize for atomic system:
+ *    '<S16>/MATLAB Function4'
+ *    '<S80>/MATLAB Function4'
+ */
+void Intercepe__MATLABFunction4_Init(DW_MATLABFunction4_Intercepe__T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * System reset for atomic system:
+ *    '<S16>/MATLAB Function4'
+ *    '<S80>/MATLAB Function4'
+ */
+void Intercepe_MATLABFunction4_Reset(DW_MATLABFunction4_Intercepe__T *localDW)
+{
+  localDW->x_prev_not_empty = false;
+}
+
+/*
+ * Output and update for atomic system:
+ *    '<S16>/MATLAB Function4'
+ *    '<S80>/MATLAB Function4'
+ */
+void Intercepe_Strik_MATLABFunction4(real32_T rtu_u, real32_T rtu_fc, real32_T
+  rtu_Ts, real32_T *rty_y, DW_MATLABFunction4_Intercepe__T *localDW)
+{
+  real32_T C;
+  real32_T tmp;
+  C = rtu_fc;
+  if (!localDW->x_prev_not_empty) {
+    localDW->x_prev = rtu_u;
+    localDW->x_prev_not_empty = true;
+    localDW->y_prev = rtu_u;
+  }
+
+  if (rtu_fc < 0.1F) {
+    C = 0.1F;
+  }
+
+  C = 6.28318548F * C * rtu_Ts;
+  tmp = C / (C + 2.0F);
+  *rty_y = (tmp * rtu_u + tmp * localDW->x_prev) - (C - 2.0F) / (C + 2.0F) *
+    localDW->y_prev;
+  localDW->x_prev = rtu_u;
+  localDW->y_prev = *rty_y;
 }
 
 /* Function for Chart: '<S2>/Chart' */
 static void Intercepe_Strike_Model_AS_LOCK(boolean_T *cmd_valid, const
   SeekerGuidanceBus *BusConversion_InsertedFor_Chart)
 {
+  uint32_T tmp;
   boolean_T seeker_data_valid;
   boolean_T target_ok;
   Intercepe_Strike_Model_AS_B.guided_state = 3U;
@@ -139,6 +358,7 @@ static void Intercepe_Strike_Model_AS_LOCK(boolean_T *cmd_valid, const
     *cmd_valid = true;
   } else if ((Intercepe_Strike_Model_AS_DW.lock_time >= 5.0F) &&
              Intercepe_Strike_Model_AS_U.bool_request) {
+    Intercepe_Strike_Model_AS_DW.durationCounter_1 = 0U;
     Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
       Intercepe_Strike_Mode_IN_STRIKE;
 
@@ -155,12 +375,25 @@ static void Intercepe_Strike_Model_AS_LOCK(boolean_T *cmd_valid, const
     Intercepe_Strike_Model_AS_B.guided_state = 1U;
     *cmd_valid = true;
   } else {
+    if ((BusConversion_InsertedFor_Chart->timestamp !=
+         Intercepe_Strike_Model_AS_DW.last_timestamp) &&
+        (BusConversion_InsertedFor_Chart->timestamp > 0ULL)) {
+      /* BusCreator generated from: '<S2>/Chart' */
+      Intercepe_Strike_Model_AS_DW.last_timestamp =
+        BusConversion_InsertedFor_Chart->timestamp;
+      Intercepe_Strike_Model_AS_DW.stale_count = 0U;
+      seeker_data_valid = true;
+    } else {
+      tmp = Intercepe_Strike_Model_AS_DW.stale_count + 1U;
+      if (Intercepe_Strike_Model_AS_DW.stale_count + 1U > 255U) {
+        tmp = 255U;
+      }
+
+      Intercepe_Strike_Model_AS_DW.stale_count = (uint8_T)tmp;
+      seeker_data_valid = (Intercepe_Strike_Model_AS_DW.stale_count < 4);
+    }
+
     /* BusCreator generated from: '<S2>/Chart' */
-    seeker_data_valid = ((BusConversion_InsertedFor_Chart->timestamp !=
-                          Intercepe_Strike_Model_AS_DW.last_timestamp) &&
-                         (BusConversion_InsertedFor_Chart->timestamp > 0ULL));
-    Intercepe_Strike_Model_AS_DW.last_timestamp =
-      BusConversion_InsertedFor_Chart->timestamp;
     target_ok = (((BusConversion_InsertedFor_Chart->workStatus & 1U) != 0U) &&
                  (BusConversion_InsertedFor_Chart->trackConfidence > 6.0F) &&
                  (BusConversion_InsertedFor_Chart->selfCheckResult == 1));
@@ -184,19 +417,61 @@ static void Intercepe_Strike_Model_AS_LOCK(boolean_T *cmd_valid, const
 void Intercepe_Strike_Model_AS_step(void)
 {
   real_T tmp;
-  real32_T rtb_Gain1_a;
-  real32_T rtb_Gain1_e;
-  real32_T rtb_IntegralGain_hj;
-  real32_T rtb_IntegralGain_hr;
-  real32_T rtb_Saturation_bm;
-  real32_T rtb_Saturation_d;
-  real32_T rtb_Saturation_k;
-  real32_T rtb_Sum7;
-  real32_T rtb_Sum_a;
-  real32_T rtb_Sum_c;
-  real32_T rtb_Sum_k;
+  int32_T i;
+  int32_T i_0;
+  int32_T rtb_DCM_tmp;
+  int32_T rtb_Transpose1_p_tmp;
+  real32_T rtb_DCM[9];
+  real32_T rtb_DCM_h[9];
+  real32_T rtb_MatrixMultiply2_cf[9];
+  real32_T rtb_MatrixMultiply2_fh[9];
+  real32_T rtb_Transpose1_b[9];
+  real32_T rtb_D2R_i[3];
+  real32_T rtb_MatrixMultiply[3];
+  real32_T pooled11;
+  real32_T rtb_Rollcmd_f;
+  real32_T rtb_Saturation;
+  real32_T rtb_Sum;
+  real32_T rtb_desired_thrust;
+  real32_T rtb_lambda_dot_roll_los_filte_a;
+  uint32_T tmp_0;
   int8_T rtPrevAction;
-  boolean_T cmd_valid;
+  boolean_T seeker_data_valid;
+
+  /* MATLAB Function: '<S3>/MATLAB Function' incorporates:
+   *  Inport: '<Root>/current_pitch'
+   *  Inport: '<Root>/current_roll'
+   *  Inport: '<Root>/current_yaw'
+   */
+  Intercepe_Strike_MATLABFunction(Intercepe_Strike_Model_AS_U.current_yaw,
+    Intercepe_Strike_Model_AS_U.current_pitch,
+    Intercepe_Strike_Model_AS_U.current_roll, rtb_DCM);
+
+  /* SignalConversion generated from: '<S3>/MatrixMultiply' incorporates:
+   *  Inport: '<Root>/current_vx'
+   *  Inport: '<Root>/current_vy'
+   *  Inport: '<Root>/current_vz'
+   */
+  rtb_MatrixMultiply[0] = Intercepe_Strike_Model_AS_U.current_vx;
+  rtb_MatrixMultiply[1] = Intercepe_Strike_Model_AS_U.current_vy;
+  rtb_MatrixMultiply[2] = Intercepe_Strike_Model_AS_U.current_vz;
+
+  /* Product: '<S3>/MatrixMultiply' */
+  rtb_Rollcmd_f = 0.0F;
+  rtb_Saturation = 0.0F;
+  rtb_desired_thrust = 0.0F;
+  for (i = 0; i < 3; i++) {
+    pooled11 = rtb_MatrixMultiply[i];
+    rtb_Rollcmd_f += rtb_DCM[3 * i] * pooled11;
+    rtb_Saturation += rtb_DCM[3 * i + 1] * pooled11;
+    rtb_desired_thrust += rtb_DCM[3 * i + 2] * pooled11;
+  }
+
+  rtb_MatrixMultiply[2] = rtb_desired_thrust;
+  rtb_MatrixMultiply[1] = rtb_Saturation;
+  rtb_MatrixMultiply[0] = rtb_Rollcmd_f;
+
+  /* End of Product: '<S3>/MatrixMultiply' */
 
   /* Chart: '<S2>/Chart' incorporates:
    *  BusCreator generated from: '<S2>/Chart'
@@ -210,7 +485,7 @@ void Intercepe_Strike_Model_AS_step(void)
     Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
       Intercepe_Strike_Model__IN_IDLE;
     Intercepe_Strike_Model_AS_B.guided_state = 1U;
-    cmd_valid = true;
+    seeker_data_valid = true;
   } else {
     switch (Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS) {
      case Intercepe_Strike_Model__IN_IDLE:
@@ -224,14 +499,14 @@ void Intercepe_Strike_Model_AS_step(void)
           Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
         Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         Intercepe_Strike_Model_AS_B.guided_state = 2U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else {
-        cmd_valid = false;
+        seeker_data_valid = false;
       }
       break;
 
      case Intercepe_Strike_Model__IN_LOCK:
-      Intercepe_Strike_Model_AS_LOCK(&cmd_valid,
+      Intercepe_Strike_Model_AS_LOCK(&seeker_data_valid,
         &Intercepe_Strike_Model_AS_U.SeekerData);
       break;
 
@@ -245,31 +520,41 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         Intercepe_Strike_Model_AS_DW.lock_time = 0.0F;
         Intercepe_Strike_Model_AS_B.guided_state = 3U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else if ((!Intercepe_Strike_Model_AS_U.bool_search) ||
                  (Intercepe_Strike_Model_AS_U.arming_state != 2)) {
         Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
           Intercepe_Strike_Model__IN_IDLE;
         Intercepe_Strike_Model_AS_B.guided_state = 1U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else {
-        cmd_valid = ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
-                      Intercepe_Strike_Model_AS_DW.last_timestamp) &&
-                     (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL));
-        Intercepe_Strike_Model_AS_DW.last_timestamp =
-          Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
-        if (cmd_valid && (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus &
-                            1U) != 0U) &&
-                          (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence
-                           > 6.0F) &&
-                          (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult
-                           == 1))) {
+        if ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
+             Intercepe_Strike_Model_AS_DW.last_timestamp) &&
+            (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL)) {
+          Intercepe_Strike_Model_AS_DW.last_timestamp =
+            Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
+          Intercepe_Strike_Model_AS_DW.stale_count = 0U;
+          seeker_data_valid = true;
+        } else {
+          tmp_0 = Intercepe_Strike_Model_AS_DW.stale_count + 1U;
+          if (Intercepe_Strike_Model_AS_DW.stale_count + 1U > 255U) {
+            tmp_0 = 255U;
+          }
+
+          Intercepe_Strike_Model_AS_DW.stale_count = (uint8_T)tmp_0;
+          seeker_data_valid = (Intercepe_Strike_Model_AS_DW.stale_count < 4);
+        }
+
+        if (seeker_data_valid &&
+            (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus & 1U) != 0U) &&
+             (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence > 6.0F) &&
+             (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult == 1))) {
           Intercepe_Strike_Model_AS_DW.time_gate += 0.01F;
         } else {
           Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         }
 
-        cmd_valid = false;
+        seeker_data_valid = false;
       }
       break;
 
@@ -283,7 +568,7 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         Intercepe_Strike_Model_AS_DW.lock_time = 0.0F;
         Intercepe_Strike_Model_AS_B.guided_state = 3U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else if ((!Intercepe_Strike_Model_AS_U.bool_search) ||
                  (Intercepe_Strike_Model_AS_U.arming_state != 2) ||
                  (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult != 1))
@@ -291,25 +576,35 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
           Intercepe_Strike_Model__IN_IDLE;
         Intercepe_Strike_Model_AS_B.guided_state = 1U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else {
-        cmd_valid = ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
-                      Intercepe_Strike_Model_AS_DW.last_timestamp) &&
-                     (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL));
-        Intercepe_Strike_Model_AS_DW.last_timestamp =
-          Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
-        if (cmd_valid && (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus &
-                            1U) != 0U) &&
-                          (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence
-                           > 6.0F) &&
-                          (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult
-                           == 1))) {
+        if ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
+             Intercepe_Strike_Model_AS_DW.last_timestamp) &&
+            (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL)) {
+          Intercepe_Strike_Model_AS_DW.last_timestamp =
+            Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
+          Intercepe_Strike_Model_AS_DW.stale_count = 0U;
+          seeker_data_valid = true;
+        } else {
+          tmp_0 = Intercepe_Strike_Model_AS_DW.stale_count + 1U;
+          if (Intercepe_Strike_Model_AS_DW.stale_count + 1U > 255U) {
+            tmp_0 = 255U;
+          }
+
+          Intercepe_Strike_Model_AS_DW.stale_count = (uint8_T)tmp_0;
+          seeker_data_valid = (Intercepe_Strike_Model_AS_DW.stale_count < 4);
+        }
+
+        if (seeker_data_valid &&
+            (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus & 1U) != 0U) &&
+             (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence > 6.0F) &&
+             (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult == 1))) {
           Intercepe_Strike_Model_AS_DW.time_gate += 0.01F;
         } else {
           Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         }
 
-        cmd_valid = false;
+        seeker_data_valid = false;
       }
       break;
 
@@ -318,31 +613,67 @@ void Intercepe_Strike_Model_AS_step(void)
       Intercepe_Strike_Model_AS_B.guided_state = 5U;
       if ((!Intercepe_Strike_Model_AS_U.bool_request) ||
           (Intercepe_Strike_Model_AS_DW.time_gate >= 0.5F)) {
+        seeker_data_valid = true;
+      } else if (STRIKE_PARAM.param1 >= 0.5F) {
+        if (sqrtf(Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth *
+                  Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth +
+                  Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight *
+                  Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight) <
+            500.0F) {
+          Intercepe_Strike_Model_AS_DW.durationCounter_1 = 0U;
+        }
+
+        seeker_data_valid = (Intercepe_Strike_Model_AS_DW.durationCounter_1 >
+                             30U);
+      } else {
+        seeker_data_valid = false;
+      }
+
+      if (seeker_data_valid) {
         Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
           Intercepe_Strike_Model__IN_IDLE;
         Intercepe_Strike_Model_AS_B.guided_state = 1U;
-        cmd_valid = true;
+        seeker_data_valid = true;
       } else {
-        cmd_valid = ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
-                      Intercepe_Strike_Model_AS_DW.last_timestamp) &&
-                     (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL));
-        Intercepe_Strike_Model_AS_DW.last_timestamp =
-          Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
-        if ((!cmd_valid) || (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus
-               & 1U) == 0U) ||
-                             (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence
-                              <= 6.0F) ||
-                             (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult
-                              != 1))) {
+        if ((Intercepe_Strike_Model_AS_U.SeekerData.timestamp !=
+             Intercepe_Strike_Model_AS_DW.last_timestamp) &&
+            (Intercepe_Strike_Model_AS_U.SeekerData.timestamp > 0ULL)) {
+          Intercepe_Strike_Model_AS_DW.last_timestamp =
+            Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
+          Intercepe_Strike_Model_AS_DW.stale_count = 0U;
+          seeker_data_valid = true;
+        } else {
+          tmp_0 = Intercepe_Strike_Model_AS_DW.stale_count + 1U;
+          if (Intercepe_Strike_Model_AS_DW.stale_count + 1U > 255U) {
+            tmp_0 = 255U;
+          }
+
+          Intercepe_Strike_Model_AS_DW.stale_count = (uint8_T)tmp_0;
+          seeker_data_valid = (Intercepe_Strike_Model_AS_DW.stale_count < 4);
+        }
+
+        if ((!seeker_data_valid) ||
+            (((Intercepe_Strike_Model_AS_U.SeekerData.workStatus & 1U) == 0U) ||
+             (Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence <= 6.0F) ||
+             (Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult != 1))) {
           Intercepe_Strike_Model_AS_DW.time_gate += 0.01F;
         } else {
           Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
         }
 
-        cmd_valid = false;
+        seeker_data_valid = false;
       }
       break;
     }
+  }
+
+  if (sqrtf(Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth *
+            Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth +
+            Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight *
+            Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight) >= 178.0F) {
+    Intercepe_Strike_Model_AS_DW.durationCounter_1++;
+  } else {
+    Intercepe_Strike_Model_AS_DW.durationCounter_1 = 0U;
   }
 
   /* End of Chart: '<S2>/Chart' */
@@ -375,9 +706,9 @@ void Intercepe_Strike_Model_AS_step(void)
   switch (Intercepe_Strike_Model_AS_DW.SwitchCase_ActiveSubsystem) {
    case 0:
     /* Outputs for IfAction SubSystem: '<S1>/Subsystem6' incorporates:
-     *  ActionPort: '<S7>/Action Port'
+     *  ActionPort: '<S8>/Action Port'
      */
-    Intercepe_Strike_Mod_Subsystem6(cmd_valid,
+    Intercepe_Strike_Mod_Subsystem6(seeker_data_valid,
       &Intercepe_Strike_Model_AS_B.Merge,
       &Intercepe_Strike_Model_AS_DW.Subsystem6);
 
@@ -386,9 +717,9 @@ void Intercepe_Strike_Model_AS_step(void)
 
    case 1:
     /* Outputs for IfAction SubSystem: '<S1>/Subsystem1' incorporates:
-     *  ActionPort: '<S3>/Action Port'
+     *  ActionPort: '<S4>/Action Port'
      */
-    Intercepe_Strike_Mod_Subsystem6(cmd_valid,
+    Intercepe_Strike_Mod_Subsystem6(seeker_data_valid,
       &Intercepe_Strike_Model_AS_B.Merge,
       &Intercepe_Strike_Model_AS_DW.Subsystem1);
 
@@ -399,115 +730,387 @@ void Intercepe_Strike_Model_AS_step(void)
     if (Intercepe_Strike_Model_AS_DW.SwitchCase_ActiveSubsystem != rtPrevAction)
     {
       /* InitializeConditions for IfAction SubSystem: '<S1>/Subsystem2' incorporates:
-       *  ActionPort: '<S4>/Action Port'
+       *  ActionPort: '<S5>/Action Port'
        */
       /* InitializeConditions for SwitchCase: '<S1>/Switch Case' incorporates:
-       *  Delay: '<S4>/Delay1'
-       *  Delay: '<S4>/Delay3'
-       *  DiscreteIntegrator: '<S101>/Integrator'
-       *  DiscreteIntegrator: '<S10>/Discrete-Time Integrator5'
-       *  DiscreteIntegrator: '<S11>/Discrete-Time Integrator5'
-       *  DiscreteIntegrator: '<S153>/Integrator'
-       *  DiscreteIntegrator: '<S49>/Integrator'
-       *  DiscreteIntegrator: '<S4>/Discrete-Time Integrator'
+       *  Delay: '<S5>/Delay1'
+       *  Delay: '<S5>/Delay3'
+       *  DiscreteIntegrator: '<S52>/Integrator'
+       *  DiscreteIntegrator: '<S5>/Discrete-Time Integrator'
+       *  RateLimiter: '<S15>/Rate Limiter1'
+       *  RateLimiter: '<S15>/Rate Limiter2'
        */
+      Intercepe_Strike_Model_AS_DW.PrevY_a = 0.0F;
       Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_k = 0.0;
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_o = 1U;
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho = 0.0F;
-      Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_d = 2;
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_L_ll = 1U;
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e = 0.0F;
-      Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_m = 2;
+      Intercepe_Strike_Model_AS_DW.PrevY_g = 0.0F;
       Intercepe_Strike_Model_AS_DW.icLoad_bl = true;
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g = 0.0F;
-      Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_h = 2;
+      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 0.0F;
+      Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState = 2;
       Intercepe_Strike_Model_AS_DW.icLoad_p = true;
 
       /* End of InitializeConditions for SubSystem: '<S1>/Subsystem2' */
+
+      /* SystemReset for IfAction SubSystem: '<S1>/Subsystem2' incorporates:
+       *  ActionPort: '<S5>/Action Port'
+       */
+      /* SystemReset for SwitchCase: '<S1>/Switch Case' incorporates:
+       *  MATLAB Function: '<S11>/MATLAB Function'
+       *  MATLAB Function: '<S16>/MATLAB Function1'
+       *  MATLAB Function: '<S16>/MATLAB Function2'
+       *  MATLAB Function: '<S16>/MATLAB Function4'
+       */
+      Intercep_MATLABFunction_k_Reset
+        (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction_f);
+      Intercepe_MATLABFunction4_Reset
+        (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction4);
+      Interce_MATLABFunction1_j_Reset
+        (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction2);
+      Interce_MATLABFunction1_j_Reset
+        (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction1_g);
+
+      /* End of SystemReset for SubSystem: '<S1>/Subsystem2' */
     }
 
     /* Outputs for IfAction SubSystem: '<S1>/Subsystem2' incorporates:
-     *  ActionPort: '<S4>/Action Port'
+     *  ActionPort: '<S5>/Action Port'
      */
-    /* Gain: '<S8>/Gain1' incorporates:
+    /* MATLAB Function: '<S14>/MATLAB Function' incorporates:
+     *  Inport: '<Root>/current_pitch'
+     *  Inport: '<Root>/current_roll'
+     *  Inport: '<Root>/current_yaw'
+     */
+    Intercepe_Strike_MATLABFunction(Intercepe_Strike_Model_AS_U.current_yaw,
+      Intercepe_Strike_Model_AS_U.current_pitch,
+      Intercepe_Strike_Model_AS_U.current_roll, rtb_DCM_h);
+    for (i = 0; i < 3; i++) {
+      /* Product: '<S14>/MatrixMultiply' incorporates:
+       *  Constant: '<S14>/Constant'
+       */
+      pooled11 = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 1];
+      rtb_Rollcmd_f = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i];
+      rtb_Saturation = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 2];
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        /* Math: '<S12>/Transpose1' incorporates:
+         *  Product: '<S14>/MatrixMultiply'
+         */
+        rtb_Transpose1_p_tmp = 3 * i + i_0;
+        rtb_Transpose1_b[rtb_Transpose1_p_tmp] = rtb_DCM_h[3 * i_0 + i];
+
+        /* Product: '<S14>/MatrixMultiply' incorporates:
+         *  Constant: '<S14>/Constant'
+         *  Math: '<S14>/Transpose2'
+         *  Product: '<S14>/MatrixMultiply2'
+         */
+        rtb_MatrixMultiply2_cf[rtb_Transpose1_p_tmp] = (rtb_DCM_h[3 * i_0 + 1] *
+          pooled11 + rtb_DCM_h[3 * i_0] * rtb_Rollcmd_f) + rtb_DCM_h[3 * i_0 + 2]
+          * rtb_Saturation;
+      }
+    }
+
+    /* Gain: '<S14>/D2R' incorporates:
+     *  Constant: '<S14>/phi_g'
      *  Inport: '<Root>/SeekerData'
      */
-    rtb_Gain1_a = 0.0174532924F *
-      Intercepe_Strike_Model_AS_U.SeekerData.misalignYaw;
+    rtb_D2R_i[0] = 0.0F;
+    rtb_D2R_i[1] = 0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.frameAnglePitch;
+    rtb_D2R_i[2] = 0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.frameAngleYaw;
 
-    /* DiscreteIntegrator: '<S10>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_o != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_k = rtb_Gain1_a;
+    /* MATLAB Function: '<S14>/MATLAB Function1' */
+    Intercepe_Strik_MATLABFunction1(rtb_D2R_i, rtb_DCM_h);
+    for (i = 0; i < 3; i++) {
+      /* Product: '<S14>/MatrixMultiply2' incorporates:
+       *  Math: '<S14>/Transpose'
+       */
+      pooled11 = 0.0F;
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        pooled11 += Intercepe_Strike_Model_A_ConstB.Transpose_g[3 * i + i_0] *
+          rtb_DCM_h[3 * i_0];
+      }
+
+      /* Product: '<S11>/MatrixMultiply' incorporates:
+       *  Product: '<S14>/MatrixMultiply2'
+       */
+      rtb_D2R_i[i] = 0.0F;
+      rtb_D2R_i[0] += pooled11 * rtb_MatrixMultiply[i];
     }
 
-    /* DiscreteIntegrator: '<S49>/Integrator' */
-    if (((Intercepe_Strike_Model_AS_B.guided_state > 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_d <= 0)) ||
-        ((Intercepe_Strike_Model_AS_B.guided_state <= 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_d == 1))) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho = 0.0F;
-    }
-
-    /* Sum: '<S58>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S10>/Discrete-Time Integrator5'
-     *  DiscreteIntegrator: '<S49>/Integrator'
-     *  Gain: '<S54>/Proportional Gain'
+    /* MATLAB Function: '<S11>/MATLAB Function' incorporates:
+     *  Constant: '<S11>/Ts'
+     *  Constant: '<S11>/cutoff frequency'
      */
-    rtb_Sum_c = STRIKE_PARAM.STRIKE_ROLL_KP *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_k +
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho;
+    Intercepe_Stri_MATLABFunction_f(rtb_D2R_i[0], 2.0, 0.01, &rtb_desired_thrust,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction_f);
 
-    /* Saturate: '<S56>/Saturation' */
-    if (rtb_Sum_c > 3.8397243F) {
-      rtb_Saturation_d = 3.8397243F;
-    } else if (rtb_Sum_c < -3.8397243F) {
-      rtb_Saturation_d = -3.8397243F;
+    /* Saturate: '<S11>/Saturation' */
+    if (rtb_desired_thrust > 80.0F) {
+      rtb_Rollcmd_f = 80.0F;
+    } else if (rtb_desired_thrust < 3.0F) {
+      rtb_Rollcmd_f = 3.0F;
     } else {
-      rtb_Saturation_d = rtb_Sum_c;
+      rtb_Rollcmd_f = rtb_desired_thrust;
     }
 
-    /* End of Saturate: '<S56>/Saturation' */
+    /* End of Saturate: '<S11>/Saturation' */
+    for (i = 0; i < 3; i++) {
+      /* Math: '<S14>/Transpose1' incorporates:
+       *  Math: '<S12>/Transpose'
+       */
+      rtb_DCM[3 * i] = rtb_DCM_h[i];
 
-    /* Gain: '<S9>/Gain1' incorporates:
+      /* Product: '<S14>/MatrixMultiply1' incorporates:
+       *  Math: '<S14>/Transpose1'
+       */
+      rtb_Transpose1_p_tmp = 3 * i + 1;
+
+      /* Math: '<S14>/Transpose1' incorporates:
+       *  Math: '<S12>/Transpose'
+       */
+      rtb_DCM[rtb_Transpose1_p_tmp] = rtb_DCM_h[i + 3];
+
+      /* Product: '<S14>/MatrixMultiply1' incorporates:
+       *  Math: '<S14>/Transpose1'
+       */
+      rtb_DCM_tmp = 3 * i + 2;
+
+      /* Math: '<S14>/Transpose1' incorporates:
+       *  Math: '<S12>/Transpose'
+       */
+      rtb_DCM[rtb_DCM_tmp] = rtb_DCM_h[i + 6];
+
+      /* Product: '<S14>/MatrixMultiply1' incorporates:
+       *  Math: '<S14>/Transpose1'
+       *  Product: '<S14>/MatrixMultiply2'
+       */
+      rtb_Saturation = 0.0F;
+      rtb_desired_thrust = 0.0F;
+      rtb_lambda_dot_roll_los_filte_a = 0.0F;
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        pooled11 = rtb_DCM[3 * i + i_0];
+        rtb_Saturation += rtb_MatrixMultiply2_cf[3 * i_0] * pooled11;
+        rtb_desired_thrust += rtb_MatrixMultiply2_cf[3 * i_0 + 1] * pooled11;
+        rtb_lambda_dot_roll_los_filte_a += rtb_MatrixMultiply2_cf[3 * i_0 + 2] *
+          pooled11;
+      }
+
+      rtb_MatrixMultiply2_fh[rtb_DCM_tmp] = rtb_lambda_dot_roll_los_filte_a;
+      rtb_MatrixMultiply2_fh[rtb_Transpose1_p_tmp] = rtb_desired_thrust;
+      rtb_MatrixMultiply2_fh[3 * i] = rtb_Saturation;
+    }
+
+    /* Trigonometry: '<S14>/Trigonometric Function' incorporates:
+     *  Selector: '<S14>/Selector2'
+     *  UnaryMinus: '<S14>/Unary Minus'
+     */
+    if (-rtb_MatrixMultiply2_fh[2] > 1.0F) {
+      pooled11 = 1.0F;
+    } else if (-rtb_MatrixMultiply2_fh[2] < -1.0F) {
+      pooled11 = -1.0F;
+    } else {
+      pooled11 = -rtb_MatrixMultiply2_fh[2];
+    }
+
+    /* MATLAB Function: '<S16>/MATLAB Function4' incorporates:
+     *  Constant: '<S16>/DYT frequency'
+     *  Constant: '<S16>/cutoff frequency'
+     *  Gain: '<S16>/D2R1'
+     *  Inport: '<Root>/SeekerData'
+     *  Product: '<S16>/Product'
+     *  Trigonometry: '<S14>/Trigonometric Function'
+     *  Trigonometry: '<S16>/Cos2'
+     */
+    Intercepe_Strik_MATLABFunction4(0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw * cosf(asinf(pooled11)),
+      1.0F, 0.02F, &rtb_desired_thrust,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction4);
+
+    /* Product: '<S16>/Product2' incorporates:
+     *  Gain: '<S16>/D2R2'
+     *  Gain: '<S16>/D2R3'
+     *  Inport: '<Root>/SeekerData'
+     *  Trigonometry: '<S16>/Cos'
+     *  Trigonometry: '<S16>/Cos1'
+     */
+    pooled11 = cosf(0.0174532924F *
+                    Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch) * cosf
+      (0.0174532924F * Intercepe_Strike_Model_AS_U.SeekerData.misalignYaw);
+
+    /* Saturate: '<S16>/Saturation1' */
+    if (pooled11 < 0.9F) {
+      pooled11 = 0.9F;
+    }
+
+    /* MATLAB Function: '<S16>/MATLAB Function2' incorporates:
+     *  Constant: '<S16>/Constant2'
+     *  Constant: '<S16>/Constant3'
+     *  Saturate: '<S16>/Saturation1'
+     */
+    Intercepe_Str_MATLABFunction1_g(pooled11, 5.0F, 0.01F, &rtb_Saturation,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction2);
+
+    /* Product: '<S16>/Divide' */
+    rtb_lambda_dot_roll_los_filte_a = rtb_desired_thrust / rtb_Saturation;
+
+    /* MATLAB Function: '<S16>/MATLAB Function1' incorporates:
+     *  Constant: '<S16>/DYT frequency'
+     *  Constant: '<S16>/cutoff frequency'
+     *  Gain: '<S16>/D2R'
      *  Inport: '<Root>/SeekerData'
      */
-    rtb_Gain1_e = 0.0174532924F *
-      Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch;
+    Intercepe_Str_MATLABFunction1_g(0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch, 1.0F, 0.02F,
+      &rtb_desired_thrust, &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction1_g);
 
-    /* DiscreteIntegrator: '<S11>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_L_ll != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTA_ku = rtb_Gain1_e;
-    }
-
-    /* DiscreteIntegrator: '<S101>/Integrator' */
-    if (((Intercepe_Strike_Model_AS_B.guided_state > 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_m <= 0)) ||
-        ((Intercepe_Strike_Model_AS_B.guided_state <= 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_m == 1))) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e = 0.0F;
-    }
-
-    /* Sum: '<S110>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S101>/Integrator'
-     *  DiscreteIntegrator: '<S11>/Discrete-Time Integrator5'
-     *  Gain: '<S106>/Proportional Gain'
+    /* SignalConversion generated from: '<S12>/Matrix Multiply' incorporates:
+     *  Constant: '<S10>/Constant'
      */
-    rtb_Sum_a = STRIKE_PARAM.STRIKE_PITCH_KP *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTA_ku +
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e;
+    rtb_MatrixMultiply[0] = 3.0F;
 
-    /* Saturate: '<S108>/Saturation' */
-    if (rtb_Sum_a > 3.8397243F) {
-      rtb_Saturation_bm = 3.8397243F;
-    } else if (rtb_Sum_a < -3.8397243F) {
-      rtb_Saturation_bm = -3.8397243F;
-    } else {
-      rtb_Saturation_bm = rtb_Sum_a;
+    /* Product: '<S10>/Product' incorporates:
+     *  Constant: '<S10>/Navigation Ratio'
+     *  Product: '<S10>/Product1'
+     *  UnaryMinus: '<S10>/Unary Minus'
+     */
+    pooled11 = 3.0F * rtb_Rollcmd_f;
+
+    /* SignalConversion generated from: '<S12>/Matrix Multiply' incorporates:
+     *  Product: '<S10>/Product'
+     *  Product: '<S10>/Product1'
+     *  Product: '<S16>/Divide1'
+     *  UnaryMinus: '<S10>/Unary Minus'
+     */
+    rtb_MatrixMultiply[1] = pooled11 * rtb_lambda_dot_roll_los_filte_a;
+    rtb_MatrixMultiply[2] = -(rtb_desired_thrust / rtb_Saturation * pooled11);
+
+    /* Product: '<S12>/Matrix Multiply' incorporates:
+     *  Math: '<S12>/Transpose'
+     */
+    rtb_Rollcmd_f = 0.0F;
+    rtb_Saturation = 0.0F;
+    rtb_desired_thrust = 0.0F;
+    for (i = 0; i < 3; i++) {
+      pooled11 = rtb_MatrixMultiply[i];
+      rtb_Rollcmd_f += rtb_DCM[3 * i] * pooled11;
+      rtb_Saturation += rtb_DCM[3 * i + 1] * pooled11;
+      rtb_desired_thrust += rtb_DCM[3 * i + 2] * pooled11;
     }
 
-    /* End of Saturate: '<S108>/Saturation' */
+    rtb_MatrixMultiply[2] = rtb_desired_thrust;
+    rtb_MatrixMultiply[1] = rtb_Saturation;
+    rtb_MatrixMultiply[0] = rtb_Rollcmd_f;
 
-    /* Delay: '<S4>/Delay1' incorporates:
+    /* End of Product: '<S12>/Matrix Multiply' */
+
+    /* Product: '<S12>/Matrix Multiply2' incorporates:
+     *  Constant: '<S14>/Constant'
+     */
+    rtb_Rollcmd_f = 0.0F;
+    rtb_Saturation = 0.0F;
+    rtb_desired_thrust = 0.0F;
+    for (i = 0; i < 3; i++) {
+      pooled11 = rtb_MatrixMultiply[i];
+      rtb_Rollcmd_f += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i] *
+        pooled11;
+      rtb_Saturation += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 1] *
+        pooled11;
+      rtb_desired_thrust += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 2] *
+        pooled11;
+    }
+
+    /* End of Product: '<S12>/Matrix Multiply2' */
+
+    /* Sum: '<S15>/Subtract' incorporates:
+     *  Constant: '<S15>/Constant'
+     *  Math: '<S12>/Transpose1'
+     *  Product: '<S12>/Matrix Multiply1'
+     */
+    for (i = 0; i < 3; i++) {
+      rtb_MatrixMultiply[i] = ((rtb_Transpose1_b[i + 3] * rtb_Saturation +
+        rtb_Transpose1_b[i] * rtb_Rollcmd_f) + rtb_Transpose1_b[i + 6] *
+        rtb_desired_thrust) - Intercepe_Strike_Model_A_ConstP.pooled12[i];
+    }
+
+    /* End of Sum: '<S15>/Subtract' */
+
+    /* Sum: '<S15>/Add2' incorporates:
+     *  Inport: '<Root>/current_yaw'
+     *  Product: '<S15>/Product'
+     *  Product: '<S15>/Product1'
+     *  Trigonometry: '<S15>/Cos'
+     *  Trigonometry: '<S15>/Cos1'
+     */
+    rtb_desired_thrust = rtb_MatrixMultiply[0] * cosf
+      (Intercepe_Strike_Model_AS_U.current_yaw) + rtb_MatrixMultiply[1] * sinf
+      (Intercepe_Strike_Model_AS_U.current_yaw);
+
+    /* Trigonometry: '<S15>/Atan1' incorporates:
+     *  Inport: '<Root>/current_yaw'
+     *  Math: '<S15>/Square'
+     *  Math: '<S15>/Square1'
+     *  Product: '<S15>/Product2'
+     *  Product: '<S15>/Product4'
+     *  Sqrt: '<S15>/Sqrt'
+     *  Sum: '<S15>/Add'
+     *  Sum: '<S15>/Add3'
+     *  Trigonometry: '<S15>/Cos2'
+     *  Trigonometry: '<S15>/Cos3'
+     *  UnaryMinus: '<S15>/Unary Minus'
+     */
+    rtb_Rollcmd_f = atan2f(-rtb_MatrixMultiply[0] * sinf
+      (Intercepe_Strike_Model_AS_U.current_yaw) + rtb_MatrixMultiply[1] * cosf
+      (Intercepe_Strike_Model_AS_U.current_yaw), sqrtf(rtb_desired_thrust *
+      rtb_desired_thrust + rtb_MatrixMultiply[2] * rtb_MatrixMultiply[2]));
+
+    /* Saturate: '<S15>/Saturation2' */
+    if (rtb_Rollcmd_f > 0.87266463F) {
+      rtb_Rollcmd_f = 0.87266463F;
+    } else if (rtb_Rollcmd_f < -0.87266463F) {
+      rtb_Rollcmd_f = -0.87266463F;
+    }
+
+    /* End of Saturate: '<S15>/Saturation2' */
+
+    /* RateLimiter: '<S15>/Rate Limiter2' */
+    pooled11 = rtb_Rollcmd_f - Intercepe_Strike_Model_AS_DW.PrevY_a;
+    if (pooled11 > 0.04F) {
+      rtb_Rollcmd_f = Intercepe_Strike_Model_AS_DW.PrevY_a + 0.04F;
+    } else if (pooled11 < -0.04F) {
+      rtb_Rollcmd_f = Intercepe_Strike_Model_AS_DW.PrevY_a - 0.04F;
+    }
+
+    Intercepe_Strike_Model_AS_DW.PrevY_a = rtb_Rollcmd_f;
+
+    /* End of RateLimiter: '<S15>/Rate Limiter2' */
+
+    /* Trigonometry: '<S15>/Atan2' incorporates:
+     *  UnaryMinus: '<S15>/Unary Minus1'
+     *  UnaryMinus: '<S15>/Unary Minus2'
+     */
+    rtb_desired_thrust = atan2f(-rtb_desired_thrust, -rtb_MatrixMultiply[2]);
+
+    /* Saturate: '<S15>/Saturation1' */
+    if (rtb_desired_thrust > 1.04719758F) {
+      rtb_desired_thrust = 1.04719758F;
+    } else if (rtb_desired_thrust < -1.04719758F) {
+      rtb_desired_thrust = -1.04719758F;
+    }
+
+    /* End of Saturate: '<S15>/Saturation1' */
+
+    /* RateLimiter: '<S15>/Rate Limiter1' */
+    pooled11 = rtb_desired_thrust - Intercepe_Strike_Model_AS_DW.PrevY_g;
+    if (pooled11 > 0.04F) {
+      rtb_desired_thrust = Intercepe_Strike_Model_AS_DW.PrevY_g + 0.04F;
+    } else if (pooled11 < -0.04F) {
+      rtb_desired_thrust = Intercepe_Strike_Model_AS_DW.PrevY_g - 0.04F;
+    }
+
+    Intercepe_Strike_Model_AS_DW.PrevY_g = rtb_desired_thrust;
+
+    /* End of RateLimiter: '<S15>/Rate Limiter1' */
+
+    /* Delay: '<S5>/Delay1' incorporates:
      *  Inport: '<Root>/current_posd'
      */
     if (Intercepe_Strike_Model_AS_DW.icLoad_bl) {
@@ -515,53 +1118,54 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_U.current_posd;
     }
 
-    /* Sum: '<S4>/Sum1' incorporates:
-     *  Delay: '<S4>/Delay1'
+    /* Sum: '<S5>/Sum1' incorporates:
+     *  Delay: '<S5>/Delay1'
      *  Inport: '<Root>/current_posd'
      */
-    rtb_IntegralGain_hr = Intercepe_Strike_Model_AS_DW.Delay1_DSTATE_m -
+    pooled11 = Intercepe_Strike_Model_AS_DW.Delay1_DSTATE_m -
       Intercepe_Strike_Model_AS_U.current_posd;
 
-    /* Saturate: '<S4>/Saturation2' */
-    if (rtb_IntegralGain_hr > 0.7F) {
-      rtb_IntegralGain_hr = 0.7F;
-    } else if (rtb_IntegralGain_hr < 0.2F) {
-      rtb_IntegralGain_hr = 0.2F;
+    /* Saturate: '<S5>/Saturation2' */
+    if (pooled11 > 2.0F) {
+      pooled11 = 2.0F;
+    } else if (pooled11 < -2.0F) {
+      pooled11 = -2.0F;
     }
 
-    /* Sum: '<S4>/Sum7' incorporates:
+    /* Sum: '<S5>/Sum7' incorporates:
      *  Inport: '<Root>/current_vz'
-     *  Saturate: '<S4>/Saturation2'
+     *  Saturate: '<S5>/Saturation2'
      */
-    rtb_Sum7 = rtb_IntegralGain_hr - Intercepe_Strike_Model_AS_U.current_vz;
+    rtb_lambda_dot_roll_los_filte_a = pooled11 -
+      Intercepe_Strike_Model_AS_U.current_vz;
 
-    /* DiscreteIntegrator: '<S153>/Integrator' */
+    /* DiscreteIntegrator: '<S52>/Integrator' */
     if (((Intercepe_Strike_Model_AS_B.guided_state > 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_h <= 0)) ||
+         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState <= 0)) ||
         ((Intercepe_Strike_Model_AS_B.guided_state <= 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_h == 1))) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g = 0.0F;
+         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState == 1))) {
+      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 0.0F;
     }
 
-    /* Sum: '<S162>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S153>/Integrator'
-     *  Gain: '<S158>/Proportional Gain'
+    /* Sum: '<S61>/Sum' incorporates:
+     *  DiscreteIntegrator: '<S52>/Integrator'
+     *  Gain: '<S57>/Proportional Gain'
      */
-    rtb_Sum_k = 0.22F * rtb_Sum7 +
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g;
+    rtb_Sum = 0.22F * rtb_lambda_dot_roll_los_filte_a +
+      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE;
 
-    /* Saturate: '<S160>/Saturation' */
-    if (rtb_Sum_k > 0.7F) {
-      rtb_Saturation_k = 0.7F;
-    } else if (rtb_Sum_k < -0.7F) {
-      rtb_Saturation_k = -0.7F;
+    /* Saturate: '<S59>/Saturation' */
+    if (rtb_Sum > 0.7F) {
+      rtb_Saturation = 0.7F;
+    } else if (rtb_Sum < -0.7F) {
+      rtb_Saturation = -0.7F;
     } else {
-      rtb_Saturation_k = rtb_Sum_k;
+      rtb_Saturation = rtb_Sum;
     }
 
-    /* End of Saturate: '<S160>/Saturation' */
+    /* End of Saturate: '<S59>/Saturation' */
 
-    /* Delay: '<S4>/Delay3' incorporates:
+    /* Delay: '<S5>/Delay3' incorporates:
      *  Inport: '<Root>/current_thr'
      */
     if (Intercepe_Strike_Model_AS_DW.icLoad_p) {
@@ -569,216 +1173,91 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_U.current_thr;
     }
 
-    /* DataTypeConversion: '<S4>/Data Type Conversion' incorporates:
-     *  DiscreteIntegrator: '<S4>/Discrete-Time Integrator'
+    /* DataTypeConversion: '<S5>/Data Type Conversion' incorporates:
+     *  DiscreteIntegrator: '<S5>/Discrete-Time Integrator'
      */
     tmp = fmod(floor
                (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_k),
                1.8446744073709552E+19);
 
-    /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-     *  Constant: '<S4>/NAVIGATION_STATE_OFFBOARD'
-     *  Constant: '<S4>/VEHICLE_CMD_SET_NAV_STATE'
-     *  DataTypeConversion: '<S4>/Data Type Conversion'
+    /* BusAssignment: '<S5>/Bus Assignment' incorporates:
+     *  Constant: '<S5>/NAVIGATION_STATE_OFFBOARD'
+     *  Constant: '<S5>/VEHICLE_CMD_SET_NAV_STATE'
+     *  DataTypeConversion: '<S5>/Data Type Conversion'
+     *  Inport: '<Root>/current_yaw'
      *  Merge: '<S1>/Merge'
      */
     Intercepe_Strike_Model_AS_B.Merge.timestamp = tmp < 0.0 ? (uint64_T)
       -(int64_T)(uint64_T)-tmp : (uint64_T)tmp;
     Intercepe_Strike_Model_AS_B.Merge.command = 100001U;
     Intercepe_Strike_Model_AS_B.Merge.param1 = 12.0F;
-
-    /* Sum: '<S4>/Sum5' incorporates:
-     *  Gain: '<S4>/Gain5'
-     *  Inport: '<Root>/current_roll'
-     *  Saturate: '<S4>/Saturation3'
-     */
-    rtb_IntegralGain_hr = 0.065F * rtb_Saturation_d +
-      Intercepe_Strike_Model_AS_U.current_roll;
-
-    /* Saturate: '<S4>/Saturation' */
-    if (rtb_IntegralGain_hr > 0.87266463F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = 0.87266463F;
-    } else if (rtb_IntegralGain_hr < -0.87266463F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = -0.87266463F;
-    } else {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = rtb_IntegralGain_hr;
-    }
-
-    /* End of Saturate: '<S4>/Saturation' */
-
-    /* Sum: '<S4>/Sum6' incorporates:
-     *  Gain: '<S4>/Gain6'
-     *  Inport: '<Root>/current_pitch'
-     *  Saturate: '<S4>/Saturation4'
-     */
-    rtb_IntegralGain_hr = 0.065F * rtb_Saturation_bm +
-      Intercepe_Strike_Model_AS_U.current_pitch;
-
-    /* Saturate: '<S4>/Saturation1' */
-    if (rtb_IntegralGain_hr > 0.87266463F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = 0.87266463F;
-    } else if (rtb_IntegralGain_hr < -0.87266463F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = -0.87266463F;
-    } else {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = rtb_IntegralGain_hr;
-    }
-
-    /* End of Saturate: '<S4>/Saturation1' */
-
-    /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-     *  Inport: '<Root>/current_yaw'
-     *  Merge: '<S1>/Merge'
-     */
+    Intercepe_Strike_Model_AS_B.Merge.param2 = rtb_Rollcmd_f;
+    Intercepe_Strike_Model_AS_B.Merge.param3 = rtb_desired_thrust;
     Intercepe_Strike_Model_AS_B.Merge.param4 =
       Intercepe_Strike_Model_AS_U.current_yaw;
 
-    /* Sum: '<S4>/Sum8' incorporates:
-     *  Delay: '<S4>/Delay3'
-     *  Gain: '<S4>/Gain7'
+    /* Sum: '<S5>/Sum8' incorporates:
+     *  Delay: '<S5>/Delay3'
+     *  Gain: '<S5>/Gain7'
      */
-    rtb_IntegralGain_hr = -rtb_Saturation_k +
-      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE_g;
+    pooled11 = -rtb_Saturation + Intercepe_Strike_Model_AS_DW.Delay3_DSTATE_g;
 
-    /* Saturate: '<S4>/Saturation5' */
-    if (rtb_IntegralGain_hr > 0.7F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
+    /* Saturate: '<S5>/Saturation5' */
+    if (pooled11 > 0.7F) {
+      /* BusAssignment: '<S5>/Bus Assignment' incorporates:
        *  Merge: '<S1>/Merge'
        */
       Intercepe_Strike_Model_AS_B.Merge.param5 = 0.7F;
-    } else if (rtb_IntegralGain_hr < 0.2F) {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
+    } else if (pooled11 < 0.05F) {
+      /* BusAssignment: '<S5>/Bus Assignment' incorporates:
        *  Merge: '<S1>/Merge'
        */
-      Intercepe_Strike_Model_AS_B.Merge.param5 = 0.2F;
+      Intercepe_Strike_Model_AS_B.Merge.param5 = 0.05F;
     } else {
-      /* BusAssignment: '<S4>/Bus Assignment' incorporates:
+      /* BusAssignment: '<S5>/Bus Assignment' incorporates:
        *  Merge: '<S1>/Merge'
        */
-      Intercepe_Strike_Model_AS_B.Merge.param5 = rtb_IntegralGain_hr;
+      Intercepe_Strike_Model_AS_B.Merge.param5 = pooled11;
     }
 
-    /* End of Saturate: '<S4>/Saturation5' */
+    /* End of Saturate: '<S5>/Saturation5' */
 
-    /* BusAssignment: '<S4>/Bus Assignment' incorporates:
-     *  Constant: '<S4>/pass1'
-     *  Constant: '<S4>/pass2'
+    /* BusAssignment: '<S5>/Bus Assignment' incorporates:
+     *  Constant: '<S5>/pass1'
+     *  Constant: '<S5>/pass2'
      *  Merge: '<S1>/Merge'
      */
     Intercepe_Strike_Model_AS_B.Merge.param6 = 0.0F;
     Intercepe_Strike_Model_AS_B.Merge.param7 = 0.0F;
-    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = cmd_valid;
+    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = seeker_data_valid;
 
-    /* Gain: '<S98>/Integral Gain' incorporates:
-     *  DiscreteIntegrator: '<S11>/Discrete-Time Integrator5'
-     */
-    rtb_IntegralGain_hr = STRIKE_PARAM.STRIKE_PITCH_KI *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTA_ku;
-
-    /* Gain: '<S46>/Integral Gain' incorporates:
-     *  DiscreteIntegrator: '<S10>/Discrete-Time Integrator5'
-     */
-    rtb_IntegralGain_hj = STRIKE_PARAM.STRIKE_ROLL_KI *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_k;
-
-    /* Update for DiscreteIntegrator: '<S4>/Discrete-Time Integrator' incorporates:
-     *  Constant: '<S4>/Constant1'
+    /* Update for DiscreteIntegrator: '<S5>/Discrete-Time Integrator' incorporates:
+     *  Constant: '<S5>/Constant1'
      */
     Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_k += 10000.0;
 
-    /* Update for DiscreteIntegrator: '<S10>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S10>/Gain'
-     *  Sum: '<S10>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_o = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_k += (rtb_Gain1_a
-      - Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_k) *
-      125.663704F * 0.0025F;
-
-    /* Update for DiscreteIntegrator: '<S49>/Integrator' incorporates:
-     *  Sum: '<S41>/SumI2'
-     *  Sum: '<S41>/SumI4'
-     */
-    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho += ((rtb_Saturation_d -
-      rtb_Sum_c) + rtb_IntegralGain_hj) * 0.0025F;
-    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho > 1.04719758F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho = 1.04719758F;
-    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho < -1.04719758F)
-    {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho = -1.04719758F;
-    }
-
-    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_d = (int8_T)
-      (Intercepe_Strike_Model_AS_B.guided_state > 0);
-
-    /* End of Update for DiscreteIntegrator: '<S49>/Integrator' */
-
-    /* Update for DiscreteIntegrator: '<S11>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S11>/Gain'
-     *  Sum: '<S11>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_L_ll = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTA_ku += (rtb_Gain1_e
-      - Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTA_ku) *
-      125.663704F * 0.0025F;
-
-    /* Update for DiscreteIntegrator: '<S101>/Integrator' incorporates:
-     *  Sum: '<S93>/SumI2'
-     *  Sum: '<S93>/SumI4'
-     */
-    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e += ((rtb_Saturation_bm -
-      rtb_Sum_a) + rtb_IntegralGain_hr) * 0.0025F;
-    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e > 1.04719758F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e = 1.04719758F;
-    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e < -1.04719758F)
-    {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e = -1.04719758F;
-    }
-
-    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_m = (int8_T)
-      (Intercepe_Strike_Model_AS_B.guided_state > 0);
-
-    /* End of Update for DiscreteIntegrator: '<S101>/Integrator' */
-
-    /* Update for Delay: '<S4>/Delay1' */
+    /* Update for Delay: '<S5>/Delay1' */
     Intercepe_Strike_Model_AS_DW.icLoad_bl = false;
 
-    /* Update for DiscreteIntegrator: '<S153>/Integrator' incorporates:
-     *  Gain: '<S150>/Integral Gain'
-     *  Sum: '<S145>/SumI2'
-     *  Sum: '<S145>/SumI4'
+    /* Update for DiscreteIntegrator: '<S52>/Integrator' incorporates:
+     *  Gain: '<S49>/Integral Gain'
+     *  Sum: '<S44>/SumI2'
+     *  Sum: '<S44>/SumI4'
      */
-    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g += ((rtb_Saturation_k -
-      rtb_Sum_k) + 0.1F * rtb_Sum7) * 0.0025F;
-    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g > 0.3F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g = 0.3F;
-    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g < -0.3F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g = -0.3F;
+    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE += ((rtb_Saturation - rtb_Sum)
+      + 0.1F * rtb_lambda_dot_roll_los_filte_a) * 0.01F;
+    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE > 0.3F) {
+      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 0.3F;
+    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE < -0.3F) {
+      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = -0.3F;
     }
 
-    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_h = (int8_T)
+    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState = (int8_T)
       (Intercepe_Strike_Model_AS_B.guided_state > 0);
 
-    /* End of Update for DiscreteIntegrator: '<S153>/Integrator' */
+    /* End of Update for DiscreteIntegrator: '<S52>/Integrator' */
 
-    /* Update for Delay: '<S4>/Delay3' */
+    /* Update for Delay: '<S5>/Delay3' */
     Intercepe_Strike_Model_AS_DW.icLoad_p = false;
 
     /* End of Outputs for SubSystem: '<S1>/Subsystem2' */
@@ -788,16 +1267,16 @@ void Intercepe_Strike_Model_AS_step(void)
     if (Intercepe_Strike_Model_AS_DW.SwitchCase_ActiveSubsystem != rtPrevAction)
     {
       /* InitializeConditions for IfAction SubSystem: '<S1>/Subsystem3' incorporates:
-       *  ActionPort: '<S5>/Action Port'
+       *  ActionPort: '<S6>/Action Port'
        */
       /* InitializeConditions for SwitchCase: '<S1>/Switch Case' incorporates:
-       *  Delay: '<S5>/Delay1'
-       *  Delay: '<S5>/Delay2'
-       *  Delay: '<S5>/Delay3'
-       *  DiscreteIntegrator: '<S5>/Discrete-Time Integrator'
+       *  Delay: '<S6>/Delay1'
+       *  Delay: '<S6>/Delay2'
+       *  Delay: '<S6>/Delay3'
+       *  DiscreteIntegrator: '<S6>/Discrete-Time Integrator'
        */
       Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_m = 0.0;
-      Intercepe_Strike_Model_AS_DW.icLoad_d = true;
+      Intercepe_Strike_Model_AS_DW.icLoad = true;
       Intercepe_Strike_Model_AS_DW.icLoad_b = true;
       Intercepe_Strike_Model_AS_DW.icLoad_bb = true;
 
@@ -805,17 +1284,17 @@ void Intercepe_Strike_Model_AS_step(void)
     }
 
     /* Outputs for IfAction SubSystem: '<S1>/Subsystem3' incorporates:
-     *  ActionPort: '<S5>/Action Port'
+     *  ActionPort: '<S6>/Action Port'
      */
-    /* Delay: '<S5>/Delay1' incorporates:
+    /* Delay: '<S6>/Delay1' incorporates:
      *  Inport: '<Root>/current_posn'
      */
-    if (Intercepe_Strike_Model_AS_DW.icLoad_d) {
+    if (Intercepe_Strike_Model_AS_DW.icLoad) {
       Intercepe_Strike_Model_AS_DW.Delay1_DSTATE =
         Intercepe_Strike_Model_AS_U.current_posn;
     }
 
-    /* Delay: '<S5>/Delay2' incorporates:
+    /* Delay: '<S6>/Delay2' incorporates:
      *  Inport: '<Root>/current_pose'
      */
     if (Intercepe_Strike_Model_AS_DW.icLoad_b) {
@@ -823,31 +1302,31 @@ void Intercepe_Strike_Model_AS_step(void)
         Intercepe_Strike_Model_AS_U.current_pose;
     }
 
-    /* Delay: '<S5>/Delay3' incorporates:
+    /* Delay: '<S6>/Delay3' incorporates:
      *  Inport: '<Root>/current_posd'
      */
     if (Intercepe_Strike_Model_AS_DW.icLoad_bb) {
-      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE_c =
+      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE =
         Intercepe_Strike_Model_AS_U.current_posd;
     }
 
-    /* DataTypeConversion: '<S5>/Data Type Conversion' incorporates:
-     *  DiscreteIntegrator: '<S5>/Discrete-Time Integrator'
+    /* DataTypeConversion: '<S6>/Data Type Conversion' incorporates:
+     *  DiscreteIntegrator: '<S6>/Discrete-Time Integrator'
      */
     tmp = fmod(floor
                (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_m),
                1.8446744073709552E+19);
 
-    /* BusAssignment: '<S5>/Bus Assignment' incorporates:
-     *  Constant: '<S5>/NAVIGATION_STATE_OFFBOARD'
-     *  Constant: '<S5>/VEHICLE_CMD_SET_NAV_STATE'
-     *  Constant: '<S5>/pass1'
-     *  Constant: '<S5>/pass2'
-     *  Constant: '<S5>/pass6'
-     *  DataTypeConversion: '<S5>/Data Type Conversion'
-     *  Delay: '<S5>/Delay1'
-     *  Delay: '<S5>/Delay2'
-     *  Delay: '<S5>/Delay3'
+    /* BusAssignment: '<S6>/Bus Assignment' incorporates:
+     *  Constant: '<S6>/NAVIGATION_STATE_OFFBOARD'
+     *  Constant: '<S6>/VEHICLE_CMD_SET_NAV_STATE'
+     *  Constant: '<S6>/pass1'
+     *  Constant: '<S6>/pass2'
+     *  Constant: '<S6>/pass6'
+     *  DataTypeConversion: '<S6>/Data Type Conversion'
+     *  Delay: '<S6>/Delay1'
+     *  Delay: '<S6>/Delay2'
+     *  Delay: '<S6>/Delay3'
      *  Merge: '<S1>/Merge'
      */
     Intercepe_Strike_Model_AS_B.Merge.timestamp = tmp < 0.0 ? (uint64_T)
@@ -860,23 +1339,23 @@ void Intercepe_Strike_Model_AS_step(void)
     Intercepe_Strike_Model_AS_B.Merge.param4 =
       Intercepe_Strike_Model_AS_DW.Delay2_DSTATE;
     Intercepe_Strike_Model_AS_B.Merge.param5 =
-      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE_c;
+      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE;
     Intercepe_Strike_Model_AS_B.Merge.param6 = 0.0F;
     Intercepe_Strike_Model_AS_B.Merge.param7 = 0.0F;
-    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = cmd_valid;
+    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = seeker_data_valid;
 
-    /* Update for DiscreteIntegrator: '<S5>/Discrete-Time Integrator' incorporates:
-     *  Constant: '<S5>/Constant1'
+    /* Update for DiscreteIntegrator: '<S6>/Discrete-Time Integrator' incorporates:
+     *  Constant: '<S6>/Constant1'
      */
     Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_m += 10000.0;
 
-    /* Update for Delay: '<S5>/Delay1' */
-    Intercepe_Strike_Model_AS_DW.icLoad_d = false;
+    /* Update for Delay: '<S6>/Delay1' */
+    Intercepe_Strike_Model_AS_DW.icLoad = false;
 
-    /* Update for Delay: '<S5>/Delay2' */
+    /* Update for Delay: '<S6>/Delay2' */
     Intercepe_Strike_Model_AS_DW.icLoad_b = false;
 
-    /* Update for Delay: '<S5>/Delay3' */
+    /* Update for Delay: '<S6>/Delay3' */
     Intercepe_Strike_Model_AS_DW.icLoad_bb = false;
 
     /* End of Outputs for SubSystem: '<S1>/Subsystem3' */
@@ -884,349 +1363,390 @@ void Intercepe_Strike_Model_AS_step(void)
 
    case 4:
     /* Outputs for IfAction SubSystem: '<S1>/Subsystem4' incorporates:
-     *  ActionPort: '<S6>/Action Port'
+     *  ActionPort: '<S7>/Action Port'
      */
-    /* Trigonometry: '<S6>/Atan1' incorporates:
-     *  Gain: '<S171>/Gain1'
-     *  Gain: '<S6>/Gain1'
+    /* MATLAB Function: '<S78>/MATLAB Function' incorporates:
+     *  Inport: '<Root>/current_pitch'
+     *  Inport: '<Root>/current_roll'
+     *  Inport: '<Root>/current_yaw'
+     */
+    Intercepe_Strike_MATLABFunction(Intercepe_Strike_Model_AS_U.current_yaw,
+      Intercepe_Strike_Model_AS_U.current_pitch,
+      Intercepe_Strike_Model_AS_U.current_roll, rtb_DCM_h);
+    for (i = 0; i < 3; i++) {
+      /* Product: '<S78>/MatrixMultiply' incorporates:
+       *  Constant: '<S78>/Constant'
+       */
+      pooled11 = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 1];
+      rtb_Rollcmd_f = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i];
+      rtb_Saturation = Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 2];
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        /* Math: '<S77>/Transpose1' incorporates:
+         *  Product: '<S78>/MatrixMultiply'
+         */
+        rtb_Transpose1_p_tmp = 3 * i + i_0;
+        rtb_Transpose1_b[rtb_Transpose1_p_tmp] = rtb_DCM_h[3 * i_0 + i];
+
+        /* Product: '<S78>/MatrixMultiply' incorporates:
+         *  Constant: '<S78>/Constant'
+         *  Math: '<S78>/Transpose2'
+         *  Product: '<S78>/MatrixMultiply2'
+         */
+        rtb_MatrixMultiply2_cf[rtb_Transpose1_p_tmp] = (rtb_DCM_h[3 * i_0 + 1] *
+          pooled11 + rtb_DCM_h[3 * i_0] * rtb_Rollcmd_f) + rtb_DCM_h[3 * i_0 + 2]
+          * rtb_Saturation;
+      }
+    }
+
+    /* Gain: '<S78>/D2R' incorporates:
+     *  Constant: '<S78>/phi_g'
      *  Inport: '<Root>/SeekerData'
      */
-    rtb_Gain1_a = atan2f(0.0174532924F *
-                         Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch *
-                         4.0F, 9.8F);
+    rtb_D2R_i[0] = 0.0F;
+    rtb_D2R_i[1] = 0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.frameAnglePitch;
+    rtb_D2R_i[2] = 0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.frameAngleYaw;
 
-    /* DiscreteIntegrator: '<S178>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LOAD != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTATE = rtb_Gain1_a;
+    /* MATLAB Function: '<S78>/MATLAB Function1' */
+    Intercepe_Strik_MATLABFunction1(rtb_D2R_i, rtb_DCM_h);
+    for (i = 0; i < 3; i++) {
+      /* Product: '<S78>/MatrixMultiply2' incorporates:
+       *  Math: '<S78>/Transpose'
+       */
+      pooled11 = 0.0F;
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        pooled11 += Intercepe_Strike_Model_A_ConstB.Transpose[3 * i + i_0] *
+          rtb_DCM_h[3 * i_0];
+      }
+
+      /* Product: '<S76>/MatrixMultiply' incorporates:
+       *  Product: '<S78>/MatrixMultiply2'
+       */
+      rtb_D2R_i[i] = 0.0F;
+      rtb_D2R_i[0] += pooled11 * rtb_MatrixMultiply[i];
     }
 
-    /* Gain: '<S173>/Gain1' incorporates:
-     *  Inport: '<Root>/SeekerData'
+    /* MATLAB Function: '<S76>/MATLAB Function' incorporates:
+     *  Constant: '<S76>/Ts'
+     *  Constant: '<S76>/cutoff frequency'
      */
-    rtb_Sum_c = 0.0174532924F *
-      Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch;
+    Intercepe_Stri_MATLABFunction_f(rtb_D2R_i[0], 2.0, 0.01, &rtb_Saturation,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction_h);
 
-    /* DiscreteIntegrator: '<S176>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_l != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_i = rtb_Sum_c;
-    }
-
-    /* DiscreteIntegrator: '<S267>/Integrator' */
-    if (((Intercepe_Strike_Model_AS_B.guided_state > 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState <= 0)) ||
-        ((Intercepe_Strike_Model_AS_B.guided_state <= 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState == 1))) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 0.0F;
-    }
-
-    /* Sum: '<S276>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S176>/Discrete-Time Integrator5'
-     *  DiscreteIntegrator: '<S267>/Integrator'
-     *  Gain: '<S272>/Proportional Gain'
-     */
-    rtb_Saturation_d = STRIKE_PARAM.STRIKE_PITCH_KP *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_i +
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE;
-
-    /* Saturate: '<S274>/Saturation' */
-    if (rtb_Saturation_d > 3.8397243F) {
-      rtb_Gain1_e = 3.8397243F;
-    } else if (rtb_Saturation_d < -3.8397243F) {
-      rtb_Gain1_e = -3.8397243F;
+    /* Saturate: '<S76>/Saturation' */
+    if (rtb_Saturation > 80.0F) {
+      rtb_Rollcmd_f = 80.0F;
+    } else if (rtb_Saturation < 3.0F) {
+      rtb_Rollcmd_f = 3.0F;
     } else {
-      rtb_Gain1_e = rtb_Saturation_d;
+      rtb_Rollcmd_f = rtb_Saturation;
     }
 
-    /* End of Saturate: '<S274>/Saturation' */
+    /* End of Saturate: '<S76>/Saturation' */
+    for (i = 0; i < 3; i++) {
+      /* Math: '<S78>/Transpose1' incorporates:
+       *  Math: '<S77>/Transpose'
+       */
+      rtb_DCM[3 * i] = rtb_DCM_h[i];
 
-    /* Gain: '<S174>/Gain1' incorporates:
+      /* Product: '<S78>/MatrixMultiply1' incorporates:
+       *  Math: '<S78>/Transpose1'
+       */
+      rtb_Transpose1_p_tmp = 3 * i + 1;
+
+      /* Math: '<S78>/Transpose1' incorporates:
+       *  Math: '<S77>/Transpose'
+       */
+      rtb_DCM[rtb_Transpose1_p_tmp] = rtb_DCM_h[i + 3];
+
+      /* Product: '<S78>/MatrixMultiply1' incorporates:
+       *  Math: '<S78>/Transpose1'
+       */
+      rtb_DCM_tmp = 3 * i + 2;
+
+      /* Math: '<S78>/Transpose1' incorporates:
+       *  Math: '<S77>/Transpose'
+       */
+      rtb_DCM[rtb_DCM_tmp] = rtb_DCM_h[i + 6];
+
+      /* Product: '<S78>/MatrixMultiply1' incorporates:
+       *  Math: '<S78>/Transpose1'
+       *  Product: '<S78>/MatrixMultiply2'
+       */
+      rtb_Saturation = 0.0F;
+      rtb_desired_thrust = 0.0F;
+      rtb_lambda_dot_roll_los_filte_a = 0.0F;
+      for (i_0 = 0; i_0 < 3; i_0++) {
+        pooled11 = rtb_DCM[3 * i + i_0];
+        rtb_Saturation += rtb_MatrixMultiply2_cf[3 * i_0] * pooled11;
+        rtb_desired_thrust += rtb_MatrixMultiply2_cf[3 * i_0 + 1] * pooled11;
+        rtb_lambda_dot_roll_los_filte_a += rtb_MatrixMultiply2_cf[3 * i_0 + 2] *
+          pooled11;
+      }
+
+      rtb_MatrixMultiply2_fh[rtb_DCM_tmp] = rtb_lambda_dot_roll_los_filte_a;
+      rtb_MatrixMultiply2_fh[rtb_Transpose1_p_tmp] = rtb_desired_thrust;
+      rtb_MatrixMultiply2_fh[3 * i] = rtb_Saturation;
+    }
+
+    /* Trigonometry: '<S78>/Trigonometric Function' incorporates:
+     *  Selector: '<S78>/Selector2'
+     *  UnaryMinus: '<S78>/Unary Minus'
+     */
+    if (-rtb_MatrixMultiply2_fh[2] > 1.0F) {
+      pooled11 = 1.0F;
+    } else if (-rtb_MatrixMultiply2_fh[2] < -1.0F) {
+      pooled11 = -1.0F;
+    } else {
+      pooled11 = -rtb_MatrixMultiply2_fh[2];
+    }
+
+    /* MATLAB Function: '<S80>/MATLAB Function4' incorporates:
+     *  Constant: '<S80>/DYT frequency'
+     *  Constant: '<S80>/cutoff frequency'
+     *  Gain: '<S80>/D2R1'
+     *  Inport: '<Root>/SeekerData'
+     *  Product: '<S80>/Product'
+     *  Trigonometry: '<S78>/Trigonometric Function'
+     *  Trigonometry: '<S80>/Cos2'
+     */
+    Intercepe_Strik_MATLABFunction4(0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw * cosf(asinf(pooled11)),
+      1.0F, 0.02F, &rtb_Saturation,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction4_h);
+
+    /* Product: '<S80>/Product2' incorporates:
+     *  Gain: '<S80>/D2R2'
+     *  Gain: '<S80>/D2R3'
+     *  Inport: '<Root>/SeekerData'
+     *  Trigonometry: '<S80>/Cos'
+     *  Trigonometry: '<S80>/Cos1'
+     */
+    pooled11 = cosf(0.0174532924F *
+                    Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch) * cosf
+      (0.0174532924F * Intercepe_Strike_Model_AS_U.SeekerData.misalignYaw);
+
+    /* Saturate: '<S80>/Saturation1' */
+    if (pooled11 < 0.9F) {
+      pooled11 = 0.9F;
+    }
+
+    /* MATLAB Function: '<S80>/MATLAB Function2' incorporates:
+     *  Constant: '<S80>/Constant2'
+     *  Constant: '<S80>/Constant3'
+     *  Saturate: '<S80>/Saturation1'
+     */
+    Intercepe_Str_MATLABFunction1_g(pooled11, 5.0F, 0.01F, &rtb_desired_thrust,
+      &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction2_k);
+
+    /* Product: '<S80>/Divide' */
+    rtb_lambda_dot_roll_los_filte_a = rtb_Saturation / rtb_desired_thrust;
+
+    /* MATLAB Function: '<S80>/MATLAB Function1' incorporates:
+     *  Constant: '<S80>/DYT frequency'
+     *  Constant: '<S80>/cutoff frequency'
+     *  Gain: '<S80>/D2R'
      *  Inport: '<Root>/SeekerData'
      */
-    rtb_Sum_a = 0.0174532924F *
-      Intercepe_Strike_Model_AS_U.SeekerData.misalignYaw;
+    Intercepe_Str_MATLABFunction1_g(0.0174532924F *
+      Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch, 1.0F, 0.02F,
+      &rtb_Saturation, &Intercepe_Strike_Model_AS_DW.sf_MATLABFunction1_gf);
 
-    /* DiscreteIntegrator: '<S175>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_k != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_a = rtb_Sum_a;
-    }
-
-    /* DiscreteIntegrator: '<S215>/Integrator' */
-    if (((Intercepe_Strike_Model_AS_B.guided_state > 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_o <= 0)) ||
-        ((Intercepe_Strike_Model_AS_B.guided_state <= 0) &&
-         (Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_o == 1))) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h = 0.0F;
-    }
-
-    /* Sum: '<S224>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S175>/Discrete-Time Integrator5'
-     *  DiscreteIntegrator: '<S215>/Integrator'
-     *  Gain: '<S220>/Proportional Gain'
+    /* SignalConversion generated from: '<S77>/Matrix Multiply' incorporates:
+     *  Constant: '<S75>/Constant'
      */
-    rtb_Saturation_bm = STRIKE_PARAM.STRIKE_ROLL_KP *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_a +
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h;
+    rtb_MatrixMultiply[0] = 3.0F;
 
-    /* Saturate: '<S222>/Saturation' */
-    if (rtb_Saturation_bm > 3.8397243F) {
-      rtb_Sum7 = 3.8397243F;
-    } else if (rtb_Saturation_bm < -3.8397243F) {
-      rtb_Sum7 = -3.8397243F;
-    } else {
-      rtb_Sum7 = rtb_Saturation_bm;
-    }
-
-    /* End of Saturate: '<S222>/Saturation' */
-
-    /* Trigonometry: '<S6>/Atan2' incorporates:
-     *  Gain: '<S172>/Gain1'
-     *  Gain: '<S6>/Gain'
-     *  Inport: '<Root>/SeekerData'
+    /* Product: '<S75>/Product' incorporates:
+     *  Constant: '<S75>/Navigation Ratio'
+     *  Product: '<S75>/Product1'
+     *  UnaryMinus: '<S75>/Unary Minus'
      */
-    rtb_Sum_k = atan2f(0.0174532924F *
-                       Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw * 4.0F,
-                       9.8F);
+    pooled11 = 3.0F * rtb_Rollcmd_f;
 
-    /* DiscreteIntegrator: '<S177>/Discrete-Time Integrator5' */
-    if (Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_n != 0) {
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_d = rtb_Sum_k;
-    }
-
-    /* RateLimiter: '<S6>/Rate Limiter' incorporates:
-     *  Constant: '<S6>/Constant4'
+    /* SignalConversion generated from: '<S77>/Matrix Multiply' incorporates:
+     *  Product: '<S75>/Product'
+     *  Product: '<S75>/Product1'
+     *  Product: '<S80>/Divide1'
+     *  UnaryMinus: '<S75>/Unary Minus'
      */
-    if (1.0F - Intercepe_Strike_Model_AS_DW.PrevY > 0.005F) {
-      /* Saturate: '<S6>/Saturation5' */
-      Intercepe_Strike_Model_AS_DW.PrevY += 0.005F;
-    } else if (1.0F - Intercepe_Strike_Model_AS_DW.PrevY < -0.0025F) {
-      /* Saturate: '<S6>/Saturation5' */
-      Intercepe_Strike_Model_AS_DW.PrevY -= 0.0025F;
-    } else {
-      /* Saturate: '<S6>/Saturation5' */
-      Intercepe_Strike_Model_AS_DW.PrevY = 1.0F;
-    }
+    rtb_MatrixMultiply[1] = pooled11 * rtb_lambda_dot_roll_los_filte_a;
+    rtb_MatrixMultiply[2] = -(rtb_Saturation / rtb_desired_thrust * pooled11);
 
-    /* End of RateLimiter: '<S6>/Rate Limiter' */
-
-    /* Delay: '<S6>/Delay3' incorporates:
-     *  Inport: '<Root>/current_thr'
+    /* Product: '<S77>/Matrix Multiply' incorporates:
+     *  Math: '<S77>/Transpose'
      */
-    if (Intercepe_Strike_Model_AS_DW.icLoad) {
-      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE =
-        Intercepe_Strike_Model_AS_U.current_thr;
+    rtb_Rollcmd_f = 0.0F;
+    rtb_Saturation = 0.0F;
+    rtb_desired_thrust = 0.0F;
+    for (i = 0; i < 3; i++) {
+      pooled11 = rtb_MatrixMultiply[i];
+      rtb_Rollcmd_f += rtb_DCM[3 * i] * pooled11;
+      rtb_Saturation += rtb_DCM[3 * i + 1] * pooled11;
+      rtb_desired_thrust += rtb_DCM[3 * i + 2] * pooled11;
     }
 
-    /* DataTypeConversion: '<S6>/Data Type Conversion' incorporates:
-     *  DiscreteIntegrator: '<S6>/Discrete-Time Integrator'
+    rtb_MatrixMultiply[2] = rtb_desired_thrust;
+    rtb_MatrixMultiply[1] = rtb_Saturation;
+    rtb_MatrixMultiply[0] = rtb_Rollcmd_f;
+
+    /* End of Product: '<S77>/Matrix Multiply' */
+
+    /* Product: '<S77>/Matrix Multiply2' incorporates:
+     *  Constant: '<S78>/Constant'
+     */
+    rtb_Rollcmd_f = 0.0F;
+    rtb_Saturation = 0.0F;
+    rtb_desired_thrust = 0.0F;
+    for (i = 0; i < 3; i++) {
+      pooled11 = rtb_MatrixMultiply[i];
+      rtb_Rollcmd_f += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i] *
+        pooled11;
+      rtb_Saturation += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 1] *
+        pooled11;
+      rtb_desired_thrust += Intercepe_Strike_Model_A_ConstP.pooled11[3 * i + 2] *
+        pooled11;
+    }
+
+    /* End of Product: '<S77>/Matrix Multiply2' */
+
+    /* Sum: '<S79>/Subtract' incorporates:
+     *  Constant: '<S79>/Constant'
+     *  Math: '<S77>/Transpose1'
+     *  Product: '<S77>/Matrix Multiply1'
+     */
+    for (i = 0; i < 3; i++) {
+      rtb_MatrixMultiply[i] = ((rtb_Transpose1_b[i + 3] * rtb_Saturation +
+        rtb_Transpose1_b[i] * rtb_Rollcmd_f) + rtb_Transpose1_b[i + 6] *
+        rtb_desired_thrust) - Intercepe_Strike_Model_A_ConstP.pooled12[i];
+    }
+
+    /* End of Sum: '<S79>/Subtract' */
+
+    /* Sum: '<S79>/Add2' incorporates:
+     *  Inport: '<Root>/current_yaw'
+     *  Product: '<S79>/Product'
+     *  Product: '<S79>/Product1'
+     *  Trigonometry: '<S79>/Cos'
+     *  Trigonometry: '<S79>/Cos1'
+     */
+    rtb_Saturation = rtb_MatrixMultiply[0] * cosf
+      (Intercepe_Strike_Model_AS_U.current_yaw) + rtb_MatrixMultiply[1] * sinf
+      (Intercepe_Strike_Model_AS_U.current_yaw);
+
+    /* Math: '<S79>/Square1' incorporates:
+     *  Math: '<S79>/Square4'
+     */
+    rtb_desired_thrust = rtb_MatrixMultiply[2] * rtb_MatrixMultiply[2];
+
+    /* Trigonometry: '<S79>/Atan1' incorporates:
+     *  Inport: '<Root>/current_yaw'
+     *  Math: '<S79>/Square'
+     *  Math: '<S79>/Square1'
+     *  Product: '<S79>/Product2'
+     *  Product: '<S79>/Product4'
+     *  Sqrt: '<S79>/Sqrt'
+     *  Sum: '<S79>/Add'
+     *  Sum: '<S79>/Add3'
+     *  Trigonometry: '<S79>/Cos2'
+     *  Trigonometry: '<S79>/Cos3'
+     *  UnaryMinus: '<S79>/Unary Minus'
+     */
+    rtb_Rollcmd_f = atan2f(-rtb_MatrixMultiply[0] * sinf
+      (Intercepe_Strike_Model_AS_U.current_yaw) + rtb_MatrixMultiply[1] * cosf
+      (Intercepe_Strike_Model_AS_U.current_yaw), sqrtf(rtb_Saturation *
+      rtb_Saturation + rtb_desired_thrust));
+
+    /* Saturate: '<S79>/Saturation2' */
+    if (rtb_Rollcmd_f > 0.87266463F) {
+      rtb_Rollcmd_f = 0.87266463F;
+    } else if (rtb_Rollcmd_f < -0.87266463F) {
+      rtb_Rollcmd_f = -0.87266463F;
+    }
+
+    /* End of Saturate: '<S79>/Saturation2' */
+
+    /* RateLimiter: '<S79>/Rate Limiter2' */
+    pooled11 = rtb_Rollcmd_f - Intercepe_Strike_Model_AS_DW.PrevY;
+    if (pooled11 > 0.04F) {
+      rtb_Rollcmd_f = Intercepe_Strike_Model_AS_DW.PrevY + 0.04F;
+    } else if (pooled11 < -0.04F) {
+      rtb_Rollcmd_f = Intercepe_Strike_Model_AS_DW.PrevY - 0.04F;
+    }
+
+    Intercepe_Strike_Model_AS_DW.PrevY = rtb_Rollcmd_f;
+
+    /* End of RateLimiter: '<S79>/Rate Limiter2' */
+
+    /* Trigonometry: '<S79>/Atan2' incorporates:
+     *  UnaryMinus: '<S79>/Unary Minus1'
+     *  UnaryMinus: '<S79>/Unary Minus2'
+     */
+    rtb_Saturation = atan2f(-rtb_Saturation, -rtb_MatrixMultiply[2]);
+
+    /* Saturate: '<S79>/Saturation1' */
+    if (rtb_Saturation > 1.04719758F) {
+      rtb_Saturation = 1.04719758F;
+    } else if (rtb_Saturation < -1.04719758F) {
+      rtb_Saturation = -1.04719758F;
+    }
+
+    /* End of Saturate: '<S79>/Saturation1' */
+
+    /* RateLimiter: '<S79>/Rate Limiter1' */
+    pooled11 = rtb_Saturation - Intercepe_Strike_Model_AS_DW.PrevY_l;
+    if (pooled11 > 0.04F) {
+      rtb_Saturation = Intercepe_Strike_Model_AS_DW.PrevY_l + 0.04F;
+    } else if (pooled11 < -0.04F) {
+      rtb_Saturation = Intercepe_Strike_Model_AS_DW.PrevY_l - 0.04F;
+    }
+
+    Intercepe_Strike_Model_AS_DW.PrevY_l = rtb_Saturation;
+
+    /* End of RateLimiter: '<S79>/Rate Limiter1' */
+
+    /* DataTypeConversion: '<S7>/Data Type Conversion' incorporates:
+     *  DiscreteIntegrator: '<S7>/Discrete-Time Integrator'
      */
     tmp = fmod(floor(Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE),
                1.8446744073709552E+19);
 
-    /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-     *  Constant: '<S6>/NAVIGATION_STATE_OFFBOARD'
-     *  Constant: '<S6>/VEHICLE_CMD_SET_NAV_STATE'
-     *  DataTypeConversion: '<S6>/Data Type Conversion'
+    /* BusAssignment: '<S7>/Bus Assignment' incorporates:
+     *  Constant: '<S79>/mass'
+     *  Constant: '<S7>/NAVIGATION_STATE_OFFBOARD'
+     *  Constant: '<S7>/VEHICLE_CMD_SET_NAV_STATE'
+     *  Constant: '<S7>/pass1'
+     *  Constant: '<S7>/pass2'
+     *  DataTypeConversion: '<S7>/Data Type Conversion'
+     *  Gain: '<S79>/Gain'
+     *  Inport: '<Root>/current_yaw'
+     *  Math: '<S79>/Square2'
+     *  Math: '<S79>/Square3'
      *  Merge: '<S1>/Merge'
+     *  Product: '<S79>/Product3'
+     *  Sqrt: '<S79>/Sqrt1'
+     *  Sum: '<S79>/Add1'
      */
     Intercepe_Strike_Model_AS_B.Merge.timestamp = tmp < 0.0 ? (uint64_T)
       -(int64_T)(uint64_T)-tmp : (uint64_T)tmp;
     Intercepe_Strike_Model_AS_B.Merge.command = 100001U;
     Intercepe_Strike_Model_AS_B.Merge.param1 = 12.0F;
-
-    /* Sum: '<S6>/Sum' incorporates:
-     *  DiscreteIntegrator: '<S177>/Discrete-Time Integrator5'
-     *  Gain: '<S6>/Gain5'
-     *  Inport: '<Root>/current_roll'
-     *  Saturate: '<S6>/Saturation3'
-     *  Sum: '<S6>/Sum5'
-     */
-    rtb_IntegralGain_hr = (0.065F * rtb_Sum7 +
-      Intercepe_Strike_Model_AS_U.current_roll) +
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_d;
-
-    /* Saturate: '<S6>/Saturation' */
-    if (rtb_IntegralGain_hr > 0.87266463F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = 0.87266463F;
-    } else if (rtb_IntegralGain_hr < -0.87266463F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = -0.87266463F;
-    } else {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param2 = rtb_IntegralGain_hr;
-    }
-
-    /* End of Saturate: '<S6>/Saturation' */
-
-    /* Sum: '<S6>/Sum1' incorporates:
-     *  DiscreteIntegrator: '<S178>/Discrete-Time Integrator5'
-     *  Gain: '<S6>/Gain6'
-     *  Inport: '<Root>/current_pitch'
-     *  Saturate: '<S6>/Saturation4'
-     *  Sum: '<S6>/Sum6'
-     */
-    rtb_IntegralGain_hr = (0.065F * rtb_Gain1_e +
-      Intercepe_Strike_Model_AS_U.current_pitch) +
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTATE;
-
-    /* Saturate: '<S6>/Saturation1' */
-    if (rtb_IntegralGain_hr > 0.87266463F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = 0.87266463F;
-    } else if (rtb_IntegralGain_hr < -0.87266463F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = -0.87266463F;
-    } else {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param3 = rtb_IntegralGain_hr;
-    }
-
-    /* End of Saturate: '<S6>/Saturation1' */
-
-    /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-     *  Inport: '<Root>/current_yaw'
-     *  Merge: '<S1>/Merge'
-     */
+    Intercepe_Strike_Model_AS_B.Merge.param2 = rtb_Rollcmd_f;
+    Intercepe_Strike_Model_AS_B.Merge.param3 = rtb_Saturation;
     Intercepe_Strike_Model_AS_B.Merge.param4 =
       Intercepe_Strike_Model_AS_U.current_yaw;
-
-    /* Sum: '<S6>/Sum4' incorporates:
-     *  Delay: '<S6>/Delay3'
-     */
-    rtb_IntegralGain_hr = Intercepe_Strike_Model_AS_DW.PrevY +
-      Intercepe_Strike_Model_AS_DW.Delay3_DSTATE;
-
-    /* Saturate: '<S6>/Saturation5' */
-    if (rtb_IntegralGain_hr > 0.7F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param5 = 0.7F;
-    } else if (rtb_IntegralGain_hr < 0.2F) {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param5 = 0.2F;
-    } else {
-      /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-       *  Merge: '<S1>/Merge'
-       */
-      Intercepe_Strike_Model_AS_B.Merge.param5 = rtb_IntegralGain_hr;
-    }
-
-    /* End of Saturate: '<S6>/Saturation5' */
-
-    /* BusAssignment: '<S6>/Bus Assignment' incorporates:
-     *  Constant: '<S6>/pass1'
-     *  Constant: '<S6>/pass2'
-     *  Merge: '<S1>/Merge'
-     */
+    Intercepe_Strike_Model_AS_B.Merge.param5 = sqrtf((rtb_MatrixMultiply[0] *
+      rtb_MatrixMultiply[0] + rtb_MatrixMultiply[1] * rtb_MatrixMultiply[1]) +
+      rtb_desired_thrust) * 5.0F * 0.0036764706F;
     Intercepe_Strike_Model_AS_B.Merge.param6 = 0.0F;
     Intercepe_Strike_Model_AS_B.Merge.param7 = 0.0F;
-    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = cmd_valid;
+    Intercepe_Strike_Model_AS_B.Merge.cmd_valid = seeker_data_valid;
 
-    /* Gain: '<S212>/Integral Gain' incorporates:
-     *  DiscreteIntegrator: '<S175>/Discrete-Time Integrator5'
-     */
-    rtb_IntegralGain_hr = STRIKE_PARAM.STRIKE_ROLL_KI *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_a;
-
-    /* Gain: '<S264>/Integral Gain' incorporates:
-     *  DiscreteIntegrator: '<S176>/Discrete-Time Integrator5'
-     */
-    rtb_Saturation_k = STRIKE_PARAM.STRIKE_PITCH_KI *
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_i;
-
-    /* Update for DiscreteIntegrator: '<S178>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S178>/Gain'
-     *  Sum: '<S178>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LOAD = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTATE += (rtb_Gain1_a
-      - Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTATE) *
-      31.415926F * 0.0025F;
-
-    /* Update for DiscreteIntegrator: '<S176>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S176>/Gain'
-     *  Sum: '<S176>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_l = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_i += (rtb_Sum_c -
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_i) *
-      125.663704F * 0.0025F;
-
-    /* Update for DiscreteIntegrator: '<S267>/Integrator' incorporates:
-     *  Sum: '<S259>/SumI2'
-     *  Sum: '<S259>/SumI4'
-     */
-    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE += ((rtb_Gain1_e -
-      rtb_Saturation_d) + rtb_Saturation_k) * 0.0025F;
-    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE > 1.04719758F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 1.04719758F;
-    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE < -1.04719758F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = -1.04719758F;
-    }
-
-    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState = (int8_T)
-      (Intercepe_Strike_Model_AS_B.guided_state > 0);
-
-    /* End of Update for DiscreteIntegrator: '<S267>/Integrator' */
-
-    /* Update for DiscreteIntegrator: '<S6>/Discrete-Time Integrator' incorporates:
-     *  Constant: '<S6>/Constant1'
+    /* Update for DiscreteIntegrator: '<S7>/Discrete-Time Integrator' incorporates:
+     *  Constant: '<S7>/Constant1'
      */
     Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE += 10000.0;
-
-    /* Update for DiscreteIntegrator: '<S175>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S175>/Gain'
-     *  Sum: '<S175>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_k = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_a += (rtb_Sum_a -
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_a) *
-      125.663704F * 0.0025F;
-
-    /* Update for DiscreteIntegrator: '<S215>/Integrator' incorporates:
-     *  Sum: '<S207>/SumI2'
-     *  Sum: '<S207>/SumI4'
-     */
-    Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h += ((rtb_Sum7 -
-      rtb_Saturation_bm) + rtb_IntegralGain_hr) * 0.0025F;
-    if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h > 1.04719758F) {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h = 1.04719758F;
-    } else if (Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h < -1.04719758F)
-    {
-      Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_h = -1.04719758F;
-    }
-
-    Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_o = (int8_T)
-      (Intercepe_Strike_Model_AS_B.guided_state > 0);
-
-    /* End of Update for DiscreteIntegrator: '<S215>/Integrator' */
-
-    /* Update for DiscreteIntegrator: '<S177>/Discrete-Time Integrator5' incorporates:
-     *  Gain: '<S177>/Gain'
-     *  Sum: '<S177>/Sum5'
-     */
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_n = 0U;
-    Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_d += (rtb_Sum_k -
-      Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_DSTAT_d) * 31.415926F
-      * 0.0025F;
-
-    /* Update for Delay: '<S6>/Delay3' */
-    Intercepe_Strike_Model_AS_DW.icLoad = false;
 
     /* End of Outputs for SubSystem: '<S1>/Subsystem4' */
     break;
@@ -1268,81 +1788,86 @@ void Intercepe_Strike_Model_AS_initialize(void)
   Intercepe_Strike_Model_AS_DW.time_gate = 0.0F;
   Intercepe_Strike_Model_AS_DW.lock_time = 0.0F;
   Intercepe_Strike_Model_AS_B.guided_state = 0U;
+  Intercepe_Strike_Model_AS_DW.stale_count = 3U;
   Intercepe_Strike_Model_AS_DW.is_active_c3_Intercepe_Strike_M = 0U;
   Intercepe_Strike_Model_AS_DW.is_c3_Intercepe_Strike_Model_AS =
     Intercepe_St_IN_NO_ACTIVE_CHILD;
 
   /* SystemInitialize for IfAction SubSystem: '<S1>/Subsystem2' */
-  /* InitializeConditions for DiscreteIntegrator: '<S4>/Discrete-Time Integrator' */
+  /* InitializeConditions for RateLimiter: '<S15>/Rate Limiter2' */
+  Intercepe_Strike_Model_AS_DW.PrevY_a = 0.0F;
+
+  /* InitializeConditions for DiscreteIntegrator: '<S5>/Discrete-Time Integrator' */
   Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_k = 0.0;
 
-  /* InitializeConditions for DiscreteIntegrator: '<S10>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_o = 1U;
+  /* InitializeConditions for RateLimiter: '<S15>/Rate Limiter1' */
+  Intercepe_Strike_Model_AS_DW.PrevY_g = 0.0F;
 
-  /* InitializeConditions for DiscreteIntegrator: '<S49>/Integrator' */
-  Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_ho = 0.0F;
-  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_d = 2;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S11>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_L_ll = 1U;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S101>/Integrator' */
-  Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_e = 0.0F;
-  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_m = 2;
-
-  /* InitializeConditions for Delay: '<S4>/Delay1' */
+  /* InitializeConditions for Delay: '<S5>/Delay1' */
   Intercepe_Strike_Model_AS_DW.icLoad_bl = true;
 
-  /* InitializeConditions for DiscreteIntegrator: '<S153>/Integrator' */
-  Intercepe_Strike_Model_AS_DW.Integrator_DSTATE_g = 0.0F;
-  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_h = 2;
+  /* InitializeConditions for DiscreteIntegrator: '<S52>/Integrator' */
+  Intercepe_Strike_Model_AS_DW.Integrator_DSTATE = 0.0F;
+  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState = 2;
 
-  /* InitializeConditions for Delay: '<S4>/Delay3' */
+  /* InitializeConditions for Delay: '<S5>/Delay3' */
   Intercepe_Strike_Model_AS_DW.icLoad_p = true;
+
+  /* SystemInitialize for MATLAB Function: '<S11>/MATLAB Function' */
+  Intercepe_MATLABFunction_h_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction_f);
+
+  /* SystemInitialize for MATLAB Function: '<S16>/MATLAB Function4' */
+  Intercepe__MATLABFunction4_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction4);
+
+  /* SystemInitialize for MATLAB Function: '<S16>/MATLAB Function2' */
+  Intercep_MATLABFunction1_a_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction2);
+
+  /* SystemInitialize for MATLAB Function: '<S16>/MATLAB Function1' */
+  Intercep_MATLABFunction1_a_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction1_g);
 
   /* End of SystemInitialize for SubSystem: '<S1>/Subsystem2' */
 
   /* SystemInitialize for IfAction SubSystem: '<S1>/Subsystem3' */
-  /* InitializeConditions for DiscreteIntegrator: '<S5>/Discrete-Time Integrator' */
+  /* InitializeConditions for DiscreteIntegrator: '<S6>/Discrete-Time Integrator' */
   Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator_DSTATE_m = 0.0;
 
-  /* InitializeConditions for Delay: '<S5>/Delay1' */
-  Intercepe_Strike_Model_AS_DW.icLoad_d = true;
+  /* InitializeConditions for Delay: '<S6>/Delay1' */
+  Intercepe_Strike_Model_AS_DW.icLoad = true;
 
-  /* InitializeConditions for Delay: '<S5>/Delay2' */
+  /* InitializeConditions for Delay: '<S6>/Delay2' */
   Intercepe_Strike_Model_AS_DW.icLoad_b = true;
 
-  /* InitializeConditions for Delay: '<S5>/Delay3' */
+  /* InitializeConditions for Delay: '<S6>/Delay3' */
   Intercepe_Strike_Model_AS_DW.icLoad_bb = true;
 
   /* End of SystemInitialize for SubSystem: '<S1>/Subsystem3' */
 
   /* SystemInitialize for IfAction SubSystem: '<S1>/Subsystem4' */
-  /* InitializeConditions for DiscreteIntegrator: '<S178>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LOAD = 1U;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S176>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_l = 1U;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S267>/Integrator' */
-  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState = 2;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S175>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_k = 1U;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S215>/Integrator' */
-  Intercepe_Strike_Model_AS_DW.Integrator_PrevResetState_o = 2;
-
-  /* InitializeConditions for DiscreteIntegrator: '<S177>/Discrete-Time Integrator5' */
-  Intercepe_Strike_Model_AS_DW.DiscreteTimeIntegrator5_IC_LO_n = 1U;
-
-  /* InitializeConditions for Saturate: '<S6>/Saturation5' incorporates:
-   *  RateLimiter: '<S6>/Rate Limiter'
-   */
+  /* InitializeConditions for RateLimiter: '<S79>/Rate Limiter2' */
   Intercepe_Strike_Model_AS_DW.PrevY = 0.0F;
 
-  /* InitializeConditions for Delay: '<S6>/Delay3' */
-  Intercepe_Strike_Model_AS_DW.icLoad = true;
+  /* InitializeConditions for RateLimiter: '<S79>/Rate Limiter1' */
+  Intercepe_Strike_Model_AS_DW.PrevY_l = 0.0F;
+
+  /* SystemInitialize for MATLAB Function: '<S76>/MATLAB Function' */
+  Intercepe_MATLABFunction_h_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction_h);
+
+  /* SystemInitialize for MATLAB Function: '<S80>/MATLAB Function4' */
+  Intercepe__MATLABFunction4_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction4_h);
+
+  /* SystemInitialize for MATLAB Function: '<S80>/MATLAB Function2' */
+  Intercep_MATLABFunction1_a_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction2_k);
+
+  /* SystemInitialize for MATLAB Function: '<S80>/MATLAB Function1' */
+  Intercep_MATLABFunction1_a_Init
+    (&Intercepe_Strike_Model_AS_DW.sf_MATLABFunction1_gf);
 
   /* End of SystemInitialize for SubSystem: '<S1>/Subsystem4' */
 

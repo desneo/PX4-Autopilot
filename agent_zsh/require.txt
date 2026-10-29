@@ -42,6 +42,9 @@
 4. `target_confidence` 写入 uORB 数组的第 0 个元素。
 5. UDP 输入发布时，`self_check` 和 `work_status` 固定为 `0x01`。
 6. UDP 输入发布时，`timestamp` 使用飞控启动后的微秒数。
+7. JSON `tracking_gate_w`、`tracking_gate_h` 映射至同名 uORB `uint16` 字段，
+   接受 0～65535 的有限数值，按四舍五入（0.5 进 1）转换为整数像素。
+   两字段独立可选，缺省为 0；负数、越界或非数值字段拒绝整包。
 
 ## 验证要求
 

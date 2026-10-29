@@ -3,9 +3,9 @@
  *
  * Code generated for Simulink model 'Intercepe_Strike_Model_AS'.
  *
- * Model version                  : 1.136
+ * Model version                  : 1.148
  * Simulink Coder version         : 25.2 (R2025b) 28-Jul-2025
- * C/C++ source code generated on : Thu Oct 22 17:32:43 2026
+ * C/C++ source code generated on : Thu Oct 29 14:32:06 2026
  *
  * Target selection: ert.tlc
  * Embedded hardware selection: ARM Compatible->ARM Cortex
@@ -16,29 +16,6 @@
 #ifndef Intercepe_Strike_Model_AS_types_h_
 #define Intercepe_Strike_Model_AS_types_h_
 #include "rtwtypes.h"
-#ifndef DEFINED_TYPEDEF_FOR_STRIKE_PARAM_t_
-#define DEFINED_TYPEDEF_FOR_STRIKE_PARAM_t_
-
-/* 打击控制器参数结构体 */
-typedef struct {
-  /* 滚转通道增益Kp */
-  real32_T STRIKE_ROLL_KP;
-
-  /* 滚转通道积分增益Ki */
-  real32_T STRIKE_ROLL_KI;
-
-  /* 俯仰通道增益Kp */
-  real32_T STRIKE_PITCH_KP;
-
-  /* 俯仰通道积分增益Ki */
-  real32_T STRIKE_PITCH_KI;
-
-  /* 误差低通滤波器截止频率(Hz) */
-  real32_T STRIKE_LOWPASS_HZ;
-} STRIKE_PARAM_t;
-
-#endif
-
 #ifndef DEFINED_TYPEDEF_FOR_SeekerGuidanceBus_
 #define DEFINED_TYPEDEF_FOR_SeekerGuidanceBus_
 
@@ -55,6 +32,12 @@ typedef struct {
 
   /* 跟踪置信度, 字节22, 比例尺10, 传输值/10得0~25.5 */
   real32_T trackConfidence;
+
+  /* 跟踪框宽度, 字节10~11, S16, 比例尺100, 传输值/100得像素 */
+  real32_T trackBoxWidth;
+
+  /* 跟踪框高度, 字节12~13, S16, 比例尺100, 传输值/100得像素 */
+  real32_T trackBoxHeight;
 
   /* 俯仰视线角速度, 字节23~24, S16, 比例尺100, 传输值/100得deg/s */
   real32_T losRatePitch;
@@ -112,6 +95,44 @@ typedef struct {
   /* 发送使能, true 时发布 */
   boolean_T cmd_valid;
 } VehicleCommandBus;
+
+#endif
+
+#ifndef DEFINED_TYPEDEF_FOR_STRIKE_PARAM_t_
+#define DEFINED_TYPEDEF_FOR_STRIKE_PARAM_t_
+
+/* 打击控制器参数结构体 */
+typedef struct {
+  /* 滚转通道增益Kp */
+  real32_T STRIKE_ROLL_KP;
+
+  /* 滚转通道积分增益Ki */
+  real32_T STRIKE_ROLL_KI;
+
+  /* 俯仰通道增益Kp */
+  real32_T STRIKE_PITCH_KP;
+
+  /* 俯仰通道积分增益Ki */
+  real32_T STRIKE_PITCH_KI;
+
+  /* 误差低通滤波器截止频率(Hz) */
+  real32_T STRIKE_LOWPASS_HZ;
+
+  /* 预留可调参数 param1（默认0，按需使用） */
+  real32_T param1;
+
+  /* 预留可调参数 param2（默认0，按需使用） */
+  real32_T param2;
+
+  /* 预留可调参数 param3（默认0，按需使用） */
+  real32_T param3;
+
+  /* 预留可调参数 param4（默认0，按需使用） */
+  real32_T param4;
+
+  /* 预留可调参数 param5（默认0，按需使用） */
+  real32_T param5;
+} STRIKE_PARAM_t;
 
 #endif
 #endif                                 /* Intercepe_Strike_Model_AS_types_h_ */

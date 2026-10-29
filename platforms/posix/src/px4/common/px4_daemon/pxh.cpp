@@ -49,6 +49,8 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
+#include <px4_daemon/server_io.h>
 
 #include "pxh.h"
 
@@ -167,6 +169,10 @@ void Pxh::run_remote_pxh(int remote_in_fd, int remote_out_fd)
 
 	if (pipe(p1) != 0) {
 		perror("Remote shell pipe creation failed");
+		close(backup_stdout_fd);
+		close(backup_stderr_fd);
+		close(remote_in_fd);
+		close(remote_out_fd);
 		return;
 	}
 
@@ -174,8 +180,31 @@ void Pxh::run_remote_pxh(int remote_in_fd, int remote_out_fd)
 		perror("Remote shell pipe 2 creation failed");
 		close(p1[0]);
 		close(p1[1]);
+		close(backup_stdout_fd);
+		close(backup_stderr_fd);
+		close(remote_in_fd);
+		close(remote_out_fd);
 		return;
 	}
+
+	const int command_output_fd = dup(remote_out_fd);
+	FILE *command_output = command_output_fd >= 0 ? fdopen(command_output_fd, "w") : nullptr;
+
+	if (command_output == nullptr) {
+		if (command_output_fd >= 0) { close(command_output_fd); }
+
+		close(p1[0]);
+		close(p1[1]);
+		close(p2[0]);
+		close(p2[1]);
+		close(backup_stdout_fd);
+		close(backup_stderr_fd);
+		close(remote_in_fd);
+		close(remote_out_fd);
+		return;
+	}
+
+	setvbuf(command_output, nullptr, _IOLBF, BUFSIZ);
 
 	// Create pipe to receive stdout and stderr
 	dup2(p1[1], STDOUT_FILENO);
@@ -202,7 +231,14 @@ void Pxh::run_remote_pxh(int remote_in_fd, int remote_out_fd)
 		struct pollfd fds[3] { {pipe_stderr, POLLIN}, {pipe_stdout, POLLIN}, {remote_in_fd, POLLIN}};
 
 		if (poll(fds, 3, -1) == -1) {
+			if (errno == EINTR) { continue; }
+
 			perror("Mavlink Shell Poll Error");
+			break;
+		}
+
+		// 远程输入关闭后结束会话，避免在挂断事件上持续空转。
+		if ((fds[2].revents & (POLLHUP | POLLERR | POLLNVAL)) && !(fds[2].revents & POLLIN)) {
 			break;
 		}
 
@@ -264,7 +300,13 @@ void Pxh::run_remote_pxh(int remote_in_fd, int remote_out_fd)
 			case '\n':	// user hit enter
 				printf("\n");
 				_check_remote_uorb_command(mystr);
-				process_line(mystr, false);
+				{
+					// 持续命令直接输出到 MAVLink 管道，并从同一会话接收退出按键。
+					// 命令执行期间外层循环不会运行，不能依赖它转发输出。
+					ScopedStdio command_stdio(remote_in_fd, command_output);
+					process_line(mystr, false);
+				}
+				fflush(command_output);
 				// reset string
 				mystr = "";
 
@@ -283,6 +325,8 @@ void Pxh::run_remote_pxh(int remote_in_fd, int remote_out_fd)
 			}
 		}
 	}
+
+	fclose(command_output);
 
 	// Restore stdout and stderr
 	dup2(backup_stdout_fd, STDOUT_FILENO);

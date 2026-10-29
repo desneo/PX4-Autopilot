@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""直接编译生产JSON解析器，核对旧包兼容、三维LOS、整数波门坐标与发送时间戳扩展。"""
+"""编译生产JSON解析器与发布函数，核对兼容、波门尺寸量化和实际uORB映射。"""
 import itertools
 import json
 import math
@@ -40,6 +40,24 @@ class ProductionJsonParserTest(unittest.TestCase):
         directory = Path(cls.temp.name)
         source = (ROOT/'DytUdpBridge.cpp').read_text()
         parser = source[source.index('namespace\n{'):source.index('\nclass DytUdpBridge')]
+        publish_start = source.index('\tvoid publish(const AishengFields &fields)')
+        publish_end = source.index('\n\tuint16_t _port', publish_start)
+        publish = source[publish_start:publish_end]
+        scalar_types = {'uint8': 'uint8_t', 'uint16': 'uint16_t', 'uint32': 'uint32_t',
+                        'uint64': 'uint64_t', 'int16': 'int16_t', 'int32': 'int32_t',
+                        'float32': 'float'}
+        members = []
+        for line in (ROOT.parents[3]/'msg/DytAishengTelemetry.msg').read_text().splitlines():
+            fields = line.split('#', 1)[0].split()
+            if not fields:
+                continue
+            kind, name = fields
+            if '[' in kind:
+                kind, count = kind.rstrip(']').split('[')
+                members.append(f'{scalar_types[kind]} {name}[{count}] {{}};')
+            else:
+                members.append(f'{scalar_types[kind]} {name} {{}};')
+        message = 'struct dyt_aisheng_telemetry_s {\n'+'\n'.join(members)+'\n};'
         harness = r"""
 #include <cerrno>
 #include <cstddef>
@@ -47,27 +65,51 @@ class ProductionJsonParserTest(unittest.TestCase):
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <iomanip>
 #include <string>
+#define PX4_ERR(...) fprintf(stderr, __VA_ARGS__)
 PARSER_SOURCE
+MESSAGE_SOURCE
+uint64_t hrt_absolute_time() { return 424242; }
+struct CapturePublisher {
+    dyt_aisheng_telemetry_s message{};
+    bool publish(const dyt_aisheng_telemetry_s &value) { message=value; return true; }
+};
+class ProductionPublisher {
+public:
+PUBLISH_SOURCE
+    CapturePublisher _publisher{};
+    uint32_t _publications{0};
+    uint64_t _last_rx{0};
+};
 int main() {
     (void)kDefaultPort;
     std::string line;
     while (std::getline(std::cin, line)) {
         AishengFields fields{};
         JsonParser parser(line.data(), line.size());
-        // 使用与生产UDP接收相同的有界报文门禁；不接受被截断的数据。
         const bool ok = line.size() < kUdpBufferSize && parser.parse(fields);
+        ProductionPublisher bridge;
+        if (ok) { bridge.publish(fields); }
+        // 核对实际publish生成的uORB值，不能用解析器中间字段代替。
+        const auto &msg = bridge._publisher.message;
         std::cout << ok << ' ' << std::setprecision(9)
-                  << fields.los_omega_n << ' ' << fields.los_omega_e << ' '
-                  << fields.los_omega_d << ' ' << fields.gyro_pitch_rate << ' '
-                  << fields.gyro_yaw_rate << ' ' << fields.pitch_los_rate << ' '
-                  << fields.yaw_los_rate << ' ' << fields.gate_x << ' '
-                  << fields.gate_y << '\n';
+                  << msg.los_omega_n << ' ' << msg.los_omega_e << ' '
+                  << msg.los_omega_d << ' ' << msg.gyro_pitch_rate << ' '
+                  << msg.gyro_yaw_rate << ' ' << msg.pitch_los_rate << ' '
+                  << msg.yaw_los_rate << ' ' << msg.gate_x << ' ' << msg.gate_y << ' '
+                  << msg.tracking_gate_w << ' ' << msg.tracking_gate_h << ' '
+                  << bridge._publications << ' ' << msg.timestamp << ' '
+                  << unsigned(msg.self_check) << ' ' << unsigned(msg.work_status) << ' '
+                  << unsigned(msg.track_status) << ' ' << msg.pitch_angle << ' '
+                  << msg.yaw_angle << ' ' << msg.pitch_misalignment << ' '
+                  << msg.yaw_misalignment << ' ' << msg.tracking_confidence << ' '
+                  << msg.target_confidence[0] << ' ' << msg.target_confidence[1] << '\n';
     }
 }
-""".replace('PARSER_SOURCE', parser)
+""".replace('PARSER_SOURCE', parser).replace('MESSAGE_SOURCE', message).replace('PUBLISH_SOURCE', publish)
         cpp = directory/'parser_test.cpp';cpp.write_text(harness)
         cls.executable = directory/'parser_test'
         subprocess.run(['g++','-std=c++17','-O2','-Wall','-Wextra','-Werror',str(cpp),'-o',str(cls.executable)],
@@ -77,22 +119,30 @@ int main() {
         if isinstance(payload, dict):payload=json.dumps(payload,separators=(',',':'))
         output=subprocess.run([str(self.executable)],input=payload+'\n',check=True,
                               capture_output=True,text=True).stdout.strip().split()
-        self.assertEqual(len(output),10,output)
-        self.last_gates=tuple(map(int,output[8:]))
+        self.assertEqual(len(output),24,output)
+        self.last_gates=tuple(map(int,output[8:10]))
+        self.last_dimensions=tuple(map(int,output[10:12]))
+        self.publications=int(output[12])
+        self.message=dict(zip(('timestamp','self_check','work_status','track_status','pitch_angle',
+                               'yaw_angle','pitch_misalignment','yaw_misalignment',
+                               'tracking_confidence','target_confidence_0','target_confidence_1'),
+                              map(float,output[13:])))
         return bool(int(output[0])),list(map(float,output[1:8]))
 
     def assertRejected(self, payload):
         self.assertFalse(self.parse(payload)[0],payload)
+        self.assertEqual(self.publications,0)
 
     def test_old_nine_fields_are_accepted_without_fabricating_vector_zero(self):
         ok,values=self.parse(old_fields());self.assertTrue(ok)
         self.assertTrue(all(math.isnan(x) for x in values[:3]))
         self.assertEqual(values[3:5],[0.,0.])
 
-    def test_existing_thirteen_fields_keep_gyro_and_unknown_gates(self):
+    def test_existing_thirteen_fields_publish_gyro_and_gate_dimensions(self):
         ok,values=self.parse(fields13());self.assertTrue(ok)
         self.assertTrue(all(math.isnan(x) for x in values[:3]))
         self.assertEqual(values[3:],[ -3.,7.,-20.,-20.])
+        self.assertEqual(self.last_dimensions,(1920,1080))
 
     def test_sixteen_fields_publish_raw_vector_without_clipping_or_scaling(self):
         ok,values=self.parse(fields16());self.assertTrue(ok)
@@ -185,6 +235,7 @@ int main() {
     def test_nineteen_fields_ignore_unix_millisecond_timestamp_without_changing_measurements(self):
         expected_ok,expected_values=self.parse(fields18())
         expected_gates=self.last_gates
+        expected_dimensions=self.last_dimensions
         self.assertTrue(expected_ok)
         # Unix毫秒数远超float32精确整数范围；未知扩展字段不能影响测量发布。
         packet=dict(fields18(),timestamp=1793012345678)
@@ -192,10 +243,87 @@ int main() {
         ok,values=self.parse(packet)
         self.assertTrue(ok);self.assertEqual(values,expected_values)
         self.assertEqual(self.last_gates,expected_gates)
+        self.assertEqual(self.last_dimensions,expected_dimensions)
 
     def test_unknown_nested_extension_is_still_compatible(self):
         packet=dict(fields16(),extension={'a':[1,True,None,{'b':'x'}]})
         self.assertTrue(self.parse(packet)[0])
+
+
+    def test_production_publish_maps_existing_measurements_and_hrt_timestamp(self):
+        packet=dict(fields18(),timestamp=1793012345678)
+        self.assertTrue(self.parse(packet)[0]);self.assertEqual(self.publications,1)
+        self.assertEqual(self.message['timestamp'],424242)
+        self.assertEqual(self.message['self_check'],1);self.assertEqual(self.message['work_status'],1)
+        for key in ('track_status','pitch_angle','yaw_angle','pitch_misalignment','yaw_misalignment',
+                    'tracking_confidence'):
+            self.assertAlmostEqual(self.message[key],packet[key],places=5)
+        self.assertAlmostEqual(self.message['target_confidence_0'],packet['target_confidence'],places=6)
+        self.assertEqual(self.message['target_confidence_1'],0)
+
+
+    def test_dimension_half_up_rounding_is_visible_in_production_publish(self):
+        for width,height,expected in ((0,0,(0,0)),(0.49,0.5,(0,1)),(10.5,20.499,(11,20)),
+                                      (1920.123456,1080.75,(1920,1081)),
+                                      (65534.5,65534.9,(65535,65535)),(65535,65535.,(65535,65535))):
+            with self.subTest(width=width,height=height):
+                self.assertTrue(self.parse(dict(fields18(),tracking_gate_w=width,tracking_gate_h=height))[0])
+                self.assertEqual(self.last_dimensions,expected)
+                self.assertEqual(self.publications,1)
+
+    def test_dimension_numeric_exponents_are_accepted_without_relaxing_center_literals(self):
+        raw=json.dumps(fields18(),separators=(',',':'))
+        raw=raw.replace('"tracking_gate_w":1920.123456','"tracking_gate_w":1.235e2')
+        raw=raw.replace('"tracking_gate_h":1080.123456','"tracking_gate_h":5e-1')
+        self.assertTrue(self.parse(raw)[0]);self.assertEqual(self.last_dimensions,(124,1))
+        self.assertEqual(self.last_gates,(960,540))
+
+    def test_dimensions_keep_decimal_precision_at_rounding_and_range_boundaries(self):
+        packet=dict(fields18(),tracking_gate_w=0.499999999,tracking_gate_h=65534.499999)
+        self.assertTrue(self.parse(packet)[0]);self.assertEqual(self.last_dimensions,(0,65534))
+        for key in ('tracking_gate_w','tracking_gate_h'):
+            for value in (65535.000001,-1e-50):
+                with self.subTest(key=key,value=value):
+                    self.assertRejected(dict(fields18(),**{key:value}))
+
+    def test_dimensions_remain_independently_optional_for_legacy_packets(self):
+        for fields in (old_fields,fields13,fields16,fields18):
+            base=fields();base.pop('tracking_gate_w',None);base.pop('tracking_gate_h',None)
+            for extension,expected in (({},(0,0)),({'tracking_gate_w':12.5},(13,0)),
+                                       ({'tracking_gate_h':24.5},(0,25))):
+                with self.subTest(fields=fields.__name__,extension=extension):
+                    self.assertTrue(self.parse(dict(base,**extension))[0])
+                    self.assertEqual(self.last_dimensions,expected)
+                    self.assertEqual(self.publications,1)
+
+    def test_duplicate_dimensions_at_mask_bits_sixteen_and_seventeen_are_rejected(self):
+        for fields in (fields13,fields18):
+            raw=json.dumps(fields(),separators=(',',':'))
+            for key in ('tracking_gate_w','tracking_gate_h'):
+                with self.subTest(fields=fields.__name__,key=key):
+                    self.assertRejected(raw[:-1]+','+json.dumps(key)+':2}')
+
+    def test_dimensions_and_high_gate_center_bits_are_order_independent(self):
+        packet=fields18()
+        for items in (list(packet.items()),list(reversed(list(packet.items())))):
+            self.assertTrue(self.parse(dict(items))[0])
+            self.assertEqual(self.last_dimensions,(1920,1080))
+            self.assertEqual(self.last_gates,(960,540))
+
+    def test_dimensions_reject_non_numeric_nonfinite_negative_and_out_of_range_values(self):
+        raw=json.dumps(fields18(),separators=(',',':'))
+        for key,old in (('tracking_gate_w','1920.123456'),('tracking_gate_h','1080.123456')):
+            for literal in ('-1','-0.1','65535.1','65536','1e10','1e500','NaN','Infinity','-Infinity',
+                            'null','true','false','"12"','[]','{}','01','+1'):
+                with self.subTest(key=key,value=literal):
+                    self.assertRejected(raw.replace('"'+key+'":'+old,'"'+key+'":'+literal))
+
+    def test_real_nineteen_field_packet_publishes_dimensions_and_center_together(self):
+        packet=dict(fields18(),tracking_gate_w=50.5,tracking_gate_h=40.49,timestamp=1793012345678)
+        self.assertEqual(len(packet),19)
+        self.assertTrue(self.parse(packet)[0]);self.assertEqual(self.publications,1)
+        self.assertEqual(self.last_dimensions,(51,40));self.assertEqual(self.last_gates,(960,540))
+        self.assertEqual(self.message['timestamp'],424242)
 
 
 if __name__=='__main__':unittest.main()

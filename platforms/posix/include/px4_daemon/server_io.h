@@ -49,4 +49,28 @@ __BEGIN_DECLS
  */
 __EXPORT FILE *get_stdout(bool *isatty_);
 
+/** 获取当前命令的输入描述符；远程命令使用 MAVLink shell 的输入管道。 */
+__EXPORT int get_stdin(void);
+
 __END_DECLS
+
+#ifdef __cplusplus
+namespace px4_daemon
+{
+
+/** 仅为当前线程绑定命令输入输出，不改变其他 PX4 线程的文件描述符。 */
+class ScopedStdio
+{
+public:
+	ScopedStdio(int input_fd, FILE *output);
+	~ScopedStdio();
+	ScopedStdio(const ScopedStdio &) = delete;
+	ScopedStdio &operator=(const ScopedStdio &) = delete;
+
+private:
+	int _previous_input;
+	FILE *_previous_output;
+};
+
+} // namespace px4_daemon
+#endif

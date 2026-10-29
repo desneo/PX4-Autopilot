@@ -44,3 +44,45 @@ parameters:
         default: 0.1
         min: 0.005
         max: 2.0
+      STRIKE_LP_HZ:
+        description:
+          short: 制导低通滤波频率
+        type: float
+        default: 10.0
+        min: 0.0
+        max: 100.0
+      STRIKE_P1:
+        description:
+          short: 预留可调参数1(默认0,按需使用)
+        type: float
+        default: 1.0
+        min: -100.0
+        max: 100.0
+      STRIKE_P2:
+        description:
+          short: 预留可调参数2(默认0,按需使用)
+        type: float
+        default: 0.2
+        min: -100.0
+        max: 100.0
+      STRIKE_P3:
+        description:
+          short: 预留可调参数3(默认0,按需使用)
+        type: float
+        default: 0.15
+        min: -100.0
+        max: 100.0
+      STRIKE_P4:
+        description:
+          short: 预留可调参数4(默认0,按需使用)
+        type: float
+        default: 0.0045
+        min: -100.0
+        max: 100.0
+      STRIKE_P5:
+        description:
+          short: 预留可调参数5(默认0,按需使用)
+        type: float
+        default: 0.0
+        min: -100.0
+        max: 100.0

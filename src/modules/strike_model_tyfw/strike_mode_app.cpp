@@ -21,12 +21,18 @@ StrikeModeAPP::StrikeModeAPP() :
 	_loop_perf = perf_alloc(PC_ELAPSED, MODULE_NAME": cycle");
 
 	// ---- 查找打击模式参数 ----
-	_param_bool_search = param_find("STRIKE_SEARCH");
-	_param_bool_request = param_find("STRIKE_REQUEST");
+	_param_bool_search        = param_find("STRIKE_SEARCH");
+	_param_bool_request       = param_find("STRIKE_REQUEST");
 	_param_strike_roll_kp     = param_find("STRIKE_ROLL_KP");
 	_param_strike_roll_ki     = param_find("STRIKE_ROLL_KI");
 	_param_strike_pitch_kp    = param_find("STRIKE_PITCH_KP");
 	_param_strike_pitch_ki    = param_find("STRIKE_PITCH_KI");
+	_param_strike_lowpass_hz  = param_find("STRIKE_LP_HZ");
+	_param_param1             = param_find("STRIKE_P1");
+	_param_param2             = param_find("STRIKE_P2");
+	_param_param3             = param_find("STRIKE_P3");
+	_param_param4             = param_find("STRIKE_P4");
+	_param_param5             = param_find("STRIKE_P5");
 
 	if (_param_bool_search == PARAM_INVALID) {
 		PX4_WARN("param STRIKE_SEARCH not found");
@@ -52,6 +58,29 @@ StrikeModeAPP::StrikeModeAPP() :
 		PX4_WARN("param STRIKE_PITCH_KI not found");
 	}
 
+	if (_param_strike_lowpass_hz == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_LP_HZ not found");
+	}
+
+	if (_param_param1 == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_P1  not found");
+	}
+
+	if (_param_param2 == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_P2  not found");
+	}
+
+	if (_param_param3 == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_P3  not found");
+	}
+
+	if (_param_param4 == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_P4  not found");
+	}
+
+	if (_param_param5 == PARAM_INVALID) {
+		PX4_WARN("param STRIKE_P5  not found");
+	}
 }
 
 StrikeModeAPP::~StrikeModeAPP()
@@ -67,7 +96,7 @@ bool StrikeModeAPP::init()
 {
 	PX4_INFO("打击制导初始化!");
 	// 调度 Run() 以 10ms（100Hz）的间隔执行
-	ScheduleOnInterval(10000_us);
+    	ScheduleOnInterval(10000_us);
 
 	Intercepe_Strike_Model_AS_initialize();
 	return true;
@@ -131,6 +160,8 @@ void StrikeModeAPP::Run()
 	Intercepe_Strike_Model_AS_U.SeekerData.workStatus = _dyt_aisheng.work_status;
 	Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult = _dyt_aisheng.self_check;
 	Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence = _dyt_aisheng.tracking_confidence;
+	Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth = _dyt_aisheng.tracking_gate_w;
+	Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight = _dyt_aisheng.tracking_gate_h;
 	Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch = _dyt_aisheng.pitch_los_rate;
 	Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw = _dyt_aisheng.yaw_los_rate;
 	Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch = _dyt_aisheng.pitch_misalignment;
@@ -145,10 +176,15 @@ void StrikeModeAPP::Run()
 	Intercepe_Strike_Model_AS_U.current_pitch = cur_pitch;
 	Intercepe_Strike_Model_AS_U.current_yaw = cur_yaw;
 	Intercepe_Strike_Model_AS_U.current_thr = -_vehicle_thrust_sp.xyz[2];
+	Intercepe_Strike_Model_AS_U.current_vx = _vehicle_local_position.vx;
+	Intercepe_Strike_Model_AS_U.current_vy = _vehicle_local_position.vy;
 	Intercepe_Strike_Model_AS_U.current_vz = _vehicle_local_position.vz;
 	Intercepe_Strike_Model_AS_U.current_posn = _vehicle_local_position.x;
 	Intercepe_Strike_Model_AS_U.current_pose = _vehicle_local_position.y;
 	Intercepe_Strike_Model_AS_U.current_posd = _vehicle_local_position.z;
+	Intercepe_Strike_Model_AS_U.current_vel_mag = sqrtf(_vehicle_local_position.vx * _vehicle_local_position.vx
+                                                  + _vehicle_local_position.vy * _vehicle_local_position.vy
+                                                  + _vehicle_local_position.vz * _vehicle_local_position.vz);
 	// ---- 读取打击模式参数 ----
 	if (_param_bool_search != PARAM_INVALID) {
 		param_get(_param_bool_search, &_bool_search);
@@ -170,7 +206,24 @@ void StrikeModeAPP::Run()
 	if (_param_strike_pitch_ki != PARAM_INVALID) {
 		param_get(_param_strike_pitch_ki, &_strike_pitch_ki);
 	}
-
+	if (_param_strike_lowpass_hz != PARAM_INVALID) {
+		param_get(_param_strike_lowpass_hz, &_strike_lowpass_hz);
+	}
+	if (_param_param1 != PARAM_INVALID) {
+		param_get(_param_param1, &_param1);
+	}
+	if (_param_param2 != PARAM_INVALID) {
+		param_get(_param_param2, &_param2);
+	}
+	if (_param_param3 != PARAM_INVALID) {
+		param_get(_param_param3, &_param3);
+	}
+	if (_param_param4 != PARAM_INVALID) {
+		param_get(_param_param4, &_param4);
+	}
+	if (_param_param5 != PARAM_INVALID) {
+		param_get(_param_param5, &_param5);
+	}
 	// ---- 打击模式开关 ----
 	Intercepe_Strike_Model_AS_U.bool_search = (_bool_search != 0) ? 1 : 0;
 	Intercepe_Strike_Model_AS_U.bool_request = (_bool_request != 0) ? 1 : 0;
@@ -180,22 +233,55 @@ void StrikeModeAPP::Run()
 	STRIKE_PARAM.STRIKE_ROLL_KI    = _strike_roll_ki;
 	STRIKE_PARAM.STRIKE_PITCH_KP   = _strike_pitch_kp;
 	STRIKE_PARAM.STRIKE_PITCH_KI   = _strike_pitch_ki;
-
+	STRIKE_PARAM.STRIKE_LOWPASS_HZ = _strike_lowpass_hz;
+	STRIKE_PARAM.param1            = _param1;
+	STRIKE_PARAM.param2            = _param2;
+	STRIKE_PARAM.param3            = _param3;
+	STRIKE_PARAM.param4            = _param4;
+	STRIKE_PARAM.param5            = _param5;
 	Intercepe_Strike_Model_AS_step();
+
+	// 日志记录
 	strike_mode_status_s status{};
 	status.timestamp = hrt_absolute_time();
-	status.arming_state = Intercepe_Strike_Model_AS_U.arming_state;
-
-	// ---- SeekerData.timestamp 是 uint64_T，直接赋值 ----
 	status.timestamp_seekerdata = Intercepe_Strike_Model_AS_U.SeekerData.timestamp;
-	status.bool_search = Intercepe_Strike_Model_AS_U.bool_search;
-	status.bool_request = Intercepe_Strike_Model_AS_U.bool_request;
-	status.target_x = _dyt_aisheng.gate_x;
-	status.target_y = _dyt_aisheng.gate_y;
-	status.gyro_pitch_rate = Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch;
-	status.gyro_yaw_rate = Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw;
-	status.guided_state = Intercepe_Strike_Model_AS_B.guided_state;
-	status.time_gate = Intercepe_Strike_Model_AS_DW.time_gate;
+	status.self_check_result    = Intercepe_Strike_Model_AS_U.SeekerData.selfCheckResult;
+	status.work_status          = Intercepe_Strike_Model_AS_U.SeekerData.workStatus;
+	status.track_confidence     = Intercepe_Strike_Model_AS_U.SeekerData.trackConfidence;
+	status.track_box_width      = Intercepe_Strike_Model_AS_U.SeekerData.trackBoxWidth;
+	status.track_box_height     = Intercepe_Strike_Model_AS_U.SeekerData.trackBoxHeight;
+	status.los_rate_pitch       = Intercepe_Strike_Model_AS_U.SeekerData.losRatePitch;
+	status.los_rate_yaw         = Intercepe_Strike_Model_AS_U.SeekerData.losRateYaw;
+	status.misalign_pitch       = Intercepe_Strike_Model_AS_U.SeekerData.misalignPitch;
+	status.misalign_yaw         = Intercepe_Strike_Model_AS_U.SeekerData.misalignYaw;
+	status.frame_angle_pitch    = Intercepe_Strike_Model_AS_U.SeekerData.frameAnglePitch;
+	status.frame_angle_yaw      = Intercepe_Strike_Model_AS_U.SeekerData.frameAngleYaw;
+	status.bool_search          = Intercepe_Strike_Model_AS_U.bool_search;
+	status.bool_request         = Intercepe_Strike_Model_AS_U.bool_request;
+	status.arming_state         = Intercepe_Strike_Model_AS_U.arming_state;
+	status.current_roll         = Intercepe_Strike_Model_AS_U.current_roll;
+	status.current_pitch        = Intercepe_Strike_Model_AS_U.current_pitch;
+	status.current_yaw          = Intercepe_Strike_Model_AS_U.current_yaw;
+	status.current_vx           = Intercepe_Strike_Model_AS_U.current_vx;
+	status.current_vy           = Intercepe_Strike_Model_AS_U.current_vy;
+	status.current_vz           = Intercepe_Strike_Model_AS_U.current_vz;
+	status.current_posn         = Intercepe_Strike_Model_AS_U.current_posn;
+	status.current_pose         = Intercepe_Strike_Model_AS_U.current_pose;
+	status.current_posd         = Intercepe_Strike_Model_AS_U.current_posd;
+	status.current_thr          = Intercepe_Strike_Model_AS_U.current_thr;
+	status.current_vel_mag      = Intercepe_Strike_Model_AS_U.current_vel_mag;
+	status.time_gate            = Intercepe_Strike_Model_AS_DW.time_gate;
+	status.guided_state         = Intercepe_Strike_Model_AS_B.guided_state;
+	status.cmd_timestamp        = Intercepe_Strike_Model_AS_Y.VehicleCommand.timestamp;
+	status.cmd_command          = Intercepe_Strike_Model_AS_Y.VehicleCommand.command;
+	status.cmd_param1           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param1;
+	status.cmd_param2           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param2;
+	status.cmd_param3           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param3;
+	status.cmd_param4           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param4;
+	status.cmd_param5           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param5;
+	status.cmd_param6           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param6;
+	status.cmd_param7           = Intercepe_Strike_Model_AS_Y.VehicleCommand.param7;
+	status.cmd_valid            = Intercepe_Strike_Model_AS_Y.VehicleCommand.cmd_valid;
 	_strike_mode_status_pub.publish(status);
 
 	const VehicleCommandBus &sim_cmd = Intercepe_Strike_Model_AS_Y.VehicleCommand;
