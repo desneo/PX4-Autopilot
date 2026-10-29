@@ -1,8 +1,8 @@
 /****************************************************************************
  *
- * TELEM2 DYT telemetry parser for zhongkeyoucheng / aisheng devices.
+ * DYT telemetry parser for zhongkeyoucheng / aisheng devices.
  *
- * The module reads the byte stream on TELEM2 and identifies the vendor by the
+ * The module reads the byte stream on the configured DYT UART and identifies the vendor by the
  * frame header:
  *   - 0xEE 0x16: zhongkeyoucheng 32-byte periodic telemetry (60 Hz)
  *   - 0x55 0xAA: aisheng 104-byte telemetry (length byte 0x68)
@@ -22,6 +22,7 @@
 
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/posix.h>
+#include <px4_platform_common/getopt.h>
 #include <drivers/drv_hrt.h>
 #include <parameters/param.h>
 #include <uORB/Publication.hpp>
@@ -75,6 +76,12 @@ uint32_t read_u32(const uint8_t *data)
 class SerialProbe : public ModuleBase<SerialProbe>
 {
 public:
+	explicit SerialProbe(const char *device)
+	{
+		strncpy(_device, device, sizeof(_device) - 1);
+		_device[sizeof(_device) - 1] = '\0';
+	}
+
 	static int task_spawn(int argc, char *argv[])
 	{
 		_task_id = px4_task_spawn_cmd("serial_probe", SCHED_DEFAULT, SCHED_PRIORITY_DEFAULT,
@@ -84,15 +91,39 @@ public:
 
 		return wait_until_running();
 	}
-	static SerialProbe *instantiate(int argc, char *argv[]) { return new SerialProbe(); }
+	static SerialProbe *instantiate(int argc, char *argv[])
+	{
+		const char *device = nullptr;
+		int option_index = 1;
+		int option;
+		const char *option_arg = nullptr;
+
+		while ((option = px4_getopt(argc, argv, "d:", &option_index, &option_arg)) != EOF) {
+			if (option == 'd') {
+				device = option_arg;
+
+			} else {
+				PX4_WARN("unrecognized option");
+				return nullptr;
+			}
+		}
+
+		if (device == nullptr || device[0] == '\0') {
+			print_usage("no device specified");
+			return nullptr;
+		}
+
+		return new SerialProbe(device);
+	}
 	static int custom_command(int, char *[]) { return print_usage("unknown command"); }
 	static int print_usage(const char *reason = nullptr)
 	{
 		if (reason) { PX4_WARN("%s", reason); }
 
-		PRINT_MODULE_DESCRIPTION("Receive and publish DYT telemetry from TELEM2.");
+		PRINT_MODULE_DESCRIPTION("Receive and publish DYT telemetry from a serial port.");
 		PRINT_MODULE_USAGE_NAME("serial_probe", "example");
 		PRINT_MODULE_USAGE_COMMAND("start");
+		PRINT_MODULE_USAGE_PARAM_STRING('d', nullptr, "<file:dev>", "Serial device", false);
 		PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 		return 0;
 	}
@@ -336,7 +367,7 @@ private:
 
 		if (!_aisheng_pub.publish(msg)) { PX4_ERR("publish aisheng telemetry failed"); }
 	}
-	char _device[16] {"/dev/ttyS3"};
+	char _device[32] {};
 	int _fd{-1};
 	uint8_t _brand{kBrandZhongke};
 	uint8_t _buffer[192] {};

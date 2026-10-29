@@ -1,0 +1,6 @@
+module_name: DYT Telemetry
+serial_config:
+    - command: serial_probe start -d ${SERIAL_DEV}
+      port_config_param:
+        name: DYT_PORT_CONFIG
+        group: Serial

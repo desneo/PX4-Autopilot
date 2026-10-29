@@ -2,4 +2,4 @@ menuconfig EXAMPLES_SERIAL_PROBE
     bool "serial_probe"
     default n
     ---help---
-        Parse zhongkeyoucheng / aisheng DYT telemetry on TELEM2 into uORB.
+        Parse zhongkeyoucheng / aisheng DYT telemetry from a serial port into uORB.

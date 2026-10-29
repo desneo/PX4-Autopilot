@@ -11,6 +11,8 @@ param set-default BAT1_V_EMPTY 3.2
 param set-default SYS_HAS_MAG 1
 param set-default PWM_MAIN_TIM0 -4
 param set-default RC_INPUT_PROTO -1
+param set-default DYT_BRAND 1
+param set-default DYT_PORT_CONFIG 103
 
 param set-default MAV_2_CONFIG 104
 param set-default SER_TEL4_BAUD 115200

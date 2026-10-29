@@ -2,20 +2,25 @@
 
 ## 功能范围
 
-1. 基于 PX4 v1.17.0，硬件目标为 `cuav_7-nano_default`。
+1. 基于 PX4 v1.17.0，同时支持 `cuav_7-nano_default` 和 `micoair_h743-v2_default`。
 2. 飞控只接收 DYT 遥测并发布 uORB，不向 DYT 发送任何数据。
-3. TELEM2 固定为 DYT 接口，对应 `/dev/ttyS3`，TTL 电平转换已由硬件验证正常。
-4. 实体串口输入和 SITL UDP 输入二选一，不要求同时接收。
+3. DYT 接口由 QGC 参数 `DYT_PORT_CONFIG` 从当前飞控支持的串口中选择，不固定设备路径。
+4. CUAV 7-Nano 默认选择 TELEM2；MicoAir743V2 默认选择 TELEM3（物理 UART5）。
+5. 实体串口输入和 SITL UDP 输入二选一，不要求同时接收。
 
 ## 实体串口
 
-1. `serial_probe` 在 CUAV 7-Nano 开机时自动启动。
-2. 串口使用 8N1、无流控，并以只读方式打开。
-3. 参数 `DYT_BRAND` 只选择接收波特率：
+1. `DYT_PORT_CONFIG` 使用 PX4 原生串口配置下拉列表，`0` 表示禁用，修改后重启飞控生效。
+2. PX4 根据 `DYT_PORT_CONFIG` 解析设备路径，并以 `serial_probe start -d ${SERIAL_DEV}` 自动启动模块。
+3. 手工启动 `serial_probe` 时必须显式提供 `-d <device>`，不存在板型相关的默认设备路径。
+4. 已被其他模块占用的串口不得重复分配；冲突时不启动 `serial_probe`，且不影响原占用模块和飞控运行。
+5. 串口使用 8N1、无流控，并以只读方式打开；无数据时保持等待，设备打开或配置失败时仅退出当前模块任务。
+6. 参数 `DYT_BRAND` 只选择接收波特率：
    - `0`：`zhongkeyoucheng`，115200 baud；
    - `1`：`aisheng`，230400 baud。
-4. 修改 `DYT_BRAND` 后，重启 `serial_probe` 使波特率生效。
-5. 解析器按帧头识别厂家报文，不依赖 `DYT_BRAND` 判断报文类型。
+7. 修改 `DYT_BRAND` 后，重启 `serial_probe` 使波特率生效；各 `SER_*_BAUD` 参数不控制 DYT 波特率。
+8. 解析器按帧头识别厂家报文，不依赖 `DYT_BRAND` 判断报文类型。
+9. MicoAir743V2 的 `DYT_BRAND` 板级默认值为 `1`，用于艾晟导引头；CUAV 7-Nano 保持参数默认值 `0`。
 
 ## 中科友成遥测
 
@@ -52,3 +57,10 @@
 2. 使用 `listener dyt_aisheng_telemetry` 或 `listener dyt_zhongke_telemetry` 检查数据与发布频率。
 3. `serial_probe status` 应显示当前品牌、波特率、有效帧数和错误计数。
 4. 若实体串口持续无数据，先检查并交换 DYT TX/RX 接线。
+
+## PC 串口模拟器
+
+1. `agent_zsh/aisheng_serial_sim.py` 通过 USB 转串口模拟艾晟 DYT，只发送遥测报文。
+2. 模拟器使用 230400 baud、8N1、无流控，默认以 60 Hz 持续发送合法 104-byte 报文。
+3. 缺省时自动选择唯一 FTDI 或 `/dev/ttyUSB*` 设备，也可使用 `--port` 显式指定。
+4. 使用 `Ctrl+C` 停止发送；`--count` 可限制发送帧数，`--dry-run` 可在不访问串口时输出单帧。

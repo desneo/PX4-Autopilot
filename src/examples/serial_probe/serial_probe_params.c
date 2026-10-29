@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Parameter definitions for the TELEM2 DYT telemetry parser.
+ * Parameter definitions for the DYT telemetry parser.
  *
  * This file is only scanned by the PX4 parameter generator; it is not
  * compiled, so PARAM_DEFINE_INT32 has no macro definition here on purpose.
@@ -8,7 +8,7 @@
  ****************************************************************************/
 
 /**
- * DYT device brand on TELEM2.
+ * DYT device brand on the configured DYT UART.
  *
  * Selects the DYT telemetry device and therefore the port baud rate:
  * zhongkeyoucheng uses 115200 baud, aisheng uses 230400 baud.

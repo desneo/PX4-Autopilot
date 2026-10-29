@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """直接编译生产串口解析方法，验证帧恢复及连续输入的返回性，不访问串口硬件。"""
 
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -12,6 +13,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = ROOT.parents[2]
+
+SIMULATOR_SPEC = importlib.util.spec_from_file_location(
+    "aisheng_serial_sim", REPOSITORY / "agent_zsh/aisheng_serial_sim.py")
+SIMULATOR = importlib.util.module_from_spec(SIMULATOR_SPEC)
+SIMULATOR_SPEC.loader.exec_module(SIMULATOR)
 
 
 def aisheng_frame():
@@ -176,6 +182,32 @@ int main() {
             self.assertEqual(state["zhongke_frames"], state["zhongke_publications"], state)
         return states
 
+    def test_serial_port_parameter_integration(self):
+        source = (ROOT / "serial_probe.cpp").read_text()
+        cmake = (ROOT / "CMakeLists.txt").read_text()
+        module_config = (ROOT / "module.yaml").read_text()
+        micoair_board = (REPOSITORY / "boards/micoair/h743-v2/default.px4board").read_text()
+        micoair_defaults = (REPOSITORY / "boards/micoair/h743-v2/init/rc.board_defaults").read_text()
+        micoair_extras = (REPOSITORY / "boards/micoair/h743-v2/init/rc.board_extras").read_text()
+        cuav_board = (REPOSITORY / "boards/cuav/7-nano/default.px4board").read_text()
+        cuav_defaults = (REPOSITORY / "boards/cuav/7-nano/init/rc.board_defaults").read_text()
+
+        self.assertNotIn("/dev/ttyS3", source)
+        self.assertIn("const char *device = nullptr;", source)
+        self.assertIn('print_usage("no device specified")', source)
+        self.assertIn("MODULE_CONFIG", cmake)
+        self.assertIn("module.yaml", cmake)
+        self.assertIn("name: DYT_PORT_CONFIG", module_config)
+        self.assertIn("serial_probe start -d ${SERIAL_DEV}", module_config)
+        self.assertIn('CONFIG_BOARD_SERIAL_TEL3="/dev/ttyS4"', micoair_board)
+        self.assertIn("CONFIG_EXAMPLES_SERIAL_PROBE=y", micoair_board)
+        self.assertIn("param set-default DYT_BRAND 1", micoair_defaults)
+        self.assertIn("param set-default DYT_PORT_CONFIG 103", micoair_defaults)
+        self.assertNotIn("serial_probe start", micoair_extras)
+        self.assertIn("CONFIG_EXAMPLES_SERIAL_PROBE=y", cuav_board)
+        self.assertIn("param set-default DYT_PORT_CONFIG 102", cuav_defaults)
+        self.assertFalse((REPOSITORY / "boards/cuav/7-nano/init/rc.board_extras").exists())
+
     def test_valid_aisheng_104_byte_frame_decodes_fields_and_publishes_once(self):
         state = self.parse([aisheng_frame()])[-1]
         self.assertEqual(state["aisheng_publications"], 1)
@@ -206,6 +238,17 @@ int main() {
             self.assertAlmostEqual(message["target_alt"][i], (1234 + i) * .1, delta=.0001)
         self.assertGreater(message["timestamp"], 0)
         self.assertNotEqual(message["timestamp"], message["device_timestamp"])
+
+    def test_pc_serial_simulator_frame_is_accepted(self):
+        frame = SIMULATOR.build_frame(123)
+        state = self.parse([frame])[-1]
+        self.assertEqual(len(frame), 104)
+        self.assertEqual(frame[:3], bytes((0x55, 0xAA, 0x68)))
+        self.assertEqual(sum(frame[3:103]) & 0xFF, frame[103])
+        self.assertEqual(state["aisheng_publications"], 1)
+        self.assertEqual(state["aisheng"]["gate_x"], 922)
+        self.assertEqual(state["aisheng"]["gate_y"], 501)
+        self.assertEqual(state["aisheng"]["device_timestamp"], 123)
 
     def test_every_fragment_boundary_waits_until_frame_complete(self):
         frame = aisheng_frame()
