@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""场景 02 靶机管理服务：场景航迹控制与 10 Hz UDP 真值。"""
+"""场景 02 靶机管理服务：场景航迹控制与 QGC 状态。"""
 
 from __future__ import annotations
 
@@ -74,7 +74,6 @@ class TargetConfig:
     altitude: float
     distance: float
     direction: str
-    station_address: tuple[str, int]
 
     @property
     def source_xy(self) -> tuple[float, float]:
@@ -144,7 +143,6 @@ def validate_config(payload: dict, terrain: TerrainMap) -> TargetConfig:
         )
     if not 100 <= distance <= 10000:
         raise ValueError("来源距离必须在 100～10000 米")
-    station = parse_station(str(payload.get("station_address", "")))
     unit = DIRECTIONS[direction]["unit"]
     source = distance * unit[0], distance * unit[1]
     endpoint = -500.0 * unit[0], -500.0 * unit[1]
@@ -158,7 +156,7 @@ def validate_config(payload: dict, terrain: TerrainMap) -> TargetConfig:
             f"海拔高度至少应为 {minimum_altitude:.1f} m，"
             "以高出整段航线最高地形30米"
         )
-    return TargetConfig(model, speed, altitude, distance, direction, station)
+    return TargetConfig(model, speed, altitude, distance, direction)
 
 
 def make_visual_model(source: Path, output: Path, model_name: str) -> Path:
@@ -338,11 +336,10 @@ class TargetSession:
         self.truth_event = threading.Event()
         self.truth_lock = threading.Lock()
         self.truth: tuple[float, float, float, float, bool] | None = None
-        self.last_udp = 0.0
-        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.mavlink_proxy = MavlinkTargetProxy(
             manager.qgc_address, manager.mavlink_system_id
         )
+        self.mavlink_failed = False
         self.model_created = False
         self.cleaned = False
 
@@ -423,39 +420,8 @@ class TargetSession:
         self._status(
             "collided",
             f"靶机已与 PX4 飞机碰撞（相对速度 {relative_speed:.1f} m/s），"
-            "航迹和遥测已停止，请点击终止靶机清理模型",
+            "航迹和 QGC 状态已停止，请点击终止靶机清理模型",
         )
-
-    def _send_udp_if_due(self) -> None:
-        now = time.monotonic()
-        if now - self.last_udp < 0.1:
-            return
-        with self.truth_lock:
-            truth = self.truth
-        if truth is None:
-            return
-        x, y, _z, speed, _done = truth
-        latitude, longitude = coordinate_offset(
-            self.manager.terrain.center_latitude,
-            self.manager.terrain.center_longitude,
-            x,
-            y,
-        )
-        payload = {
-            "type": "target_truth",
-            "source": "simulation_truth",
-            "timestamp_ms": int(time.time() * 1000),
-            "model": self.config.model,
-            "latitude": latitude,
-            "longitude": longitude,
-            "altitude_msl_m": self.config.altitude,
-            "speed_m_s": speed,
-        }
-        self.udp_socket.sendto(
-            json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(),
-            self.config.station_address,
-        )
-        self.last_udp = now
 
     def _send_mavlink(self) -> None:
         with self.truth_lock:
@@ -469,13 +435,26 @@ class TargetSession:
             x,
             y,
         )
-        self.mavlink_proxy.update(
-            self.config,
-            truth,
-            latitude,
-            longitude,
-            self.manager.terrain.origin_elevation,
-        )
+        try:
+            self.mavlink_proxy.update(
+                self.config,
+                truth,
+                latitude,
+                longitude,
+                self.manager.terrain.origin_elevation,
+            )
+        except OSError as error:
+            if not self.mavlink_failed:
+                self.mavlink_failed = True
+                self._status(
+                    "running",
+                    f"靶机仍在运行，但 QGC 状态发送失败：{error}；"
+                    "将继续重试",
+                )
+            return
+        if self.mavlink_failed:
+            self.mavlink_failed = False
+            self._status("running", "QGC 状态发送已恢复，靶机继续运行")
 
     def run(self) -> None:
         self._status("starting", "正在生成靶机视觉模型…")
@@ -502,7 +481,6 @@ class TargetSession:
         while not self.stop_event.wait(0.05):
             if self.collided_event.is_set():
                 continue
-            self._send_udp_if_due()
             self._send_mavlink()
             with self.truth_lock:
                 done = self.truth is not None and self.truth[4]
@@ -516,7 +494,6 @@ class TargetSession:
         self.cleaned = True
         self.stop_event.set()
         self.manager.publish_trajectory("STOP")
-        self.udp_socket.close()
         self.mavlink_proxy.close()
         try:
             self.remove_model()
@@ -663,7 +640,7 @@ class TargetManager:
             if error is not None:
                 self.publish_status("error", f"靶机启动或航迹控制失败：{error}")
             elif stopped and not self.shutdown_event.is_set():
-                self.publish_status("idle", "靶机已终止，位置数据发送已停止")
+                self.publish_status("idle", "靶机已终止，航迹和 QGC 状态已停止")
 
     def stop(self) -> None:
         with self.lock:
@@ -672,7 +649,7 @@ class TargetManager:
             self.publish_status("idle", "当前没有运行中的靶机")
             return
         self.publish_status(
-            "stopping", "正在终止靶机并停止位置数据发送…", session.config.model
+            "stopping", "正在终止靶机并停止航迹与 QGC 状态…", session.config.model
         )
         session.stop_event.set()
 

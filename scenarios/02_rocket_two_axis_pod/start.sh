@@ -529,7 +529,7 @@ fi
 echo "其他碰撞：      飞机与地形/建筑物/靶机的检测和致损保持启用；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
 if ((GUI)); then
 	echo "雷达/靶机控制：使用 Gazebo 地图右侧的固定控制面板。"
-	echo "地面站 JSON：   雷达航迹默认 1 Hz（可设 1～2 Hz），靶机真值 10 Hz；共享面板地址。"
+	echo "地面站 JSON：   雷达航迹默认 1 Hz（可设 1～2 Hz）。"
 	echo "QGC 靶机：      udp://${TARGET_QGC_ADDRESS}，SYSID=${TARGET_MAVLINK_SYSID}（只读轻量代理）。"
 fi
 echo "接口表：${RUNTIME_DIR}/interfaces.tsv"

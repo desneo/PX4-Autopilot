@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""对已运行的场景 02 验证雷达航迹与靶机真值共用 UDP 地址。"""
+"""对已运行的场景 02 验证雷达对靶机的航迹输出。"""
 
 from __future__ import annotations
 
@@ -46,9 +46,8 @@ def main() -> int:
         "altitude": args.altitude,
         "distance": 2000.0,
         "direction": "east_west",
-        "station_address": station,
     })
-    packets: dict[str, list[dict]] = {"target_truth": [], "radar_tracks": []}
+    scans: list[dict] = []
     deadline = time.monotonic() + args.duration
     try:
         while time.monotonic() < deadline:
@@ -57,18 +56,13 @@ def main() -> int:
             except socket.timeout:
                 continue
             value = json.loads(data)
-            packet_type = value.get("type")
-            if packet_type in packets:
-                packets[packet_type].append(value)
+            if value.get("type") == "radar_tracks":
+                scans.append(value)
     finally:
         publish(target, {"command": "stop"})
         publish(radar, {"command": "stop"})
         receiver.close()
 
-    truth = packets["target_truth"]
-    scans = packets["radar_tracks"]
-    if len(truth) < max(10, int(args.duration * 5)):
-        raise RuntimeError(f"靶机真值频率不足：{len(truth)} packets/{args.duration:g}s")
     if len(scans) < max(2, int(args.duration) - 2):
         raise RuntimeError(f"雷达航迹频率不足：{len(scans)} packets/{args.duration:g}s")
     tracked = [scan for scan in scans if scan.get("tracks")]
@@ -77,12 +71,10 @@ def main() -> int:
     radar_text = json.dumps(tracked, ensure_ascii=False)
     if "xiaobianfu" in radar_text or "rocket_two_axis_pod" in radar_text:
         raise RuntimeError("雷达输出泄露了 Gazebo 模型身份")
-    if any(value.get("source") != "simulation_truth" for value in truth):
-        raise RuntimeError("靶机真值 source 标记错误")
     if any(value.get("source") != "radar_center" for value in scans):
         raise RuntimeError("雷达航迹 source 标记错误")
     print(
-        f"正式场景联合测试通过：truth={len(truth)}，radar={len(scans)}，"
+        f"正式场景联合测试通过：radar={len(scans)}，"
         f"tracked_scans={len(tracked)}，station={station}"
     )
     print(json.dumps(tracked[-1], ensure_ascii=False, indent=2))

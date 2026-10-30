@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from unittest import mock
 import xml.etree.ElementTree as ET
-import json
 
 
 HERE = Path(__file__).resolve().parent
@@ -36,7 +35,6 @@ class TargetManagerTest(unittest.TestCase):
             "altitude": 104.019969,
             "distance": 2000,
             "direction": "east_west",
-            "station_address": "127.0.0.1:7788",
         }
         value.update(changes)
         return value
@@ -67,7 +65,7 @@ class TargetManagerTest(unittest.TestCase):
         self.assertLess(northeast.endpoint_xy[0], 0)
         self.assertLess(northeast.endpoint_xy[1], 0)
 
-    def test_rejects_low_altitude_distance_and_station(self):
+    def test_rejects_low_altitude_and_distance(self):
         with self.assertRaisesRegex(ValueError, "最高地形30米"):
             MODULE.validate_config(self.payload(altitude=35), FakeTerrain())
         with self.assertRaisesRegex(ValueError, "100～10000"):
@@ -82,8 +80,6 @@ class TargetManagerTest(unittest.TestCase):
             MODULE.validate_config(self.payload(distance=10000), FakeTerrain()).distance,
             10000,
         )
-        with self.assertRaisesRegex(ValueError, "主机:端口"):
-            MODULE.validate_config(self.payload(station_address="127.0.0.1"), FakeTerrain())
 
     def test_coordinate_offset_uses_east_and_north_axes(self):
         latitude, longitude = MODULE.coordinate_offset(32.0, 119.0, 1000, 0)
@@ -140,7 +136,6 @@ class TargetManagerTest(unittest.TestCase):
             proxy = MODULE.MavlinkTargetProxy(("127.0.0.1", 14550), 200)
             config = MODULE.TargetConfig(
                 "xiaomotuo", 35, 104.019969, 2000, "east_west",
-                ("127.0.0.1", 7788),
             )
             proxy.update(
                 config,
@@ -174,7 +169,6 @@ class TargetManagerTest(unittest.TestCase):
         manager = FakeManager()
         config = MODULE.TargetConfig(
             "xiaomotuo", 35, 104.019969, 2000, "east_west",
-            ("127.0.0.1", 7788),
         )
         with mock.patch.object(MODULE.socket, "socket", return_value=FakeSocket()):
             session = MODULE.TargetSession(manager, config)
@@ -184,50 +178,6 @@ class TargetManagerTest(unittest.TestCase):
         self.assertEqual(manager.status[-1][0], "collided")
         session.on_collision(35.0)
         self.assertEqual(manager.trajectory, ["STOP"])
-
-    def test_truth_udp_uses_distinct_schema_and_ten_hertz_interval(self):
-        class FakeManager:
-            qgc_address = ("127.0.0.1", 14550)
-            mavlink_system_id = 200
-            terrain = type("Terrain", (), {
-                "center_latitude": 32.217857,
-                "center_longitude": 119.105878,
-                "origin_elevation": 4.019969,
-            })()
-
-        class FakeSocket:
-            def __init__(self):
-                self.sent = []
-            def sendto(self, data, address):
-                self.sent.append((data, address))
-            def close(self):
-                pass
-
-        sockets = []
-        def socket_factory(*_args, **_kwargs):
-            value = FakeSocket()
-            sockets.append(value)
-            return value
-
-        config = MODULE.TargetConfig(
-            "xiaomotuo", 35, 104.019969, 2000, "east_west",
-            ("127.0.0.1", 7790),
-        )
-        with mock.patch.object(MODULE.socket, "socket", side_effect=socket_factory):
-            session = MODULE.TargetSession(FakeManager(), config)
-        session.truth = (1000.0, 0.0, 100.0, 35.0, False)
-        with mock.patch.object(MODULE.time, "monotonic", side_effect=[1.0, 1.05, 1.11]):
-            session._send_udp_if_due()
-            session._send_udp_if_due()
-            session._send_udp_if_due()
-        self.assertEqual(len(sockets[0].sent), 2)
-        payload = json.loads(sockets[0].sent[0][0])
-        self.assertEqual(payload["type"], "target_truth")
-        self.assertEqual(payload["source"], "simulation_truth")
-        self.assertIn("altitude_msl_m", payload)
-        self.assertIn("speed_m_s", payload)
-        self.assertNotIn("range_m", payload)
-
 
 if __name__ == "__main__":
     unittest.main()

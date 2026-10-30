@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
+#include <QSettings>
 #include <gz/common/MouseEvent.hh>
 #include <gz/common/KeyEvent.hh>
 #include <gz/gui/Application.hh>
@@ -22,14 +23,45 @@ namespace
 {
 constexpr double kMinFollowDistanceM = 0.25;
 constexpr double kMaxFollowDistanceM = 500.0;
+constexpr int kRadarResponseTimeoutMs = 5000;
+
+bool IsValidStationAddress(const QString &_address)
+{
+  const QString address = _address.trimmed();
+  const int separator = address.lastIndexOf(':');
+  if (separator <= 0 || separator == address.size() - 1)
+    return false;
+  bool ok = false;
+  const int port = address.mid(separator + 1).toInt(&ok);
+  return ok && port >= 1 && port <= 65535;
+}
 }
 
 TargetControl::TargetControl()
 {
+  QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+      QStringLiteral("PX4"), QStringLiteral("Scenario02TargetControl"));
+  const QString savedAddress = settings.value(
+      QStringLiteral("stationAddress"), this->stationAddress).toString().trimmed();
+  if (IsValidStationAddress(savedAddress))
+    this->stationAddress = savedAddress;
+
+  this->radarResponseTimer.setSingleShot(true);
+  this->radarResponseTimer.setInterval(kRadarResponseTimeoutMs);
+  connect(&this->radarResponseTimer, &QTimer::timeout, this, [this]
+  {
+    if (!this->radarBusy)
+      return;
+    this->radarBusy = false;
+    this->radarStatus = QStringLiteral(
+        "雷达控制响应超时，请检查雷达服务或 WSL 网络后重试");
+    emit this->RadarStateChanged();
+  });
 }
 
 TargetControl::~TargetControl()
 {
+  this->radarResponseTimer.stop();
   this->SetNativeCameraControlBlocked(false);
 }
 
@@ -355,6 +387,7 @@ void TargetControl::PublishRadar(const QString &_json)
 {
   if (!this->radarPublisher.Valid())
   {
+    this->radarResponseTimer.stop();
     this->radarStatus = QStringLiteral("雷达控制服务尚未就绪");
     this->radarBusy = false;
     emit this->RadarStateChanged();
@@ -364,10 +397,24 @@ void TargetControl::PublishRadar(const QString &_json)
   message.set_data(_json.toStdString());
   if (!this->radarPublisher.Publish(message))
   {
+    this->radarResponseTimer.stop();
     this->radarStatus = QStringLiteral("发送雷达控制命令失败");
     this->radarBusy = false;
     emit this->RadarStateChanged();
   }
+}
+
+void TargetControl::SetStationAddress(const QString &_address)
+{
+  const QString address = _address.trimmed();
+  if (!IsValidStationAddress(address) || address == this->stationAddress)
+    return;
+  this->stationAddress = address;
+  QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+      QStringLiteral("PX4"), QStringLiteral("Scenario02TargetControl"));
+  settings.setValue(QStringLiteral("stationAddress"), this->stationAddress);
+  settings.sync();
+  emit this->StationAddressChanged();
 }
 
 void TargetControl::Publish(const QString &_json)
@@ -394,8 +441,7 @@ void TargetControl::StartTarget(
     double _speed,
     double _altitude,
     double _distance,
-    const QString &_direction,
-    const QString &_stationAddress)
+    const QString &_direction)
 {
   if (this->busy)
     return;
@@ -407,7 +453,6 @@ void TargetControl::StartTarget(
       {QStringLiteral("altitude"), _altitude},
       {QStringLiteral("distance"), _distance},
       {QStringLiteral("direction"), _direction},
-      {QStringLiteral("station_address"), _stationAddress},
   };
   this->busy = true;
   this->status = QStringLiteral("正在启动靶机…");
@@ -436,6 +481,7 @@ void TargetControl::StartRadar(
 {
   if (this->radarBusy)
     return;
+  this->SetStationAddress(_stationAddress);
   QJsonObject command{
       {QStringLiteral("command"), QStringLiteral("start")},
       {QStringLiteral("rate_hz"), _rateHz},
@@ -443,6 +489,7 @@ void TargetControl::StartRadar(
   };
   this->radarBusy = true;
   this->radarStatus = QStringLiteral("正在启动雷达…");
+  this->radarResponseTimer.start();
   emit this->RadarStateChanged();
   this->PublishRadar(QString::fromUtf8(
       QJsonDocument(command).toJson(QJsonDocument::Compact)));
@@ -457,6 +504,7 @@ void TargetControl::StopRadar()
   };
   this->radarBusy = true;
   this->radarStatus = QStringLiteral("正在停止雷达…");
+  this->radarResponseTimer.start();
   emit this->RadarStateChanged();
   this->PublishRadar(QString::fromUtf8(
       QJsonDocument(command).toJson(QJsonDocument::Compact)));
@@ -502,6 +550,7 @@ void TargetControl::OnRadarStatus(const gz::msgs::StringMsg &_message)
   const int trackCount = object.value(QStringLiteral("track_count")).toInt();
   QMetaObject::invokeMethod(this, [this, state, message, trackCount]
   {
+    this->radarResponseTimer.stop();
     this->radarBusy = state == QStringLiteral("starting") ||
         state == QStringLiteral("stopping");
     this->radarRunning = state == QStringLiteral("starting") ||

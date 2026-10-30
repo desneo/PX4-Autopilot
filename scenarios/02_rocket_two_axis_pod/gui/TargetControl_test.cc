@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQuickItem>
+#include <QSettings>
 #include <QtTest/QtTest>
 #include <cmath>
 #include <functional>
@@ -25,6 +26,11 @@ class TargetControlTest : public QObject
 
 void TargetControlTest::PublishesStartAndReceivesStatus()
 {
+  QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+      QStringLiteral("PX4"), QStringLiteral("Scenario02TargetControl"));
+  settings.clear();
+  settings.sync();
+
   tinyxml2::XMLDocument config;
   QVERIFY(config.Parse(R"(
     <plugin filename="TargetControl">
@@ -89,6 +95,11 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QVERIFY(plugin.PluginItem());
   QCOMPARE(plugin.DefaultAltitudeM(), 104.019969);
   QCOMPARE(plugin.AircraftCount(), 2);
+  QCOMPARE(plugin.StationAddress(), QStringLiteral("192.168.1.41:7790"));
+  plugin.SetStationAddress(QStringLiteral("192.168.1.100:7790"));
+  scenario_02::TargetControl restoredSettings;
+  QCOMPARE(restoredSettings.StationAddress(),
+      QStringLiteral("192.168.1.100:7790"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("returnToMapCenterButton"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("fixedFollowTitleBar"));
   auto *aircraftCombo = plugin.PluginItem()->findChild<QQuickItem *>(
@@ -121,7 +132,10 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("stopRadarButton"));
   auto *radarRateRange = plugin.PluginItem()->findChild<QQuickItem *>(
       "radarRateRangeLabel");
+  auto *stationField = plugin.PluginItem()->findChild<QQuickItem *>(
+      "stationAddressField");
   QVERIFY(radarRateRange);
+  QVERIFY(stationField);
   QCOMPARE(radarRateRange->property("text").toString(),
       QStringLiteral("1.0～2.0 Hz"));
 
@@ -216,13 +230,13 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
       !plugin.PluginItem()->property("radarCollapsed").toBool(), 1000);
 
   plugin.StartTarget(
-      "xiaomotuo", 35, 104.019969, 2000, "east_west",
-      "192.168.1.41:7790");
+      "xiaomotuo", 35, 104.019969, 2000, "east_west");
   QTRY_VERIFY_WITH_TIMEOUT(!command.isEmpty(), 2000);
   const auto object = QJsonDocument::fromJson(command.toUtf8()).object();
   QCOMPARE(object.value("command").toString(), QString("start"));
   QCOMPARE(object.value("model").toString(), QString("xiaomotuo"));
   QCOMPARE(object.value("speed").toDouble(), 35.0);
+  QVERIFY(!object.contains(QStringLiteral("station_address")));
 
   plugin.StartRadar(1.5, "192.168.1.41:7790");
   QTRY_VERIFY_WITH_TIMEOUT(!radarCommand.isEmpty(), 2000);
@@ -267,6 +281,20 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   }
   QTRY_VERIFY_WITH_TIMEOUT(plugin.RadarRunning(), 2000);
   QCOMPARE(plugin.RadarTrackCount(), 2);
+  QVERIFY(!stationField->property("enabled").toBool());
+
+  plugin.radarResponseTimer.setInterval(20);
+  plugin.StopRadar();
+  QTRY_VERIFY_WITH_TIMEOUT(!plugin.RadarBusy(), 1000);
+  QVERIFY(plugin.RadarStatus().contains(QStringLiteral("响应超时")));
+
+  status.set_data(
+      R"({"state":"idle","message":"雷达已停止","track_count":0})");
+  radarStatusPublisher.Publish(status);
+  QTRY_VERIFY_WITH_TIMEOUT(!plugin.RadarRunning(), 2000);
+  QTRY_VERIFY_WITH_TIMEOUT(stationField->property("enabled").toBool(), 2000);
+  settings.clear();
+  settings.sync();
 }
 
 int main(int argc, char **argv)

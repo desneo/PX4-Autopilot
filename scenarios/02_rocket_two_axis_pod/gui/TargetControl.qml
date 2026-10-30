@@ -95,8 +95,6 @@ Item {
     var distance = Number(distanceField.text)
     if (!isFinite(distance) || distance < 100 || distance > 10000)
       return "来源距离必须在 100～10000 米"
-    if (!root.stationValid(stationField.text.trim()))
-      return "请在雷达控制中填写有效的地面站地址"
     return ""
   }
 
@@ -308,14 +306,15 @@ Item {
               text: "1.0～2.0 Hz"
               color: "#607d8b"
             }
-            Label { text: "地面站地址\n（雷达/靶机真值）"; color: "#202124" }
+            Label { text: "地面站地址\n（雷达航迹）"; color: "#202124" }
             TextField {
               id: stationField
               objectName: "stationAddressField"
               Layout.fillWidth: true
-              text: "192.168.1.41:7790"
+              text: TargetControl.stationAddress
               selectByMouse: true
-              enabled: !TargetControl.radarRunning && !TargetControl.running
+              enabled: !TargetControl.radarRunning && !TargetControl.radarBusy
+              onEditingFinished: TargetControl.SetStationAddress(text.trim())
             }
           }
           RowLayout {
@@ -329,8 +328,10 @@ Item {
               onClicked: {
                 var error = root.validateRadar()
                 radarError.text = error
-                if (error.length === 0)
+                if (error.length === 0) {
+                  TargetControl.SetStationAddress(stationField.text.trim())
                   TargetControl.StartRadar(Number(radarRateField.text), stationField.text.trim())
+                }
               }
             }
             Button {
@@ -477,12 +478,12 @@ Item {
               onClicked: {
                 var error = root.validateTarget()
                 targetError.text = error
-                if (error.length === 0)
+                if (error.length === 0) {
                   TargetControl.StartTarget(
                     root.selectedModel(), Number(speedField.text), Number(altitudeField.text),
                     Number(distanceField.text),
-                    directionBox.currentIndex === 0 ? "east_west" : "northeast_45",
-                    stationField.text.trim())
+                    directionBox.currentIndex === 0 ? "east_west" : "northeast_45")
+                }
               }
             }
             Button {

@@ -368,6 +368,38 @@ class RadarManager:
         }
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(), len(tracks)
 
+    def _stop_after_send_error(
+        self, error: OSError, station: tuple[str, int]
+    ) -> None:
+        with self.lock:
+            # A stop or a new start may have arrived after this packet was queued.
+            # Do not let a stale send failure overwrite that newer state.
+            if not self.running or self.station != station:
+                return
+            self.running = False
+            self.station = None
+            self.tracks.clear()
+            self.pending.clear()
+        self.publish_status(
+            "error",
+            f"雷达航迹发送失败：{error}；已自动停止发送，"
+            "请检查地面站地址和 WSL 网络后重试",
+        )
+
+    def _send_packet(
+        self, packet: bytes, count: int, station: tuple[str, int]
+    ) -> bool:
+        try:
+            self.socket.sendto(packet, station)
+        except OSError as error:
+            # A temporary route loss must not kill the manager. Otherwise the GUI
+            # can never receive the subsequent stop acknowledgement.
+            self._stop_after_send_error(error, station)
+            return False
+        if self.sequence % max(1, int(round(self.rate_hz * 5))) == 0:
+            self.publish_status("running", f"雷达运行中，当前航迹 {count} 条", count)
+        return True
+
     def run(self) -> None:
         self.publish_status("idle", "等待启动雷达")
         while not self.shutdown_event.wait(0.02):
@@ -383,9 +415,7 @@ class RadarManager:
                     while self.pending and self.pending[0][0] <= now:
                         ready.append((self.pending.pop(0), self.station))
             for (_deadline, packet, count), station in ready:
-                self.socket.sendto(packet, station)
-                if self.sequence % max(1, int(round(self.rate_hz * 5))) == 0:
-                    self.publish_status("running", f"雷达运行中，当前航迹 {count} 条", count)
+                self._send_packet(packet, count, station)
 
     def shutdown(self) -> None:
         self.shutdown_event.set()

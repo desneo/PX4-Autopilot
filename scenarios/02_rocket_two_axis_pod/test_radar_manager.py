@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import random
 import sys
+import threading
 import unittest
 
 
@@ -101,6 +102,33 @@ class RadarManagerTest(unittest.TestCase):
         manager.on_target_pose(message)
         observation = manager.observations["xiaobianfu"]
         self.assertEqual((observation.x, observation.y, observation.z), (2000.0, 0.0, 100.0))
+
+    def test_udp_route_failure_stops_scan_but_keeps_manager_available(self):
+        manager = self.make_manager()
+        manager.lock = threading.Lock()
+        manager.running = True
+        manager.station = ("192.168.1.100", 7790)
+        manager.pending = [(1.0, b"queued", 1)]
+        manager.tracks = {"xiaobianfu": MODULE.Track(1)}
+        manager.socket = type(
+            "FailingSocket",
+            (),
+            {"sendto": lambda _self, _packet, _station: (_ for _ in ()).throw(
+                OSError(101, "Network is unreachable")
+            )},
+        )()
+        statuses = []
+        manager.publish_status = lambda *args: statuses.append(args)
+
+        self.assertFalse(
+            manager._send_packet(b"scan", 1, ("192.168.1.100", 7790))
+        )
+        self.assertFalse(manager.running)
+        self.assertIsNone(manager.station)
+        self.assertEqual(manager.pending, [])
+        self.assertEqual(manager.tracks, {})
+        self.assertEqual(statuses[0][0], "error")
+        self.assertIn("已自动停止发送", statuses[0][1])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QTimer>
 #include <gz/gui/Plugin.hh>
 #include <gz/math/Pose3.hh>
 #include <gz/math/Vector2.hh>
@@ -27,6 +28,8 @@ class TargetControl final : public gz::gui::Plugin
   Q_PROPERTY(bool radarRunning READ RadarRunning NOTIFY RadarStateChanged)
   Q_PROPERTY(QString radarStatus READ RadarStatus NOTIFY RadarStateChanged)
   Q_PROPERTY(int radarTrackCount READ RadarTrackCount NOTIFY RadarStateChanged)
+  Q_PROPERTY(QString stationAddress READ StationAddress WRITE SetStationAddress
+      NOTIFY StationAddressChanged)
   Q_PROPERTY(int aircraftCount READ AircraftCount NOTIFY CameraStateChanged)
   Q_PROPERTY(QString targetModel READ TargetModel NOTIFY StateChanged)
   Q_PROPERTY(bool cameraBusy READ CameraBusy NOTIFY CameraStateChanged)
@@ -43,12 +46,12 @@ class TargetControl final : public gz::gui::Plugin
       double _speed,
       double _altitude,
       double _distance,
-      const QString &_direction,
-      const QString &_stationAddress);
+      const QString &_direction);
   public: Q_INVOKABLE void StopTarget();
   public: Q_INVOKABLE void StartRadar(
       double _rateHz, const QString &_stationAddress);
   public: Q_INVOKABLE void StopRadar();
+  public: Q_INVOKABLE void SetStationAddress(const QString &_address);
   public: Q_INVOKABLE void FollowEntity(
       const QString &_entity, const QString &_label);
   public: Q_INVOKABLE void StopFollowing();
@@ -62,6 +65,7 @@ class TargetControl final : public gz::gui::Plugin
   public: bool RadarRunning() const { return this->radarRunning; }
   public: QString RadarStatus() const { return this->radarStatus; }
   public: int RadarTrackCount() const { return this->radarTrackCount; }
+  public: QString StationAddress() const { return this->stationAddress; }
   public: int AircraftCount() const { return this->aircraftCount; }
   public: QString TargetModel() const { return this->targetModel; }
   public: bool CameraBusy() const { return this->cameraBusy; }
@@ -72,6 +76,7 @@ class TargetControl final : public gz::gui::Plugin
 
   signals: void StateChanged();
   signals: void RadarStateChanged();
+  signals: void StationAddressChanged();
   signals: void CameraStateChanged();
 
   protected: void LoadConfig(const tinyxml2::XMLElement *_config) override;
@@ -112,6 +117,8 @@ class TargetControl final : public gz::gui::Plugin
   private: bool radarRunning{false};
   private: QString radarStatus{QStringLiteral("等待操作")};
   private: int radarTrackCount{0};
+  private: QString stationAddress{QStringLiteral("192.168.1.41:7790")};
+  private: QTimer radarResponseTimer;
   private: int aircraftCount{1};
   private: QString targetModel;
   private: bool cameraBusy{false};
