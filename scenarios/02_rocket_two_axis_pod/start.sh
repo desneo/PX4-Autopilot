@@ -154,7 +154,7 @@ fi
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
 	|| pgrep -f '[g]imbal_bridge[.]py' >/dev/null \
-	|| pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/main[.]py' >/dev/null \
+	|| pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/(main|video_worker|rtsp_server)[.]py' >/dev/null \
 	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
 	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null \
 	|| pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
@@ -291,7 +291,8 @@ count = int(sys.argv[1])
 kind = sys.argv[2]
 ranges = [(8770, count)]
 if kind == "aisheng":
-    ranges += [(8800, count), (9000, count), (7001, 2 * count)]
+    ranges += [(8800, count), (9000, count), (7001, count),
+               (8554, count), (8792, count)]
 sockets = []
 try:
     for base, length in ranges:
@@ -483,7 +484,7 @@ fi
 if [[ $BRIDGE_KIND == two_axis ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 else
-	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tpx4_json_udp\ttelemetry_udp\twide_rtp\ttele_rtp\n' > "$RUNTIME_DIR/interfaces.tsv"
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tpx4_json_udp\ttelemetry_udp\tjson_telemetry_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 fi
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
@@ -498,9 +499,10 @@ for ((i = 0; i < COUNT; i++)); do
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
 	else
 		telemetry_port=$((8800 + i))
-		wide_rtp_port=$((7001 + 2 * i))
-		tele_rtp_port=$((7002 + 2 * i))
-		rtsp_url="rtp://${ADVERTISE_HOST}:${wide_rtp_port}"
+		video_port=$((7001 + i))
+		rtsp_port=$((8554 + i))
+		json_telemetry_port=$((8792 + i))
+		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}/aisheng_seeker"
 	fi
 
 	px4_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
@@ -530,9 +532,9 @@ for ((i = 0; i < COUNT; i++)); do
 			--topic-prefix "$topic_prefix"
 			--image-topic "$topic_prefix/image"
 			--tele-image-topic "$topic_prefix/image_tele"
-			--video --video-host "$ADVERTISE_HOST"
-			--wide-video-port "$wide_rtp_port"
-			--tele-video-port "$tele_rtp_port"
+			--video --video-port "$video_port"
+			--rtsp-port "$rtsp_port" --rtsp-mount /aisheng_seeker
+			--json-telemetry-host 127.0.0.1 --json-telemetry-port "$json_telemetry_port"
 			--px4-json-host 127.0.0.1 --px4-json-port "$dyt_udp_port"
 			--verbose)
 	fi
@@ -567,13 +569,13 @@ for ((i = 0; i < COUNT; i++)); do
 			--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
 			--mount /two_axis_pod --decoder nvdec --window-title "Aircraft${aircraft_id}Gimbal"
 	else
-		echo "  导引头视频：    ${rtsp_url}（长焦 rtp://${ADVERTISE_HOST}:${tele_rtp_port}）"
+		echo "  导引头视频：    ${rtsp_url}（广角/长焦共用）"
 		printf '  地面站 command: '
 		printf '%q ' "$BRIDGE_PYTHON" \
 			"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py" \
 			--host "$ADVERTISE_HOST" --control-port "$udp_port" \
 			--telemetry-port "$telemetry_port" \
-			--wide-port "$wide_rtp_port" --tele-port "$tele_rtp_port"
+			--json-telemetry-port "$json_telemetry_port" --rtsp-url "$rtsp_url"
 	fi
 	printf '\n'
 
@@ -598,10 +600,10 @@ for ((i = 0; i < COUNT; i++)); do
 			>> "$RUNTIME_DIR/interfaces.tsv"
 	else
 		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1
-		wait_for_log "bridge_${aircraft_id}" 'RTP 视频' 60 || exit 1
+		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
 		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" \
 			"$mavsdk_port" "$udp_port" "$dyt_udp_port" "$telemetry_port" \
-			"$wide_rtp_port" "$tele_rtp_port" \
+			"$json_telemetry_port" "$rtsp_url" \
 			>> "$RUNTIME_DIR/interfaces.tsv"
 	fi
 done

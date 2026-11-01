@@ -173,7 +173,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 - 组合模型指令 UDP：`8770 + i - 1`；
 - Aisheng JSON UDP：`9000 + i - 1`；
 - `rocket_two_axis_pod`：共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
-- `rocket_aisheng_seeker`：二进制遥测 `8800 + i - 1`，广角 RTP `7001 + 2(i-1)`，长焦 RTP `7002 + 2(i-1)`；
+- `rocket_aisheng_seeker`：二进制遥测 `8800 + i - 1`，RTSP `rtsp://主机:(8554+i-1)/aisheng_seeker`（广角/长焦共用），GCS JSON 遥测 `8792 + i - 1`；
 - Gazebo 话题：`/uav_i/pod/*`。
 
 例如两架飞机：
@@ -193,13 +193,13 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 飞机1：控制 udp://192.168.1.56:8770
        遥测 udp://192.168.1.56:8800
        Aisheng JSON udp://192.168.1.56:9000
-       广角 RTP udp://192.168.1.56:7001
-       长焦 RTP udp://192.168.1.56:7002
+       RTSP rtsp://192.168.1.56:8554/aisheng_seeker
+       GCS JSON udp://192.168.1.56:8792
 飞机2：控制 udp://192.168.1.56:8771
        遥测 udp://192.168.1.56:8801
        Aisheng JSON udp://192.168.1.56:9001
-       广角 RTP udp://192.168.1.56:7003
-       长焦 RTP udp://192.168.1.56:7004
+       RTSP rtsp://192.168.1.56:8555/aisheng_seeker
+       GCS JSON udp://192.168.1.56:8793
 ```
 
 02 场景会在每个 PX4 SITL 实例启动完成后，自动为该实例启动独立的 `dyt_udp_bridge`。模块只编译进 SITL；它监听本机全部接口上的对应 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系（包括 `dyt_udp`）保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
@@ -212,7 +212,7 @@ JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度�
 
 ## 目标惯性 LOS 遥测采集
 
-`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟19字段实际UDP。该工具连接默认 `rocket_two_axis_pod` 的 JSON/RTSP 网关；`rocket_aisheng_seeker` 使用二进制 UDP/RTP 网关，其 25°/s 跟踪验收由资产仓导引头组件测试覆盖。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
+`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟19字段实际UDP。该工具连接默认 `rocket_two_axis_pod` 的 JSON/RTSP 网关；`rocket_aisheng_seeker` 使用二进制 UDP/RTSP 网关，其 25°/s 跟踪验收由资产仓导引头组件测试覆盖。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
 
 ```bash
 ../px4-gazebo-assets/.venv-linux/bin/python scenarios/02_rocket_two_axis_pod/check_target_los.py \
