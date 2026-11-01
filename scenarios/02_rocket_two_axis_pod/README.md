@@ -1,14 +1,17 @@
-# 场景 02：火箭穿越机与两轴吊仓
+# 场景 02：火箭穿越机与两轴吊仓/艾晟导引头
 
-在资产仓的 `geo_32_217857_119_105878` world 中启动火箭穿越机与顶部两轴吊仓组合模型。所有飞机使用同一个 world，默认启动一架、不开启 Gazebo GUI，启动后保持待命，不自动解锁或飞行。
+在资产仓的 `geo_32_217857_119_105878` world 中启动火箭穿越机与顶部组合模型。`--aircraft-model` 选择 `rocket_two_axis_pod`（默认，两轴吊仓）或 `rocket_aisheng_seeker`（艾晟导引头）。所有飞机使用同一个 world，默认启动一架、不开启 Gazebo GUI，启动后保持待命，不自动解锁或飞行。
 
-当前组合模型总长 `590 mm`、质量 `5.00 kg`。每次启动从资产仓原生模型生成运行副本，继承质量、惯量、动力配置，以及装配生成器派生的重心参考、控制分配和 IMU/GPS 位置参数。
+当前两种组合模型总长均为 `590 mm`、质量 `5.00 kg`。每次启动从资产仓原生模型生成运行副本，继承质量、惯量、动力配置，以及装配生成器派生的重心参考、控制分配和 IMU/GPS 位置参数。
 
 ## 启动和停止
 
 ```bash
-# 默认一架
+# 默认一架（rocket_two_axis_pod）
 bash scenarios/02_rocket_two_axis_pod/start.sh
+
+# 切换为火箭机 + 艾晟导引头组合模型
+bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_aisheng_seeker
 
 # 显式切换为 CSRT 图像跟踪
 bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
@@ -30,9 +33,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 \
 bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。
+`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。`--aircraft-model` 默认 `rocket_two_axis_pod`，可选 `rocket_aisheng_seeker`；两者使用相同的 world、PX4 飞行接口和 `/uav_<id>/pod` 话题前缀，但各自使用独立的生成器、控制器、网关和地面站。
 
-吊仓单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部 `rocket_two_axis_pod_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
+吊仓/导引头单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部 `rocket_two_axis_pod_<id>` 或 `rocket_aisheng_seeker_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
 
 每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
 
@@ -167,11 +170,11 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 第 `i` 架飞机使用：
 
 - PX4/MAVSDK UDP：`14280 + i - 1`；
-- 吊仓指令与遥测 UDP：`8770 + i - 1`；
+- 组合模型指令 UDP：`8770 + i - 1`；
 - Aisheng JSON UDP：`9000 + i - 1`；
-- 共享 RTSP 端口：`8555`；
-- 视频路径：`/two_axis_pod_i`；
-- Gazebo 吊仓话题：`/uav_i/pod/*`。
+- `rocket_two_axis_pod`：共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
+- `rocket_aisheng_seeker`：二进制遥测 `8800 + i - 1`，广角 RTP `7001 + 2(i-1)`，长焦 RTP `7002 + 2(i-1)`；
+- Gazebo 话题：`/uav_i/pod/*`。
 
 例如两架飞机：
 
@@ -184,17 +187,32 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
        rtsp://192.168.1.56:8555/two_axis_pod_2
 ```
 
+`--aircraft-model rocket_aisheng_seeker` 时：
+
+```text
+飞机1：控制 udp://192.168.1.56:8770
+       遥测 udp://192.168.1.56:8800
+       Aisheng JSON udp://192.168.1.56:9000
+       广角 RTP udp://192.168.1.56:7001
+       长焦 RTP udp://192.168.1.56:7002
+飞机2：控制 udp://192.168.1.56:8771
+       遥测 udp://192.168.1.56:8801
+       Aisheng JSON udp://192.168.1.56:9001
+       广角 RTP udp://192.168.1.56:7003
+       长焦 RTP udp://192.168.1.56:7004
+```
+
 02 场景会在每个 PX4 SITL 实例启动完成后，自动为该实例启动独立的 `dyt_udp_bridge`。模块只编译进 SITL；它监听本机全部接口上的对应 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系（包括 `dyt_udp`）保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
 JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
 
-吊仓网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。
+吊仓/导引头网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。`rocket_two_axis_pod` 打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。`rocket_aisheng_seeker` 打印的地面站命令直接调用资产仓导引头上位机，使用二进制 UDP、双路 RTP 和 `--px4-json-port` 向本机 `dyt_udp_bridge` 发送 19 字段 JSON。
 
-最新资产仓的吊仓网关仅支持 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
+最新资产仓的两轴吊仓和艾晟导引头网关均使用 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
 
 ## 目标惯性 LOS 遥测采集
 
-`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟19字段实际UDP。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
+`check_target_los.py` 验证正式 02 场景的两轴协议 v8、目标 NED 惯性视线角速度、机械 `gyro_*` 映射与艾晟19字段实际UDP。该工具连接默认 `rocket_two_axis_pod` 的 JSON/RTSP 网关；`rocket_aisheng_seeker` 使用二进制 UDP/RTP 网关，其 25°/s 跟踪验收由资产仓导引头组件测试覆盖。先启动场景、生成运动靶机，并完成镜头对准与锁定；工具不启动或停止 Gazebo/PX4，也不自动生成目标。使用资产仓已配置的 Python 环境，`--assets-root` 默认指向 PX4 仓同级的 `px4-gazebo-assets`：
 
 ```bash
 ../px4-gazebo-assets/.venv-linux/bin/python scenarios/02_rocket_two_axis_pod/check_target_los.py \

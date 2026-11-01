@@ -22,12 +22,13 @@ TARGET_QGC_ADDRESS=127.0.0.1:14550
 TARGET_MAVLINK_SYSID=200
 TRACKING_BACKEND=sim_truth
 ENABLE_COLLISION=0
+AIRCRAFT_MODEL=rocket_two_axis_pod
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt]
+用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt] [--aircraft-model 模型]
 
-在 geo_32_217857_119_105878 world 中启动火箭穿越机与两轴吊仓组合模型。
+在 geo_32_217857_119_105878 world 中启动火箭穿越机与顶部吊仓/导引头组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
 
 选项：
@@ -38,6 +39,8 @@ usage() {
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
       --tracking-backend TYPE
                            单目标跟踪后端：sim_truth（默认）或 csrt
+      --aircraft-model NAME
+                           组合飞机模型：rocket_two_axis_pod（默认）或 rocket_aisheng_seeker
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
@@ -87,6 +90,11 @@ while (($# > 0)); do
 			TRACKING_BACKEND=$2
 			shift 2
 			;;
+		--aircraft-model)
+			require_value "$@"
+			AIRCRAFT_MODEL=$2
+			shift 2
+			;;
 		--target-qgc-address)
 			require_value "$@"
 			TARGET_QGC_ADDRESS=$2
@@ -121,6 +129,10 @@ if [[ $TRACKING_BACKEND != sim_truth && $TRACKING_BACKEND != csrt ]]; then
 	echo "ERROR: --tracking-backend 只接受 sim_truth 或 csrt" >&2
 	exit 2
 fi
+if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aisheng_seeker ]]; then
+	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod 或 rocket_aisheng_seeker" >&2
+	exit 2
+fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
 	echo "ERROR: --advertise-host 不能包含空白字符" >&2
 	exit 2
@@ -142,6 +154,7 @@ fi
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
 	|| pgrep -f '[g]imbal_bridge[.]py' >/dev/null \
+	|| pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/main[.]py' >/dev/null \
 	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
 	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null \
 	|| pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
@@ -183,18 +196,40 @@ ASSETS_REV=$(git -C "$ASSETS_ROOT" rev-parse --short=12 HEAD)
 echo "资产仓版本：${ASSETS_REV}"
 
 WORLD_SOURCE="${ASSETS_ROOT}/worlds/${WORLD}/world.sdf"
-GENERATOR="${ASSETS_ROOT}/assembledmodels/rocket_two_axis_pod/tools/generate_dynamic_model.py"
-CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/two_axis_pod/controller"
-BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
-for required in "$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
-	"$BRIDGE_SERVICE/gimbal_bridge.py" \
+case "$AIRCRAFT_MODEL" in
+	rocket_two_axis_pod)
+		MODEL_DIR="assembledmodels/rocket_two_axis_pod"
+		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/two_axis_pod/controller"
+		BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
+		BRIDGE_KIND=two_axis
+		;;
+	rocket_aisheng_seeker)
+		MODEL_DIR="assembledmodels/rocket_aisheng_seeker"
+		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/aisheng-ASD-2-075-DD0/controller"
+		BRIDGE_SERVICE=""
+		BRIDGE_KIND=aisheng
+		;;
+esac
+GENERATOR="${ASSETS_ROOT}/${MODEL_DIR}/tools/generate_dynamic_model.py"
+required=("$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$ASSETS_ROOT/worlds/${WORLD}/metadata.json" \
 	"$ASSETS_ROOT/models/vehicles/xiaomotuo/model.sdf" \
 	"$ASSETS_ROOT/models/vehicles/xiaobianfu/model.sdf" \
 	"$SCRIPT_DIR/collision_manager.py" \
 	"$SCRIPT_DIR/target_manager.py" \
-	"$SCRIPT_DIR/radar_manager.py"; do
-	[[ -f $required ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required}" >&2; exit 1; }
+	"$SCRIPT_DIR/radar_manager.py")
+if [[ $BRIDGE_KIND == two_axis ]]; then
+	required+=("$BRIDGE_SERVICE/gimbal_bridge.py")
+else
+	required+=(
+		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
+		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/px4_forward.py"
+		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py"
+		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/common/protocol.py"
+	)
+fi
+for required_file in "${required[@]}"; do
+	[[ -f $required_file ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required_file}" >&2; exit 1; }
 done
 
 for command in gz setsid timeout git cmake make find; do
@@ -206,7 +241,11 @@ if [[ ! -x $PX4_BIN || ! -x $DYT_UDP_BRIDGE_BIN || ! -d $PX4_ETC ]]; then
 	make -C "$PX4_DIR" px4_sitl_default
 fi
 
-echo "增量构建两轴吊仓控制插件。"
+if [[ $BRIDGE_KIND == two_axis ]]; then
+	echo "增量构建两轴吊仓控制插件。"
+else
+	echo "增量构建艾晟导引头控制插件。"
+fi
 cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$CONTROLLER_DIR/build" -j"$(nproc)"
 
@@ -244,20 +283,25 @@ if [[ -z $ADVERTISE_HOST ]]; then
 	[[ -n $ADVERTISE_HOST ]] || ADVERTISE_HOST=127.0.0.1
 fi
 
-python3 - "$COUNT" <<'PY_PORTS'
+python3 - "$COUNT" "$BRIDGE_KIND" <<'PY_PORTS'
 import socket
 import sys
 
 count = int(sys.argv[1])
+kind = sys.argv[2]
+ranges = [(8770, count)]
+if kind == "aisheng":
+    ranges += [(8800, count), (9000, count), (7001, 2 * count)]
 sockets = []
 try:
-    for port in range(8770, 8770 + count):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sockets.append(sock)
-        try:
-            sock.bind(("0.0.0.0", port))
-        except OSError as error:
-            raise SystemExit(f"ERROR: 吊仓 UDP 端口 {port} 已被使用：{error}")
+    for base, length in ranges:
+        for port in range(base, base + length):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sockets.append(sock)
+            try:
+                sock.bind(("0.0.0.0", port))
+            except OSError as error:
+                raise SystemExit(f"ERROR: 吊仓 UDP 端口 {port} 已被使用：{error}")
 finally:
     for sock in sockets:
         sock.close()
@@ -272,7 +316,7 @@ printf '%s\n' "$ASSETS_REV" > "$RUNTIME_DIR/assets_revision"
 model_args=()
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
-	generated="${RUNTIME_DIR}/generated/aircraft_${aircraft_id}/rocket_two_axis_pod"
+	generated="${RUNTIME_DIR}/generated/aircraft_${aircraft_id}/${AIRCRAFT_MODEL}"
 	python3 "$GENERATOR" --output-dir "$generated" --topic-prefix "/uav_${aircraft_id}/pod"
 	model_args+=(--model "$aircraft_id" "$generated/model.sdf")
 done
@@ -280,6 +324,7 @@ done
 WORLD_FILE="${RUNTIME_DIR}/world.sdf"
 prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
 	--source-world "$WORLD_SOURCE" --output "$WORLD_FILE"
+	--model-basename "$AIRCRAFT_MODEL"
 	--tracking-backend "$TRACKING_BACKEND" "${model_args[@]}")
 ((GUI)) && prepare_world_command+=(--target-control)
 ((ENABLE_COLLISION)) && prepare_world_command+=(--enable-collision)
@@ -287,12 +332,12 @@ prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
 gz sdf -k "$WORLD_FILE"
 
 cp -R "$PX4_ETC" "$RUNTIME_DIR/etc"
-rm -f "$RUNTIME_DIR/etc/init.d-posix/airframes/"*_gz_rocket_two_axis_pod
+rm -f "$RUNTIME_DIR/etc/init.d-posix/airframes/"*_gz_"$AIRCRAFT_MODEL"
 mapfile -t generated_airframes < <(find \
-	"$RUNTIME_DIR/generated/aircraft_1/rocket_two_axis_pod/px4" -maxdepth 1 -type f \
-	-name '*_gz_rocket_two_axis_pod' -print)
+	"$RUNTIME_DIR/generated/aircraft_1/${AIRCRAFT_MODEL}/px4" -maxdepth 1 -type f \
+	-name "*_gz_${AIRCRAFT_MODEL}" -print)
 if ((${#generated_airframes[@]} != 1)); then
-	echo "ERROR: 最新资产仓应生成一个 rocket_two_axis_pod PX4 机体文件，实际为 ${#generated_airframes[@]} 个。" >&2
+	echo "ERROR: 最新资产仓应生成一个 ${AIRCRAFT_MODEL} PX4 机体文件，实际为 ${#generated_airframes[@]} 个。" >&2
 	exit 1
 fi
 runtime_airframe="$RUNTIME_DIR/etc/init.d-posix/airframes/$(basename -- "${generated_airframes[0]}")"
@@ -399,7 +444,7 @@ start_process gazebo "${gazebo_command[@]}"
 
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
-	entity="rocket_two_axis_pod_${aircraft_id}"
+	entity="${AIRCRAFT_MODEL}_${aircraft_id}"
 	imu_topic="/world/${WORLD}/model/${entity}/link/base_link/sensor/imu_sensor/imu"
 	if ! wait_for_gz_message "imu_${aircraft_id}" "$imu_topic" 120; then
 		echo "ERROR: 飞机 ${aircraft_id} 的 IMU 未就绪：${imu_topic}" >&2
@@ -435,53 +480,101 @@ if ((GUI)); then
 		GZ_GUI_PLUGIN_PATH="$GUI_PLUGIN_PATH" gz sim -g -v2
 fi
 
-printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+if [[ $BRIDGE_KIND == two_axis ]]; then
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+else
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tpx4_json_udp\ttelemetry_udp\twide_rtp\ttele_rtp\n' > "$RUNTIME_DIR/interfaces.tsv"
+fi
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
-	entity="rocket_two_axis_pod_${aircraft_id}"
+	entity="${AIRCRAFT_MODEL}_${aircraft_id}"
 	topic_prefix="/uav_${aircraft_id}/pod"
 	mavsdk_port=$((14280 + i))
 	udp_port=$((8770 + i))
 	dyt_udp_port=$((9000 + i))
-	rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
 	rootfs="${RUNTIME_DIR}/rootfs_${aircraft_id}"
 	mkdir -p "$rootfs"
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
+	else
+		telemetry_port=$((8800 + i))
+		wide_rtp_port=$((7001 + 2 * i))
+		tele_rtp_port=$((7002 + 2 * i))
+		rtsp_url="rtp://${ADVERTISE_HOST}:${wide_rtp_port}"
+	fi
 
 	px4_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
 		GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
 		GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
-		PX4_SIM_MODEL=gz_rocket_two_axis_pod PX4_GZ_STANDALONE=1
+		PX4_SIM_MODEL="gz_${AIRCRAFT_MODEL}" PX4_GZ_STANDALONE=1
 		PX4_GZ_WORLD="$WORLD" PX4_GZ_MODEL_NAME="$entity"
 		"$PX4_BIN" -d "$RUNTIME_DIR/etc" -i "$i" -w "$rootfs")
-	bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
-		GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
-		GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
-		GIMBAL_RUNDIR="${RUNTIME_DIR}/gimbal_${aircraft_id}"
-		"$BRIDGE_PYTHON" -u "$BRIDGE_SERVICE/gimbal_bridge.py"
-		--world "$WORLD" --gimbal-model "$entity"
-		--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
-		--udp-port "$udp_port" --rtsp-port "$RTSP_PORT"
-		--mount /two_axis_pod --aircraft-id "$aircraft_id" --encoder "$ENCODER")
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+			GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+			GIMBAL_RUNDIR="${RUNTIME_DIR}/gimbal_${aircraft_id}"
+			"$BRIDGE_PYTHON" -u "$BRIDGE_SERVICE/gimbal_bridge.py"
+			--world "$WORLD" --gimbal-model "$entity"
+			--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
+			--udp-port "$udp_port" --rtsp-port "$RTSP_PORT"
+			--mount /two_axis_pod --aircraft-id "$aircraft_id" --encoder "$ENCODER")
+	else
+		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+			GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+			"$BRIDGE_PYTHON" -u \
+			"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
+			--control-host 0.0.0.0 --control-port "$udp_port"
+			--telemetry-host "$ADVERTISE_HOST" --telemetry-port "$telemetry_port"
+			--topic-prefix "$topic_prefix"
+			--image-topic "$topic_prefix/image"
+			--tele-image-topic "$topic_prefix/image_tele"
+			--video --video-host "$ADVERTISE_HOST"
+			--wide-video-port "$wide_rtp_port"
+			--tele-video-port "$tele_rtp_port"
+			--px4-json-host 127.0.0.1 --px4-json-port "$dyt_udp_port"
+			--verbose)
+	fi
 
 	echo
 	echo "飞机 ${aircraft_id}："
 	printf '  PX4 command: '
 	printf '%q ' "${px4_command[@]}"
 	printf '\n'
-	printf '  吊仓网关 command: '
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		printf '  吊仓网关 command: '
+	else
+		printf '  导引头网关 command: '
+	fi
 	printf '%q ' "${bridge_command[@]}"
 	printf '\n'
 	echo "  MAVSDK：        udpout://${ADVERTISE_HOST}:${mavsdk_port}"
-	echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
+	else
+		echo "  导引头控制：    udp://${ADVERTISE_HOST}:${udp_port}"
+		echo "  导引头遥测：    udp://${ADVERTISE_HOST}:${telemetry_port}"
+	fi
 	echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
-	echo "  吊仓视频：      ${rtsp_url}"
-	printf '  地面站 command: '
-	printf '%q ' bash \
-		"$ASSETS_ROOT/models/gimbals/two_axis_pod/ground_station/run.sh" \
-		--no-manage-bridge \
-		--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
-		--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
-		--mount /two_axis_pod --decoder nvdec --window-title "Aircraft${aircraft_id}Gimbal"
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		echo "  吊仓视频：      ${rtsp_url}"
+		printf '  地面站 command: '
+		printf '%q ' bash \
+			"$ASSETS_ROOT/models/gimbals/two_axis_pod/ground_station/run.sh" \
+			--no-manage-bridge \
+			--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
+			--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
+			--mount /two_axis_pod --decoder nvdec --window-title "Aircraft${aircraft_id}Gimbal"
+	else
+		echo "  导引头视频：    ${rtsp_url}（长焦 rtp://${ADVERTISE_HOST}:${tele_rtp_port}）"
+		printf '  地面站 command: '
+		printf '%q ' "$BRIDGE_PYTHON" \
+			"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py" \
+			--host "$ADVERTISE_HOST" --control-port "$udp_port" \
+			--telemetry-port "$telemetry_port" \
+			--wide-port "$wide_rtp_port" --tele-port "$tele_rtp_port"
+	fi
 	printf '\n'
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"
@@ -497,11 +590,20 @@ for ((i = 0; i < COUNT; i++)); do
 		exit 1
 	fi
 	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
-	wait_for_log "bridge_${aircraft_id}" '遥测/指令服务' 30 || exit 1
-	wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
-	printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
-		"$dyt_udp_port" "$rtsp_url" \
-		>> "$RUNTIME_DIR/interfaces.tsv"
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		wait_for_log "bridge_${aircraft_id}" '遥测/指令服务' 30 || exit 1
+		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
+			"$dyt_udp_port" "$rtsp_url" \
+			>> "$RUNTIME_DIR/interfaces.tsv"
+	else
+		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1
+		wait_for_log "bridge_${aircraft_id}" 'RTP 视频' 60 || exit 1
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" \
+			"$mavsdk_port" "$udp_port" "$dyt_udp_port" "$telemetry_port" \
+			"$wide_rtp_port" "$tele_rtp_port" \
+			>> "$RUNTIME_DIR/interfaces.tsv"
+	fi
 done
 
 collision_manager_command=(python3 -u "$SCRIPT_DIR/collision_manager.py"
@@ -518,9 +620,17 @@ wait_for_log collision_manager '碰撞致损服务已就绪' 15 || exit 1
 FAILED=0
 trap - EXIT
 echo
-echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
+if [[ $BRIDGE_KIND == two_axis ]]; then
+	echo "场景已就绪：${COUNT} 架飞机，world=${WORLD}，资产版本=${ASSETS_REV}。"
+else
+	echo "场景已就绪：${COUNT} 架飞机，model=${AIRCRAFT_MODEL}，world=${WORLD}，资产版本=${ASSETS_REV}。"
+fi
 echo "飞机保持待命，不自动解锁或飞行。"
-echo "吊仓单目标跟踪：${TRACKING_BACKEND}。"
+if [[ $BRIDGE_KIND == two_axis ]]; then
+	echo "吊仓单目标跟踪：${TRACKING_BACKEND}。"
+else
+	echo "导引头单目标跟踪：${TRACKING_BACKEND}。"
+fi
 if ((ENABLE_COLLISION)); then
 	echo "机间碰撞：      已启用刚体接触；相撞飞机关闭全部电机。"
 else

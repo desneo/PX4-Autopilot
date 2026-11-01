@@ -25,6 +25,7 @@ MAX_ELEVATION_DEG = 60.0
 RATE_RANGE_HZ = (1.0, 2.0)
 PROFILE_RANGES_M = {
     "rocket_two_axis_pod": 3000.0,
+    "rocket_aisheng_seeker": 3000.0,
     "xiaomotuo": 5000.0,
     "xiaobianfu": 5000.0,
 }
@@ -62,6 +63,8 @@ def coordinate_offset(
 def profile_for_model(name: str) -> tuple[str, float] | None:
     if name.startswith("rocket_two_axis_pod_"):
         return "small_uav", PROFILE_RANGES_M["rocket_two_axis_pod"]
+    if name.startswith("rocket_aisheng_seeker_"):
+        return "small_uav", PROFILE_RANGES_M["rocket_aisheng_seeker"]
     if name in ("xiaomotuo", "xiaobianfu"):
         return "small_target", PROFILE_RANGES_M[name]
     return None

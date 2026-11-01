@@ -225,11 +225,15 @@ def mesh_collision_bounds(mesh: ET.Element) -> tuple[list[float], list[float]]:
     return ([(a+b)/2 for a, b in zip(minimum, maximum)], [(b-a)/2 for a, b in zip(minimum, maximum)])
 
 
-def add_mesh_collision_bounds(plugin: ET.Element, world: ET.Element) -> int:
+def add_mesh_collision_bounds(
+    plugin: ET.Element,
+    world: ET.Element,
+    model_basename: str = MODEL_BASENAME,
+) -> int:
     keys = set()
     count = 0
     for model in world.findall("model"):
-        if not model.get("name", "").startswith(MODEL_BASENAME+"_"):
+        if not model.get("name", "").startswith(model_basename+"_"):
             continue
         for link in model.findall("link"):
             for collision in link.findall("collision"):
@@ -250,14 +254,18 @@ def add_mesh_collision_bounds(plugin: ET.Element, world: ET.Element) -> int:
     return count
 
 
-def load_model(aircraft_id: int, model_path: Path) -> ET.Element:
+def load_model(
+    aircraft_id: int,
+    model_path: Path,
+    model_basename: str = MODEL_BASENAME,
+) -> ET.Element:
     root = ET.parse(model_path).getroot()
     model = root.find("model")
     if model is None:
         raise ValueError(f"SDF 中没有顶层 model：{model_path}")
-    if model.get("name") != MODEL_BASENAME:
+    if model.get("name") != model_basename:
         raise ValueError(
-            f"需要模型 {MODEL_BASENAME}，实际为 {model.get('name')}：{model_path}"
+            f"需要模型 {model_basename}，实际为 {model.get('name')}：{model_path}"
         )
     if model.findtext("static", "false").strip().lower() in {"true", "1"}:
         raise ValueError(f"模型必须是动态模型：{model_path}")
@@ -285,7 +293,7 @@ def load_model(aircraft_id: int, model_path: Path) -> ET.Element:
 
     model = copy.deepcopy(model)
     absolute_resources(model, model_path)
-    model.set("name", f"{MODEL_BASENAME}_{aircraft_id}")
+    model.set("name", f"{model_basename}_{aircraft_id}")
     for mesh in model.findall("link/collision/geometry/mesh"):
         mesh_collision_bounds(mesh)
     return model
@@ -360,7 +368,10 @@ def configure_gimbal_tracking(
         candidate.text = target_name
 
 
-def add_collision_systems(world: ET.Element) -> ET.Element:
+def add_collision_systems(
+    world: ET.Element,
+    model_basename: str = MODEL_BASENAME,
+) -> ET.Element:
     """加入接触数据系统和场景碰撞监控器。"""
     for old in world.findall('./plugin[@name="gz::sim::systems::Contact"]'):
         world.remove(old)
@@ -382,9 +393,9 @@ def add_collision_systems(world: ET.Element) -> ET.Element:
         name="scenario02::CollisionMonitor",
     )
     set_text(plugin, "event_topic", COLLISION_EVENT_TOPIC)
-    set_text(plugin, "aircraft_prefix", f"{MODEL_BASENAME}_")
+    set_text(plugin, "aircraft_prefix", f"{model_basename}_")
     set_text(plugin, "airborne_height_m", "1.0")
-    add_mesh_collision_bounds(plugin, world)
+    add_mesh_collision_bounds(plugin, world, model_basename)
     return plugin
 
 
@@ -661,6 +672,7 @@ def prepare(
     target_control: bool = False,
     tracking_backend: str = "sim_truth",
     enable_aircraft_collision: bool = False,
+    model_basename: str = MODEL_BASENAME,
 ) -> Path:
     if not models:
         raise ValueError("至少需要一架飞机")
@@ -672,6 +684,9 @@ def prepare(
         raise ValueError("飞机原点相对地形高度必须为有限正数")
     if tracking_backend not in TRACKING_BACKENDS:
         raise ValueError("单目标跟踪后端只支持 sim_truth 或 csrt")
+    if (not isinstance(model_basename, str) or not model_basename
+            or any(character.isspace() for character in model_basename)):
+        raise ValueError("组合模型名必须是非空且不含空白的字符串")
 
     source_world = source_world.resolve()
     tree = ET.parse(source_world)
@@ -685,11 +700,11 @@ def prepare(
     positions = [((index % columns + 1)*spacing + .25, (index // columns + 1)*spacing) for index in range(len(models))]
     ground_surfaces = terrain_surfaces(world, positions)
     target_names = [
-        *(f"{MODEL_BASENAME}_{aircraft_id}" for aircraft_id, _ in models),
+        *(f"{model_basename}_{aircraft_id}" for aircraft_id, _ in models),
         *SIM_TRUTH_DYNAMIC_TARGETS,
     ]
     for (aircraft_id, model_path), (x, y), (ground_z, normal) in zip(models, positions, ground_surfaces):
-        model = load_model(aircraft_id, model_path.resolve())
+        model = load_model(aircraft_id, model_path.resolve(), model_basename)
         configure_gimbal_tracking(model, tracking_backend, target_names)
         configure_aircraft_collision_filter(
             model, aircraft_id, enable_aircraft_collision
@@ -701,7 +716,7 @@ def prepare(
         world.append(model)
         add_aircraft_marker(world, aircraft_id, x, y, spawn_z)
 
-    add_collision_systems(world)
+    add_collision_systems(world, model_basename)
     add_radar_model(world)
 
     scene = world.find('./gui/plugin[@filename="MinimalScene"]')
@@ -741,6 +756,11 @@ def main() -> int:
         required=True,
     )
     parser.add_argument("--spacing", type=float, default=5.0)
+    parser.add_argument(
+        "--model-basename",
+        default=MODEL_BASENAME,
+        help=f"组合飞机模型名（默认：{MODEL_BASENAME}）",
+    )
     parser.add_argument("--altitude", type=float, help="显式覆盖飞机原点距当地地形的竖直高度（m）；默认继承各模型parameters.json simulation.spawn_pose的Z")
     parser.add_argument(
         "--tracking-backend",
@@ -771,6 +791,7 @@ def main() -> int:
                 target_control=args.target_control,
                 tracking_backend=args.tracking_backend,
                 enable_aircraft_collision=args.enable_collision,
+                model_basename=args.model_basename,
             )
         )
     except (OSError, ValueError, ET.ParseError) as error:

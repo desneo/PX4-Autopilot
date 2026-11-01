@@ -37,18 +37,18 @@ class PrepareWorldTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_model(self, aircraft_id: int) -> Path:
-        directory = self.root / f"generated_{aircraft_id}" / "rocket_two_axis_pod"
+    def make_model(self, aircraft_id: int, basename: str = "rocket_two_axis_pod") -> Path:
+        directory = self.root / f"generated_{aircraft_id}" / basename
         (directory / "meshes").mkdir(parents=True)
         (directory / "meshes" / "body.stl").write_text("mesh")
         (directory / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 0.24 0 0 0"}}))
         path = directory / "model.sdf"
         path.write_text(
-            "<sdf version='1.9'><model name='rocket_two_axis_pod'><static>false</static>"
+            f"<sdf version='1.9'><model name='{basename}'><static>false</static>"
             "<link name='base_link'><collision name='body_collision'><geometry><box>"
             "<size>1 1 1</size></box></geometry></collision>"
             "<visual name='body'><geometry><mesh>"
-            "<uri>model://rocket_two_axis_pod/meshes/body.stl</uri>"
+            f"<uri>model://{basename}/meshes/body.stl</uri>"
             "</mesh></geometry></visual></link>"
             "<plugin name='two_axis::GimbalController' filename='lib.so'>"
             f"<command_topic>/uav_{aircraft_id}/pod/command</command_topic>"
@@ -93,6 +93,23 @@ class PrepareWorldTest(unittest.TestCase):
             marker_z = float(world.findtext(f"model[@name='POD_LOCATION_MARKER_{number}']/pose").split()[2])
             self.assertAlmostEqual(model_z, expected_z)
             self.assertEqual(marker_z, model_z)
+
+    def test_alternate_model_basename_uses_same_interface(self):
+        source, _ = self.add_terrain_tile()
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(
+            source, output, [(1, self.make_model(1, "rocket_aisheng_seeker"))],
+            model_basename="rocket_aisheng_seeker")
+        world = ET.parse(output).getroot().find("world")
+        self.assertIsNotNone(world.find("model[@name='rocket_aisheng_seeker_1']"))
+        self.assertIsNotNone(world.find("model[@name='POD_LOCATION_MARKER_1']"))
+        monitor = world.find("plugin[@name='scenario02::CollisionMonitor']")
+        self.assertEqual(monitor.findtext("aircraft_prefix"), "rocket_aisheng_seeker_")
+        plugin = world.find("model[@name='rocket_aisheng_seeker_1']/plugin")
+        self.assertEqual(plugin.findtext("tracking_backend"), "sim_truth")
+        self.assertEqual(
+            [item.text for item in plugin.findall("sim_truth_target_name")],
+            ["rocket_aisheng_seeker_1", "xiaomotuo", "xiaobianfu"])
 
     def test_missing_unsupported_or_uncovered_real_terrain_never_falls_back_to_zero(self):
         source, path = self.add_terrain_tile()
