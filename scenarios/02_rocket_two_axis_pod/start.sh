@@ -246,7 +246,9 @@ if [[ $BRIDGE_KIND == two_axis ]]; then
 else
 	echo "增量构建艾晟导引头控制插件。"
 fi
-cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" -DCMAKE_BUILD_TYPE=Release
+# 场景启动只构建运行插件，不要求资产仓提供可选测试源码。
+cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" \
+	-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build "$CONTROLLER_DIR/build" -j"$(nproc)"
 
 GUI_PLUGIN_DIR="${ASSETS_ROOT}/worlds/${WORLD}/gui"
