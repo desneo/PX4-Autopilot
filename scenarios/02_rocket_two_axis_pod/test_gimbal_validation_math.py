@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_gimbal_interfaces as check
 import check_target_los as los_check
 
@@ -196,6 +197,63 @@ class OpticalValidationTest(unittest.TestCase):
                 path.write_text(xml)
                 with self.assertRaisesRegex(ValueError, '轴向/范围'):
                     check.runtime_model_check(path, 1)
+
+
+class AircraftInterfaceValidationTest(unittest.TestCase):
+    def world(self, directory, names):
+        path = Path(directory)/'world.sdf'
+        path.write_text('<sdf><world>'+''.join(f'<model name="{name}"/>' for name in names)+'</world></sdf>')
+        return path
+
+    def test_detects_each_actual_aircraft_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for model in check.AIRCRAFT_MODELS:
+                world = self.world(directory, [f'{model}_1', f'{model}_2', 'xiaobianfu'])
+                self.assertEqual(check.detect_aircraft_model(world, 2), model)
+
+    def test_rejects_mixed_missing_and_ambiguous_aircraft(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for models in (['rocket_two_axis_pod_1'],
+                           ['rocket_two_axis_pod_1', 'rocket_aisheng_seeker_2'],
+                           [f'{name}_{i}' for name in check.AIRCRAFT_MODELS for i in (1, 2)]):
+                world = self.world(directory, models)
+                with self.subTest(models=models), self.assertRaisesRegex(ValueError, '唯一组合机型'):
+                    check.detect_aircraft_model(world, 2)
+
+    def schema(self):
+        return check.aisheng_schema(Path(__file__).resolve().parents[2]/'msg/DytAishengTelemetry.msg')
+
+    def packet(self):
+        return {name: [0]*4 if kind.endswith('[4]') else 0 for name, kind in self.schema().items()}
+
+    def test_complete_aisheng_schema_uses_message_names_and_all_target_slots(self):
+        schema = self.schema()
+        self.assertEqual(len(schema), 37)
+        self.assertFalse(any(name.startswith('los_omega_') for name in schema))
+        self.assertEqual({name for name, kind in schema.items() if kind.endswith('[4]')},
+                         {'target_type', 'target_confidence', 'target_lon', 'target_lat', 'target_alt'})
+        packet = self.packet()
+        self.assertIs(check.validate_aisheng_packet(packet, schema), packet)
+
+    def test_scalar_confidence_truncated_arrays_and_legacy_json_are_rejected(self):
+        for name in ('target_type', 'target_confidence', 'target_lon', 'target_lat', 'target_alt'):
+            for value in (0, [], [0], [0]*3, [0]*5):
+                packet = self.packet()
+                packet[name] = value
+                with self.subTest(name=name, value=value), self.assertRaisesRegex(ValueError, '四个目标槽位'):
+                    check.validate_aisheng_packet(packet, self.schema())
+        packet = self.packet()
+        del packet['device_timestamp']
+        with self.assertRaisesRegex(ValueError, '字段'):
+            check.validate_aisheng_packet(packet, self.schema())
+
+    def test_aisheng_packet_rejects_nonfinite_and_boolean_values(self):
+        for name, value in (('pitch_angle', float('nan')), ('pitch_angle', True),
+                            ('device_timestamp', False), ('target_lon', [0, 0, 0.5, 0])):
+            packet = self.packet()
+            packet[name] = value
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                check.validate_aisheng_packet(packet, self.schema())
 
 
 if __name__ == '__main__':

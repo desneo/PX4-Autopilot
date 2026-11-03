@@ -170,10 +170,9 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 第 `i` 架飞机使用：
 
 - PX4/MAVSDK UDP：`14280 + i - 1`；
-- 组合模型指令 UDP：`8770 + i - 1`；
 - Aisheng JSON UDP：`9000 + i - 1`；
-- `rocket_two_axis_pod`：共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
-- `rocket_aisheng_seeker`：二进制遥测 `8800 + i - 1`，RTSP `rtsp://主机:(8554+i-1)/aisheng_seeker`（广角/长焦共用），GCS JSON 遥测 `8792 + i - 1`；
+- `rocket_two_axis_pod`：指令/遥测 UDP `8770 + i - 1`，共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
+- `rocket_aisheng_seeker`：指令/遥测共用 UDP `8001 + i - 1`，RTSP `rtsp://主机:(8554+i-1)/aisheng_seeker`（广角/长焦共用）；
 - Gazebo 话题：`/uav_i/pod/*`。
 
 例如两架飞机：
@@ -190,23 +189,23 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 `--aircraft-model rocket_aisheng_seeker` 时：
 
 ```text
-飞机1：控制 udp://192.168.1.56:8770
-       遥测 udp://192.168.1.56:8800
+飞机1：指令/遥测 udp://192.168.1.56:8001
        Aisheng JSON udp://192.168.1.56:9000
        RTSP rtsp://192.168.1.56:8554/aisheng_seeker
-       GCS JSON udp://192.168.1.56:8792
-飞机2：控制 udp://192.168.1.56:8771
-       遥测 udp://192.168.1.56:8801
+飞机2：指令/遥测 udp://192.168.1.56:8002
        Aisheng JSON udp://192.168.1.56:9001
        RTSP rtsp://192.168.1.56:8555/aisheng_seeker
-       GCS JSON udp://192.168.1.56:8793
 ```
 
-02 场景会在每个 PX4 SITL 实例启动完成后，自动为该实例启动独立的 `dyt_udp_bridge`。模块只编译进 SITL；它监听本机全部接口上的对应 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系（包括 `dyt_udp`）保存到运行目录的 `interfaces.tsv`。RTSP 内部 RTP 端口由资产仓网关自动分配。
+02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`。两个模块只编译进 SITL，均监听该飞机的 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题；每个实例只启动与机型对应的一个模块。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
-JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
+两轴机型的 JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
 
-吊仓/导引头网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。`rocket_two_axis_pod` 打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。`rocket_aisheng_seeker` 打印的地面站命令直接调用资产仓导引头上位机，使用二进制 UDP、双路 RTP 和 `--px4-json-port` 向本机 `dyt_udp_bridge` 发送 19 字段 JSON。
+吊仓/导引头网关、地面站与视频处理功能由资产仓提供，场景负责逐机启动网关并配置接口。`rocket_two_axis_pod` 打印的地面站命令调用资产仓 `run.sh`，由启动器选择并检查地面站 Python 环境；使用 `--decoder nvdec` 硬解，以及 `--no-manage-bridge` 连接场景已启动的网关，关闭地面站窗口不会停止场景网关。
+
+`rocket_aisheng_seeker` 的地面站在同一个 UDP socket 上发送控制/心跳并接收 104 字节二进制遥测。网关向有效控制或心跳报文的源 IP 和源端口回传遥测，地面站不配置固定遥测接收端口。地面站直接解析该遥测，点击“发送艾晟报文”后才向目标地址转发完整 JSON。打印命令的 `--forward-host`、`--forward-port` 将目标地址预设为对应飞机的 PX4 接口，启动地面站不会自动开启转发；远程运行地面站时该地址仍指向仿真主机。
+
+艾晟完整 JSON 使用 `msg/DytAishengTelemetry.msg` 中除 `los_omega_n/e/d` 之外的 37 个字段，字段名与消息定义一致。`target_type`、`target_confidence`、`target_lon`、`target_lat`、`target_alt` 均为四元素数组，保留标准帧的全部目标槽位；`target_lon/target_lat` 使用 `1e-7 deg` 原始整数。`timestamp` 是地面站收到该条遥测时的本机单调时钟微秒，转发时保留该接收时间；`device_timestamp` 是导引头上电毫秒。PX4 发布的 uORB `timestamp` 使用本机 hrt 微秒。专用桥接模块校验全部字段及类型、范围后发布遥测，不接受字段缺失或标量目标置信度。
 
 最新资产仓的两轴吊仓和艾晟导引头网关均使用 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
 
@@ -264,12 +263,12 @@ python3 scenarios/02_rocket_two_axis_pod/test_radar_integration.py \
 GZ_PARTITION=px4_scenario_02_rocket_two_axis_pod GZ_IP=127.0.0.1 \
   python3 scenarios/02_rocket_two_axis_pod/test_live_radar_target.py --duration 5
 
-# 双机场景：复用资产仓地面站客户端，验证双轴转动和逐机控制隔离；结束时回零
+# 双机场景：从运行 world 自动识别组合机型，复用对应资产仓地面站客户端
 ../px4-gazebo-assets/.venv-linux/bin/python \
   scenarios/02_rocket_two_axis_pod/test_gimbal_interfaces.py -n 2
 ```
 
-吊仓接口测试需要资产仓已配置的地面站 Python 环境，执行期间不要同时人工控制吊仓。视频身份与帧表绑定可复用资产仓的 `scenarios/geographic_rocket_two_axis_pod/check_rtsp_binding.py`，分别指定各机 ID、UDP 端口和输出目录；该工具只读取遥测与视频。
+接口测试需要资产仓已配置的地面站 Python 环境。`rocket_two_axis_pod` 分支验证双轴转动、逐机控制隔离、四端限位和独立光学/轴心真值，结束时回零，执行期间不要同时人工控制吊仓。`rocket_aisheng_seeker` 分支通过对应控制端口在同一 socket 收到连续二进制遥测，再执行地面站“发送艾晟报文”的实际发送路径，通过临时回环端口核对完整 JSON 字段和四目标数组；该分支不操纵导引头、不向 PX4 注入测试遥测。两轴视频身份与帧表绑定可复用资产仓的 `scenarios/geographic_rocket_two_axis_pod/check_rtsp_binding.py`，分别指定各机 ID、UDP 端口和输出目录；该工具只读取遥测与视频。
 
 启动场景后，可使用原生 MAVSDK 通过 `14280+i` 依次控制飞机完成 20 米见方的闭合航线，并验证实际水平位移、爬升、航线完成、返航和落地：
 

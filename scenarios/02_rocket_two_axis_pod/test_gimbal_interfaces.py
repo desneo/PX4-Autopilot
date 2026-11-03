@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""验证运行中多机吊舱身份、隔离、限位和独立光学/轴心真值；结束时回零。"""
+"""按组合机型验证运行中导引头/吊舱接口；两轴吊舱另验证机械与光学真值。"""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 from pathlib import Path
 import sys
+import socket
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -21,6 +23,48 @@ AISHENG_FIELDS = {'track_status', 'pitch_angle', 'yaw_angle', 'pitch_misalignmen
 LIMITS = {"yaw": (-60., 60.), "pitch": (-80., 30.)}
 BALL_CENTER = (.015, 0., .056)
 SENSOR_OFFSET = .0237
+AIRCRAFT_MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker')
+
+
+def detect_aircraft_model(world_file, count):
+    """从当前生成 world 的实际飞机实体选择协议，不依赖调用方默认值。"""
+    world = ET.parse(world_file).getroot().find('world')
+    models = {item.get('name') for item in world.findall('model')}
+    matches = [name for name in AIRCRAFT_MODELS
+               if all(f'{name}_{aircraft_id}' in models for aircraft_id in range(1, count+1))]
+    if len(matches) != 1:
+        raise ValueError('运行 world 必须包含唯一组合机型和所需飞机编号')
+    return matches[0]
+
+
+def aisheng_schema(message_file):
+    """直接读取 uORB 字段定义，排除标准二进制协议未携带的 LOS 向量。"""
+    schema = {}
+    for line in Path(message_file).read_text().splitlines():
+        fields = line.split('#', 1)[0].split()
+        if len(fields) == 2 and not fields[1].startswith('los_omega_'):
+            schema[fields[1]] = fields[0]
+    return schema
+
+
+def validate_aisheng_packet(packet, schema):
+    if set(packet) != set(schema):
+        raise ValueError('艾晟完整遥测字段与 DytAishengTelemetry.msg 不符')
+    for name, kind in schema.items():
+        values = packet[name]
+        if kind.endswith('[4]'):
+            if not isinstance(values, list) or len(values) != 4:
+                raise ValueError(f'艾晟{name}必须保留四个目标槽位')
+            kind = kind[:-3]
+        else:
+            values = [values]
+        for value in values:
+            if kind.startswith('float'):
+                if type(value) not in (int, float) or not math.isfinite(value):
+                    raise ValueError(f'艾晟{name}必须为有限数值')
+            elif type(value) is not int:
+                raise ValueError(f'艾晟{name}必须为整数')
+    return packet
 
 
 def wait_for(predicate, label: str, timeout: float = 12.0):
@@ -245,6 +289,65 @@ def runtime_model_check(world_file, count):
             raise ValueError('运行world没有继承新CAD固定罩壳网格')
 
 
+def run_aisheng_interfaces(args, control_ports=None):
+    """复用实际地面站收发和转发代码，验证当前二进制遥测到完整 JSON 链路。"""
+    model_root = args.assets_root.resolve()/'models/gimbals/aisheng-ASD-2-075-DD0'
+    sys.path.insert(0, str(model_root))
+    spec = importlib.util.spec_from_file_location('aisheng_gcs_validation', model_root/'ground_station/main.py')
+    gcs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gcs)
+    schema = aisheng_schema(Path(__file__).resolve().parents[2]/'msg/DytAishengTelemetry.msg')
+    report = dict(passed=False, aircraft_model='rocket_aisheng_seeker', aircraft=[])
+    clients = []
+    try:
+        for index in range(args.n):
+            control_port = control_ports[index] if control_ports is not None else 8001+index
+            client = gcs.TelemetryClient(args.host, control_port)
+            clients.append(client)
+            wait_for(lambda: client.forward_snapshot, f'飞机{index+1}同 socket 遥测')
+            before = client.count
+            wait_for(lambda: client.count > before+1, f'飞机{index+1}连续遥测')
+            if client.sock.getpeername()[1] != control_port:
+                raise ValueError('遥测 socket 必须连接对应飞机的控制端口')
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+                receiver.bind(('127.0.0.1', 0))
+                receiver.settimeout(3.)
+                # 不初始化视频窗口，直接执行“发送艾晟报文”按钮使用的生产发送路径。
+                sender = gcs.GCS.__new__(gcs.GCS)
+                sender.client = client
+                sender.running = True
+                sender.forward_active = False
+                sender.forward_thread = None
+                sender.forward_count = 0
+                sender.forward_error = ''
+                sender.forward_inputs = dict(ip='127.0.0.1', port=str(receiver.getsockname()[1]))
+                sender.forward_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    sender._toggle_forward()
+                    packet = validate_aisheng_packet(json.loads(receiver.recvfrom(8192)[0]), schema)
+                    wait_for(lambda: sender.forward_count, '地面站真实 JSON 转发')
+                finally:
+                    sender.running = False
+                    if sender.forward_active:
+                        sender._toggle_forward()
+                    sender.forward_sock.close()
+            report['aircraft'].append(dict(aircraft_id=index+1, control_udp=control_port,
+                aisheng_udp=9000+index, local_udp=client.sock.getsockname()[1],
+                telemetry_received=client.count, forwarded_fields=len(packet), packet=packet, passed=True))
+            print(f'PASS: 飞机{index+1}同 socket 控制/遥测与{len(packet)}字段 JSON 实际转发', flush=True)
+        report['passed'] = True
+    except Exception as error:
+        report['error'] = str(error)
+    finally:
+        for client in clients:
+            client.close()
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report['passed'] else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-n', type=int, default=1)
@@ -256,6 +359,9 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.n <= 10:
         parser.error('-n 必须为1～10')
+    aircraft_model = detect_aircraft_model(args.runtime_dir/'world.sdf', args.n)
+    if aircraft_model == 'rocket_aisheng_seeker':
+        return run_aisheng_interfaces(args)
     runtime_model_check(args.runtime_dir/'world.sdf', args.n)
     sys.path.insert(0, str(args.assets_root.resolve()/'models/gimbals/two_axis_pod/ground_station'))
     from ground_station import UdpClient

@@ -5,7 +5,6 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PX4_DIR=$(cd -- "${SCRIPT_DIR}/../.." && pwd)
 PX4_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4"
 PX4_ETC="${PX4_DIR}/build/px4_sitl_default/etc"
-DYT_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-dyt_udp_bridge"
 RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
 ASSETS_ROOT="${PX4_GAZEBO_ASSETS_ROOT:-${PX4_DIR}/../px4-gazebo-assets}"
 ASSETS_URL="${PX4_GAZEBO_ASSETS_URL:-https://github.com/desneo/px4-gazebo-assets.git}"
@@ -202,14 +201,19 @@ case "$AIRCRAFT_MODEL" in
 		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/two_axis_pod/controller"
 		BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
 		BRIDGE_KIND=two_axis
+		PX4_UDP_BRIDGE=dyt_udp_bridge
+		CONTROL_PORT_BASE=8770
 		;;
 	rocket_aisheng_seeker)
 		MODEL_DIR="assembledmodels/rocket_aisheng_seeker"
 		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/aisheng-ASD-2-075-DD0/controller"
 		BRIDGE_SERVICE=""
 		BRIDGE_KIND=aisheng
+		PX4_UDP_BRIDGE=aisheng_udp_bridge
+		CONTROL_PORT_BASE=8001
 		;;
 esac
+PX4_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-${PX4_UDP_BRIDGE}"
 GENERATOR="${ASSETS_ROOT}/${MODEL_DIR}/tools/generate_dynamic_model.py"
 required=("$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$ASSETS_ROOT/worlds/${WORLD}/metadata.json" \
@@ -223,7 +227,6 @@ if [[ $BRIDGE_KIND == two_axis ]]; then
 else
 	required+=(
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
-		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/px4_forward.py"
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py"
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/common/protocol.py"
 	)
@@ -236,7 +239,7 @@ for command in gz setsid timeout git cmake make find; do
 	command -v "$command" >/dev/null || { echo "ERROR: 缺少命令：${command}" >&2; exit 1; }
 done
 
-if [[ ! -x $PX4_BIN || ! -x $DYT_UDP_BRIDGE_BIN || ! -d $PX4_ETC ]]; then
+if [[ ! -x $PX4_BIN || ! -x $PX4_UDP_BRIDGE_BIN || ! -d $PX4_ETC ]]; then
 	echo "PX4 SITL 尚未构建，开始构建 px4_sitl_default。"
 	make -C "$PX4_DIR" px4_sitl_default
 fi
@@ -291,10 +294,9 @@ import sys
 
 count = int(sys.argv[1])
 kind = sys.argv[2]
-ranges = [(8770, count)]
+ranges = [(8001 if kind == "aisheng" else 8770, count)]
 if kind == "aisheng":
-    ranges += [(8800, count), (9000, count), (7001, count),
-               (8554, count), (8792, count)]
+    ranges += [(9000, count), (7001, count), (8554, count)]
 sockets = []
 try:
     for base, length in ranges:
@@ -486,24 +488,22 @@ fi
 if [[ $BRIDGE_KIND == two_axis ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 else
-	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tpx4_json_udp\ttelemetry_udp\tjson_telemetry_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\taisheng_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 fi
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
 	entity="${AIRCRAFT_MODEL}_${aircraft_id}"
 	topic_prefix="/uav_${aircraft_id}/pod"
 	mavsdk_port=$((14280 + i))
-	udp_port=$((8770 + i))
+	udp_port=$((CONTROL_PORT_BASE + i))
 	dyt_udp_port=$((9000 + i))
 	rootfs="${RUNTIME_DIR}/rootfs_${aircraft_id}"
 	mkdir -p "$rootfs"
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
 	else
-		telemetry_port=$((8800 + i))
 		video_port=$((7001 + i))
 		rtsp_port=$((8554 + i))
-		json_telemetry_port=$((8792 + i))
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}/aisheng_seeker"
 	fi
 
@@ -530,14 +530,11 @@ for ((i = 0; i < COUNT; i++)); do
 			"$BRIDGE_PYTHON" -u \
 			"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
 			--control-host 0.0.0.0 --control-port "$udp_port"
-			--telemetry-host "$ADVERTISE_HOST" --telemetry-port "$telemetry_port"
 			--topic-prefix "$topic_prefix"
 			--image-topic "$topic_prefix/image"
 			--tele-image-topic "$topic_prefix/image_tele"
 			--video --video-port "$video_port"
 			--rtsp-port "$rtsp_port" --rtsp-mount /aisheng_seeker
-			--json-telemetry-host 127.0.0.1 --json-telemetry-port "$json_telemetry_port"
-			--px4-json-host 127.0.0.1 --px4-json-port "$dyt_udp_port"
 			--verbose)
 	fi
 
@@ -557,8 +554,7 @@ for ((i = 0; i < COUNT; i++)); do
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
 	else
-		echo "  导引头控制：    udp://${ADVERTISE_HOST}:${udp_port}"
-		echo "  导引头遥测：    udp://${ADVERTISE_HOST}:${telemetry_port}"
+		echo "  导引头指令/遥测：udp://${ADVERTISE_HOST}:${udp_port}"
 	fi
 	echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
 	if [[ $BRIDGE_KIND == two_axis ]]; then
@@ -576,21 +572,26 @@ for ((i = 0; i < COUNT; i++)); do
 		printf '%q ' "$BRIDGE_PYTHON" \
 			"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py" \
 			--host "$ADVERTISE_HOST" --control-port "$udp_port" \
-			--telemetry-port "$telemetry_port" \
-			--json-telemetry-port "$json_telemetry_port" --rtsp-url "$rtsp_url"
+			--forward-host "$ADVERTISE_HOST" --forward-port "$dyt_udp_port" \
+			--rtsp-url "$rtsp_url"
 	fi
 	printf '\n'
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"
 	wait_for_log "px4_${aircraft_id}" 'Startup script returned successfully' 60 || exit 1
-	if ! "$DYT_UDP_BRIDGE_BIN" --instance "$i" start -p "$dyt_udp_port"; then
-		echo "ERROR: 飞机 ${aircraft_id} 的 Aisheng UDP bridge 启动失败" >&2
+	if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" start -p "$dyt_udp_port"; then
+		echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动失败" >&2
 		exit 1
 	fi
-	wait_for_log "px4_${aircraft_id}" "listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}" 10 || exit 1
+	if [[ $BRIDGE_KIND == two_axis ]]; then
+		bridge_ready="listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}"
+	else
+		bridge_ready="完整遥测接收已就绪 UDP 0.0.0.0:${dyt_udp_port}"
+	fi
+	wait_for_log "px4_${aircraft_id}" "$bridge_ready" 10 || exit 1
 	sleep 0.2
-	if ! "$DYT_UDP_BRIDGE_BIN" --instance "$i" status >/dev/null; then
-		echo "ERROR: 飞机 ${aircraft_id} 的 Aisheng UDP bridge 启动后异常退出" >&2
+	if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" status >/dev/null; then
+		echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动后异常退出" >&2
 		exit 1
 	fi
 	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
@@ -603,9 +604,8 @@ for ((i = 0; i < COUNT; i++)); do
 	else
 		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1
 		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
-		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" \
-			"$mavsdk_port" "$udp_port" "$dyt_udp_port" "$telemetry_port" \
-			"$json_telemetry_port" "$rtsp_url" \
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" \
+			"$mavsdk_port" "$udp_port" "$dyt_udp_port" "$rtsp_url" \
 			>> "$RUNTIME_DIR/interfaces.tsv"
 	fi
 done

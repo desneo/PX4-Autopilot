@@ -1,0 +1,7 @@
+menuconfig MODULES_SIMULATION_AISHENG_UDP_BRIDGE
+	bool "aisheng_udp_bridge"
+	default n
+	depends on PLATFORM_POSIX
+	---help---
+		Receive complete ASD-2-075-DD0 JSON telemetry over UDP in SITL.
+		The two-axis seeker continues to use the independent dyt_udp_bridge.
