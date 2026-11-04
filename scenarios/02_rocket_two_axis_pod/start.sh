@@ -22,6 +22,7 @@ TARGET_MAVLINK_SYSID=200
 TRACKING_BACKEND=sim_truth
 ENABLE_COLLISION=0
 AIRCRAFT_MODEL=rocket_two_axis_pod
+ZHONGKE_OPTIONS=()
 
 usage() {
 	cat <<'EOF'
@@ -39,10 +40,13 @@ usage() {
       --tracking-backend TYPE
                            单目标跟踪后端：sim_truth（默认）或 csrt
       --aircraft-model NAME
-                           组合飞机模型：rocket_two_axis_pod（默认）或 rocket_aisheng_seeker
+                           组合飞机模型：rocket_two_axis_pod（默认）、rocket_aisheng_seeker 或 rocket_zhongke_d80
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
+      --runtime-dir PATH  中科独立运行目录（仅中科模式）
+      --prepare-only      仅离线生成中科场景，不启动进程
+      --no-video          中科内部验收时关闭转码，保留真实相机
   -h, --help              显示帮助
 
 环境变量：
@@ -94,6 +98,15 @@ while (($# > 0)); do
 			AIRCRAFT_MODEL=$2
 			shift 2
 			;;
+        --runtime-dir|--partition|--config|--udp-base|--rtsp-base)
+            require_value "$@"
+            ZHONGKE_OPTIONS+=("$1" "$2")
+            shift 2
+            ;;
+        --prepare-only|--no-video)
+            ZHONGKE_OPTIONS+=("$1")
+            shift
+            ;;
 		--target-qgc-address)
 			require_value "$@"
 			TARGET_QGC_ADDRESS=$2
@@ -128,8 +141,8 @@ if [[ $TRACKING_BACKEND != sim_truth && $TRACKING_BACKEND != csrt ]]; then
 	echo "ERROR: --tracking-backend 只接受 sim_truth 或 csrt" >&2
 	exit 2
 fi
-if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aisheng_seeker ]]; then
-	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod 或 rocket_aisheng_seeker" >&2
+if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aisheng_seeker && $AIRCRAFT_MODEL != rocket_zhongke_d80 ]]; then
+	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod、rocket_aisheng_seeker 或 rocket_zhongke_d80" >&2
 	exit 2
 fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
@@ -148,6 +161,25 @@ fi
 if ((TARGET_MAVLINK_SYSID <= COUNT)); then
 	echo "ERROR: 靶机 SYSID ${TARGET_MAVLINK_SYSID} 与普通飞机 SYSID 1～${COUNT} 冲突" >&2
 	exit 2
+fi
+
+# 中科采用独立分区和登记PID，在旧模式的全局进程检查与清理之前分派。
+if [[ $AIRCRAFT_MODEL == rocket_zhongke_d80 ]]; then
+    if [[ -z ${GIMBAL_PYTHON:-} && -x "$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python" ]]; then
+        BRIDGE_PYTHON="$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python"
+    fi
+    zhongke_command=("$BRIDGE_PYTHON" "$SCRIPT_DIR/start_zhongke.py"
+        --count "$COUNT" --assets-root "$ASSETS_ROOT" --python "$BRIDGE_PYTHON"
+        --encoder "$ENCODER" --tracking-backend "$TRACKING_BACKEND"
+        --target-qgc-address "$TARGET_QGC_ADDRESS" --target-sysid "$TARGET_MAVLINK_SYSID")
+    ((GUI)) && zhongke_command+=(--gui)
+    ((ENABLE_COLLISION)) && zhongke_command+=(--enable-collision)
+    [[ -n $ADVERTISE_HOST ]] && zhongke_command+=(--advertise-host "$ADVERTISE_HOST")
+    exec "${zhongke_command[@]}" "${ZHONGKE_OPTIONS[@]}"
+fi
+if ((${#ZHONGKE_OPTIONS[@]})); then
+    echo "ERROR: --runtime-dir/--partition/--config/--udp-base/--rtsp-base/--prepare-only/--no-video 仅用于 rocket_zhongke_d80" >&2
+    exit 2
 fi
 
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \

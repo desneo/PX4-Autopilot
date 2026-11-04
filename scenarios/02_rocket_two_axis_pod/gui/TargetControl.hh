@@ -30,6 +30,7 @@ class TargetControl final : public gz::gui::Plugin
   Q_PROPERTY(int radarTrackCount READ RadarTrackCount NOTIFY RadarStateChanged)
   Q_PROPERTY(QString stationAddress READ StationAddress WRITE SetStationAddress
       NOTIFY StationAddressChanged)
+  Q_PROPERTY(QString aircraftPrefix READ AircraftPrefix NOTIFY CameraStateChanged)
   Q_PROPERTY(int aircraftCount READ AircraftCount NOTIFY CameraStateChanged)
   Q_PROPERTY(QString targetModel READ TargetModel NOTIFY StateChanged)
   Q_PROPERTY(bool cameraBusy READ CameraBusy NOTIFY CameraStateChanged)
@@ -66,6 +67,7 @@ class TargetControl final : public gz::gui::Plugin
   public: QString RadarStatus() const { return this->radarStatus; }
   public: int RadarTrackCount() const { return this->radarTrackCount; }
   public: QString StationAddress() const { return this->stationAddress; }
+  public: QString AircraftPrefix() const { return this->aircraftPrefix; }
   public: int AircraftCount() const { return this->aircraftCount; }
   public: QString TargetModel() const { return this->targetModel; }
   public: bool CameraBusy() const { return this->cameraBusy; }
@@ -119,6 +121,7 @@ class TargetControl final : public gz::gui::Plugin
   private: int radarTrackCount{0};
   private: QString stationAddress{QStringLiteral("192.168.1.41:7790")};
   private: QTimer radarResponseTimer;
+  private: QString aircraftPrefix{QStringLiteral("rocket_two_axis_pod_")};
   private: int aircraftCount{1};
   private: QString targetModel;
   private: bool cameraBusy{false};

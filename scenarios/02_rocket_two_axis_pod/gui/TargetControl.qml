@@ -42,7 +42,7 @@ Item {
     for (var index = 1; index <= TargetControl.aircraftCount; ++index) {
       aircraftOptions.append({
         "label": "飞机 " + index + " · PX4",
-        "entity": "rocket_two_axis_pod_" + index
+        "entity": TargetControl.aircraftPrefix + index
       })
     }
     if (TargetControl.running && TargetControl.targetModel.length > 0) {

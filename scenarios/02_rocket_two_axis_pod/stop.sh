@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 新中科模式只处理其清单；无参数继续使用原有场景停止方式。
+if (($# > 0)); then
+    if [[ ${1:-} == --aircraft-model && ${2:-} == rocket_zhongke_d80 ]]; then
+        shift 2
+        SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+        exec "${GIMBAL_PYTHON:-python3}" "$SCRIPT_DIR/start_zhongke.py" --stop "$@"
+    fi
+    echo "ERROR: 新中科停止方式：stop.sh --aircraft-model rocket_zhongke_d80 [--runtime-dir PATH]；旧模式使用无参数stop.sh" >&2
+    exit 2
+fi
+
 RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
 
 declare -A seen=()

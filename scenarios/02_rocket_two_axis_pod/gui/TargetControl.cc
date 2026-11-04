@@ -93,6 +93,9 @@ void TargetControl::LoadConfig(const tinyxml2::XMLElement *_config)
     if (const auto *value = _config->FirstChildElement("track_topic");
         value && value->GetText())
       this->trackTopic = QString::fromUtf8(value->GetText());
+    if (const auto *value = _config->FirstChildElement("aircraft_prefix");
+        value && value->GetText())
+      this->aircraftPrefix = QString::fromUtf8(value->GetText());
     if (const auto *value = _config->FirstChildElement("aircraft_count");
         value && value->GetText())
     {

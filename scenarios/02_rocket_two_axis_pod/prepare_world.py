@@ -352,6 +352,17 @@ def configure_gimbal_tracking(
     target_names: list[str],
 ) -> None:
     """配置单目标跟踪后端与场景内可锁定的飞机实体。"""
+    zhongke_plugins = model.findall("./plugin[@name='zhongke_d80::GimbalController']")
+    if zhongke_plugins:
+        if len(zhongke_plugins) != 1 or not model.get("name", "").startswith("rocket_zhongke_d80_"):
+            raise ValueError("中科组合必须且只能包含一个中科控制器")
+        plugin = zhongke_plugins[0]
+        configured_names = [item.text for item in plugin.findall("sim_truth_target_name")]
+        if tracking_backend != "sim_truth" or plugin.findtext("tracking_backend") != "sim_truth":
+            raise ValueError("中科D80仅使用sim_truth真值跟踪")
+        if configured_names != target_names:
+            raise ValueError("中科目标注册表必须在逐机性能INI中配置并重新生成，不得改写SDF导致hash失配")
+        return
     plugins = model.findall("./plugin[@name='two_axis::GimbalController']")
     if len(plugins) != 1:
         raise ValueError(
@@ -399,7 +410,7 @@ def add_collision_systems(
     return plugin
 
 
-def add_target_control(world: ET.Element, aircraft_count: int) -> ET.Element:
+def add_target_control(world: ET.Element, aircraft_count: int, aircraft_prefix: str | None = None) -> ET.Element:
     """加入右侧安全区控制面板，并接管地图中心与相机跟随。"""
     gui = world.find("gui")
     if gui is None:
@@ -463,6 +474,8 @@ def add_target_control(world: ET.Element, aircraft_count: int) -> ET.Element:
     set_text(plugin, "move_to_pose_service", "/gui/move_to/pose")
     set_text(plugin, "center_pose", center_pose)
     set_text(plugin, "aircraft_count", aircraft_count)
+    if aircraft_prefix is not None:
+        set_text(plugin, "aircraft_prefix", aircraft_prefix)
     set_text(plugin, "default_altitude_m", f"{default_altitude_m:.6f}")
     return plugin
 
@@ -727,7 +740,10 @@ def prepare(
         set_text(clip, "near", 0.005)
 
     if target_control:
-        add_target_control(world, len(models))
+        if model_basename == "rocket_zhongke_d80":
+            add_target_control(world, len(models), aircraft_prefix="rocket_zhongke_d80_")
+        else:
+            add_target_control(world, len(models))
         add_target_trajectory(world)
 
     output = output.resolve()
