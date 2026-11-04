@@ -1,316 +1,370 @@
-"""中科02入口的离线、端口和进程归属回归；不启动世界或终止真实进程。"""
+"""用隔离工具替身执行统一场景脚本，不启动仿真或终止真实进程。"""
 from __future__ import annotations
 
-import configparser
-import importlib.util
 import json
 import os
 from pathlib import Path
-import re
-import signal
-import socket
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
-from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parents[1].parent / 'px4-gazebo-assets'
+WORLD = 'geo_32_217857_119_105878'
+MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker', 'rocket_zhongke_d80')
 
-
-def load_module():
-    spec = importlib.util.spec_from_file_location('scenario02_zhongke_launcher', HERE / 'start_zhongke.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-LAUNCHER = load_module()
-
-
-class LegacyDispatchTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='scenario02-legacy-check-')
-        self.directory = Path(self.temp.name)
-
-    def tearDown(self):
-        self.temp.cleanup()
-
-    def parser_snapshot(self, argv):
-        # 运行真实参数解析及原机型case块，在任何pgrep/git/构建/进程操作之前截断。
-        source = (HERE / 'start.sh').read_text()
-        prefix = source.split("if pgrep -f ", 1)[0]
-        block = re.search(r'case "\$AIRCRAFT_MODEL" in\n.*?\nesac', source, re.S).group()
-        capture = '\nprintf "%s\\n" "$AIRCRAFT_MODEL" "$COUNT" "$GUI" "$TRACKING_BACKEND" "$BRIDGE_KIND" "$CONTROL_PORT_BASE" "$PX4_UDP_BRIDGE" "$MODEL_DIR"\n'
-        script = self.directory / 'parser.sh'
-        script.write_text(prefix + block + capture)
-        env = dict(os.environ, PX4_GAZEBO_ASSETS_ROOT='/fixture/assets')
-        completed = subprocess.run(['bash', str(script), *argv], env=env, text=True, capture_output=True)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        return completed.stdout.splitlines()
-
-    def test_old_default_and_explicit_two_axis_are_equivalent(self):
-        expected = ['rocket_two_axis_pod', '1', '0', 'sim_truth', 'two_axis', '8770',
-                    'dyt_udp_bridge', 'assembledmodels/rocket_two_axis_pod']
-        self.assertEqual(self.parser_snapshot([]), expected)
-        self.assertEqual(self.parser_snapshot(['--aircraft-model', 'rocket_two_axis_pod']), expected)
-
-    def test_aisheng_and_legacy_options_keep_their_contract(self):
-        self.assertEqual(self.parser_snapshot(['--aircraft-model', 'rocket_aisheng_seeker',
-                         '-n', '2', '--gui', '--tracking-backend', 'csrt']),
-                         ['rocket_aisheng_seeker', '2', '1', 'csrt', 'aisheng', '8001',
-                          'aisheng_udp_bridge', 'assembledmodels/rocket_aisheng_seeker'])
-
-    def test_new_dispatch_precedes_all_global_process_probes(self):
-        capture = self.directory / 'argv.json'
-        python = self.directory / 'capture-python'
-        python.write_text('#!/usr/bin/env python3\nimport json,os,sys\nopen(os.environ["CHECK_ARGV"],"w").write(json.dumps(sys.argv[1:]))\n')
-        python.chmod(0o755)
-        sentinel = self.directory / 'pgrep-ran'
-        pgrep = self.directory / 'pgrep'
-        pgrep.write_text('#!/bin/sh\ntouch "$CHECK_PGREP"\nexit 99\n')
-        pgrep.chmod(0o755)
-        env = dict(os.environ, GIMBAL_PYTHON=str(python), CHECK_ARGV=str(capture),
-                   CHECK_PGREP=str(sentinel), PATH=str(self.directory)+os.pathsep+os.environ['PATH'])
-        completed = subprocess.run(['bash', str(HERE / 'start.sh'), '--aircraft-model',
-            'rocket_zhongke_d80', '-n', '2', '--prepare-only', '--runtime-dir', str(self.directory/'runtime')],
-            env=env, text=True, capture_output=True)
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        argv = json.loads(capture.read_text())
-        self.assertEqual(Path(argv[0]), HERE/'start_zhongke.py')
-        self.assertEqual(argv[argv.index('--count')+1], '2')
-        self.assertIn('--prepare-only', argv)
-        self.assertFalse(sentinel.exists(), '中科分派触发了旧全局pgrep')
-
-    def test_old_stop_body_is_preserved_after_explicit_dispatch(self):
-        source = (HERE/'stop.sh').read_text()
-        self.assertIn('RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"', source)
-        self.assertLess(source.index('rocket_zhongke_d80'), source.index('declare -A seen=()'))
-        self.assertIn('exec "${GIMBAL_PYTHON:-python3}" "$SCRIPT_DIR/start_zhongke.py" --stop "$@"', source)
-
-
-class LauncherBoundaryTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix='scenario02-zhongke-check-')
-        self.directory = Path(self.temp.name)
-
-    def tearDown(self):
-        self.temp.cleanup()
-
-    def manifest(self):
-        value = configparser.ConfigParser(interpolation=None)
-        value['session'] = {'kind':'scenario02_zhongke_d80', 'state':'ready'}
-        value['aircraft 1'] = {'udp_port':'38080', 'mavsdk_udp':'14280',
-                               'px4_instance':'0', 'rtsp_port':'38566'}
-        return value
-
-    def test_occupied_real_control_port_rejects_without_killing_owner(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as owner:
-            owner.bind(('127.0.0.1', 0))
-            manifest = self.manifest()
-            manifest['aircraft 1']['udp_port'] = str(owner.getsockname()[1])
-            with patch.object(LAUNCHER.os, 'kill') as kill:
-                with self.assertRaisesRegex(ValueError, 'UDP端口.*已占用'):
-                    LAUNCHER.check_ports(manifest, no_video=True)
-                kill.assert_not_called()
-            self.assertGreaterEqual(owner.fileno(), 0)
-
-    def test_all_px4_local_ports_are_checked_and_probe_sockets_closed(self):
-        made = []
-        class ProbeSocket:
-            def __init__(self, *_):
-                self.closed = False
-                made.append(self)
+# 所有外部进程、端口检测及 kill 均被截获；shell 分支、参数和清理流程保持真实。
+TOOL = r'''import json, os, pathlib, sys, time, types
+name = pathlib.Path(sys.argv[0]).name
+args = sys.argv[1:]
+root = pathlib.Path(os.environ['FIXTURE_ROOT'])
+log = root / 'calls.jsonl'
+def record(tool, argv):
+    row = {'tool':tool, 'argv':argv,
+           'partition':os.environ.get('GZ_PARTITION'),
+           'server_config':os.environ.get('GZ_SIM_SERVER_CONFIG_PATH')}
+    with log.open('a') as stream:
+        stream.write(json.dumps(row, ensure_ascii=False)+'\n')
+record(name, args)
+def value(flag):
+    return args[args.index(flag)+1]
+if name == 'git':
+    if 'branch' in args: print('main')
+    if 'rev-parse' in args: print('fixture12345')
+elif name == 'pgrep':
+    if os.environ.get('FIXTURE_EXISTING') or (root/'started').exists():
+        (root/'stopping').touch()
+        print('990001')
+        sys.exit(0)
+    sys.exit(1)
+elif name == 'kill':
+    alive = root/'alive'
+    if args[0] == '-0':
+        # 等待就绪时模拟进程存在；停止时使用独立模拟存活状态。
+        failed = root/'failed_pid'
+        if failed.exists() and args[-1] == failed.read_text(): sys.exit(1)
+        stopping = os.environ.get('FIXTURE_STOP') or (root/'stopping').exists()
+        sys.exit(0 if alive.exists() or not stopping else 1)
+    if args[0] in ('-TERM','-KILL'):
+        if args[0] == '-KILL' or not os.environ.get('FIXTURE_STUBBORN'):
+            alive.unlink(missing_ok=True)
+elif name == 'sleep':
+    time.sleep(0.01)
+elif name == 'setsid':
+    (root/'started').touch()
+    fail = os.environ.get('FIXTURE_FAIL_GATEWAY')
+    if fail and any('zhongke-d80/controller/service/gimbal_bridge.py' in part for part in args):
+        (root/'failed_pid').write_text(str(os.getpid()))
+        print('中科网关启动\n中科RTSP已启动\n测试网关启动失败', flush=True)
+    else:
+        print('Startup script returned successfully\n遥测/指令服务\n网关启动\n中科网关启动\n中科RTSP已启动\nRTSP 服务已启动\n靶机管理服务已就绪\n雷达管理服务已就绪\n碰撞致损服务已就绪', flush=True)
+elif name.startswith('px4-'):
+    runtime = pathlib.Path(os.environ['TMPDIR'])/'px4-scenarios/02_rocket_two_axis_pod'
+    if 'start' in args:
+        instance = int(value('--instance'))
+        with (runtime/f'logs/px4_{instance+1}.log').open('a') as stream:
+            stream.write('listening for Aisheng JSON on UDP 0.0.0.0:'+value('-p')+'\n')
+            stream.write('完整遥测接收已就绪 UDP 0.0.0.0:'+value('-p')+'\n')
+elif name in ('python3','component-python'):
+    if args and args[0] == '-':
+        source = sys.stdin.read()
+        if 'import socket' not in source: sys.exit(0)
+        class Probe:
+            def __init__(self, *values): self.values=values
+            def __enter__(self): return self
+            def __exit__(self, *values): self.close()
+            def setsockopt(self, *values): pass
             def bind(self, endpoint):
-                if endpoint[1] == 13030:
-                    raise OSError('测试端口已占用')
-            def close(self):
-                self.closed = True
-        with patch.object(LAUNCHER.socket, 'socket', ProbeSocket):
-            with self.assertRaisesRegex(ValueError, '13030'):
-                LAUNCHER.check_ports(self.manifest(), no_video=True)
-        self.assertTrue(made)
-        self.assertTrue(all(item.closed for item in made))
-
-    def test_stale_ready_log_never_hides_dead_new_process(self):
-        (self.directory/'logs').mkdir()
-        (self.directory/'logs/gateway_1.log').write_text('中科网关启动\n')
-        manifest = self.manifest()
-        manifest['process gateway_1'] = {'pid':'999999', 'start_ticks':'100'}
-        with patch.object(LAUNCHER, 'identity_alive', return_value=False):
-            with self.assertRaisesRegex(ValueError, '启动失败'):
-                LAUNCHER.wait_log(self.directory, manifest, 'gateway_1', '中科网关启动', .1)
-
-    def test_start_truncates_old_log_before_new_process(self):
-        (self.directory/'logs').mkdir()
-        path = self.directory/'logs/gateway_1.log'
-        path.write_text('中科网关启动\n')
-        class NewProcess:
-            pid = 999999
-        def fake_popen(*args, **kwargs):
-            self.assertEqual(path.read_bytes(), b'')
-            return NewProcess()
-        with patch.object(LAUNCHER.subprocess, 'Popen', side_effect=fake_popen), \
-                patch.object(LAUNCHER, 'record_process') as record:
-            LAUNCHER.start_process(self.directory, self.manifest(), 'gateway_1', ['fixture'], {})
-            record.assert_called_once()
-
-    def test_failure_cleanup_is_limited_to_selected_runtime(self):
-        runtime = self.directory/'owned'
-        manifest = self.manifest()
-        with patch.object(LAUNCHER, 'preflight_dependencies'), \
-                patch.object(LAUNCHER, 'prepare_runtime', return_value=manifest), \
-                patch.object(LAUNCHER, 'start_runtime', side_effect=ValueError('测试启动失败')), \
-                patch.object(LAUNCHER, 'stop_runtime') as stop:
-            self.assertEqual(LAUNCHER.main(['--runtime-dir', str(runtime), '--no-video']), 1)
-            stop.assert_called_once_with(str(runtime))
-
-    def test_stop_ignores_reused_pid_and_never_uses_global_process_names(self):
-        manifest = self.manifest()
-        manifest['process owned'] = {'pid':'999991', 'start_ticks':'123'}
-        manifest['process reused'] = {'pid':'999992', 'start_ticks':'234'}
-        LAUNCHER.write_manifest(self.directory, manifest)
-        alive = {'999991'}
-        def identity_alive(identity):
-            return identity.get('pid') in alive and identity.get('start_ticks') == '123'
-        def kill(pid, _):
-            alive.discard(str(pid))
-        with patch.object(LAUNCHER, 'identity_alive', side_effect=identity_alive), \
-                patch.object(LAUNCHER.Path, 'glob', return_value=[]), \
-                patch.object(LAUNCHER.os, 'kill', side_effect=kill) as sent:
-            LAUNCHER.stop_runtime(self.directory)
-            self.assertEqual(sent.call_args_list[0].args, (999991, signal.SIGTERM))
-            self.assertTrue(all(call.args[0] == 999991 for call in sent.call_args_list))
-            sent.reset_mock()
-            LAUNCHER.stop_runtime(self.directory)
-            sent.assert_not_called()
-        self.assertEqual(LAUNCHER.read_manifest(self.directory)['session']['state'], 'stopped')
-
-    def test_nonempty_unowned_runtime_is_rejected_before_any_overwrite(self):
-        runtime = self.directory/'legacy-run'
-        runtime.mkdir()
-        sentinel = runtime/'world.sdf'
-        sentinel.write_text('现有场景内容')
-        args = LAUNCHER.parse_args(['--prepare-only', '--assets-root', str(ASSETS),
-                                   '--runtime-dir', str(runtime)])
-        with patch.object(LAUNCHER, 'checked') as command:
-            with self.assertRaises(ValueError):
-                LAUNCHER.prepare_runtime(args)
-            command.assert_not_called()
-        self.assertEqual(sentinel.read_text(), '现有场景内容')
-        self.assertFalse((runtime/'session.ini').exists())
-
-    def test_legacy_partition_is_rejected(self):
-        with self.assertRaises(SystemExit):
-            LAUNCHER.parse_args(['--partition', 'px4_scenario_02_rocket_two_axis_pod'])
-
-    def test_default_python_uses_existing_component_virtual_environment(self):
-        virtual = self.directory/'assets/models/gimbals/.venv-zhongke-d80/bin/python'
-        virtual.parent.mkdir(parents=True)
-        virtual.touch()
-        with patch.dict(os.environ, {}, clear=True):
-            args = LAUNCHER.parse_args(['--assets-root', str(self.directory/'assets')])
-        self.assertEqual(args.python, str(virtual))
-
-    def test_explicit_environment_and_cli_interpreters_have_precedence(self):
-        with patch.dict(os.environ, {'GIMBAL_PYTHON':'/fixture/env-python'}):
-            self.assertEqual(LAUNCHER.parse_args([]).python, '/fixture/env-python')
-            self.assertEqual(LAUNCHER.parse_args(['--python','/fixture/cli-python']).python,
-                             '/fixture/cli-python')
-
-    def test_dependency_failure_never_prepares_starts_or_stops_a_scene(self):
-        runtime = self.directory/'not-created'
-        with patch.object(LAUNCHER, 'preflight_dependencies', side_effect=ValueError('测试依赖缺失')), \
-                patch.object(LAUNCHER, 'prepare_runtime') as prepare, \
-                patch.object(LAUNCHER, 'start_runtime') as start, \
-                patch.object(LAUNCHER, 'stop_runtime') as stop:
-            self.assertEqual(LAUNCHER.main(['--runtime-dir', str(runtime)]), 1)
-            prepare.assert_not_called()
-            start.assert_not_called()
-            stop.assert_not_called()
-        self.assertFalse(runtime.exists())
-
-    def test_failed_dependency_probe_reports_interpreter_and_setup_entry(self):
-        args = LAUNCHER.parse_args(['--python','/fixture/missing-python'])
-        failed = subprocess.CompletedProcess([], 1, stdout='', stderr='ModuleNotFoundError: gi')
-        with patch.object(LAUNCHER.subprocess, 'run', return_value=failed):
-            with self.assertRaisesRegex(ValueError, 'missing-python.*setup.sh.*未启动场景进程'):
-                LAUNCHER.preflight_dependencies(args)
-
-    def test_direct_python_rejects_target_sysid_conflicts(self):
-        for argv in (['-n','2','--target-sysid','2'], ['--target-sysid','255']):
-            with self.subTest(argv=argv), self.assertRaises(SystemExit):
-                LAUNCHER.parse_args(argv)
+                record('port_bind', list(endpoint))
+                if str(endpoint[1]) == os.environ.get('FIXTURE_OCCUPIED_PORT'):
+                    raise OSError('测试端口已被使用')
+            def close(self): record('port_close', [])
+        socket = types.ModuleType('socket')
+        socket.AF_INET=2; socket.SOCK_DGRAM=2; socket.SOCK_STREAM=1
+        socket.SOL_SOCKET=1; socket.SO_REUSEADDR=2; socket.socket=Probe
+        sys.modules['socket'] = socket
+        sys.argv = args
+        exec(compile(source, '<端口检测>', 'exec'), {'__name__':'__main__'})
+    elif any(part.endswith('generate_dynamic_model.py') for part in args):
+        output = pathlib.Path(value('--output-dir'))
+        output.mkdir(parents=True)
+        (output/'model.sdf').write_text('<sdf version="1.9"><model name="fixture"/></sdf>')
+        (output/'px4').mkdir()
+        (output/'px4'/('4001_gz_'+output.name)).write_text('param set-default EKF2_HGT_REF 0\n')
+    elif any(part.endswith('prepare_world.py') for part in args):
+        pathlib.Path(value('--output')).write_text('<sdf version="1.9"><world name="fixture"/></sdf>')
+'''
 
 
-class PreparedIdentityTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.temp = tempfile.TemporaryDirectory(prefix='scenario02-zhongke-prepare-')
-        cls.directory = Path(cls.temp.name)
-        cls.source = ASSETS/'models/gimbals/zhongke-d80/parameters.ini'
-        cls.source_bytes = cls.source.read_bytes()
-        args = LAUNCHER.parse_args(['--prepare-only', '-n','2', '--assets-root',str(ASSETS),
-            '--runtime-dir',str(cls.directory/'run'), '--python',sys.executable,
-            '--udp-base','38880','--rtsp-base','38566'])
-        cls.manifest = LAUNCHER.prepare_runtime(args)
-        cls.world = ET.parse(cls.directory/'run/world.sdf').getroot().find('world')
+class UnifiedLauncherTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='scenario02-shell-')
+        self.root = Path(self.temp.name)
+        self.px4 = self.root/'PX4-Autopilot'
+        self.scene = self.px4/'scenarios/02_rocket_two_axis_pod'
+        self.scene.mkdir(parents=True)
+        self.bin = self.root/'bin'
+        self.bin.mkdir()
+        self.assets = self.root/'assets'
+        (self.assets/'.git').mkdir(parents=True)
+        for name in ('start.sh','stop.sh'):
+            shutil.copy2(HERE/name, self.scene/name)
+        self.runtime = self.root/'tmp/px4-scenarios/02_rocket_two_axis_pod'
+        self.runtime.parent.mkdir(parents=True)
+        for name in ('python3','component-python','git','pgrep','kill','sleep','setsid',
+                     'gz','cmake','make'):
+            self.executable(self.bin/name, '#!'+sys.executable+'\n'+TOOL)
+        self.touch(self.scene/'prepare_world.py')
+        for name in ('collision_manager.py','target_manager.py','radar_manager.py'):
+            self.touch(self.scene/name)
+        self.touch(self.assets/f'worlds/{WORLD}/world.sdf')
+        self.touch(self.assets/f'worlds/{WORLD}/metadata.json')
+        for model in MODELS:
+            self.touch(self.assets/f'assembledmodels/{model}/tools/generate_dynamic_model.py')
+        for model in ('xiaomotuo','xiaobianfu'):
+            self.touch(self.assets/f'models/vehicles/{model}/model.sdf')
+        for component in ('two_axis_pod','aisheng-ASD-2-075-DD0','zhongke-d80'):
+            base = self.assets/f'models/gimbals/{component}'
+            for file in ('controller/CMakeLists.txt','controller/service/gimbal_bridge.py',
+                         'controller/service/rtsp_relay.py',
+                         'gateway/main.py','gateway/rtsp_server.py',
+                         'ground_station/main.py','ground_station/ground_station.py',
+                         'common/protocol.py','parameters.ini','scripts/server.config'):
+                self.touch(base/file)
+        for name in ('px4','px4-dyt_udp_bridge','px4-aisheng_udp_bridge'):
+            self.executable(self.px4/f'build/px4_sitl_default/bin/{name}',
+                            '#!'+sys.executable+'\n'+TOOL)
+        (self.px4/'build/px4_sitl_default/etc/init.d-posix/airframes').mkdir(parents=True)
+        bash_env = self.root/'bash_env'
+        bash_env.write_text('kill() { "$FIXTURE_BIN/kill" "$@"; }\n')
+        self.env = dict(os.environ, FIXTURE_ROOT=str(self.root), FIXTURE_BIN=str(self.bin),
+                        BASH_ENV=str(bash_env), TMPDIR=str(self.root/'tmp'),
+                        PX4_GAZEBO_ASSETS_ROOT=str(self.assets),
+                        GIMBAL_PYTHON=str(self.bin/'component-python'),
+                        PATH=str(self.bin)+os.pathsep+os.environ['PATH'])
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.temp.cleanup()
+    def tearDown(self):
+        self.temp.cleanup()
 
-    def test_source_ini_is_unchanged_and_configs_are_external_per_aircraft(self):
-        self.assertEqual(self.source.read_bytes(), self.source_bytes)
-        paths = [Path(self.manifest[f'aircraft {i}']['config_path']) for i in (1,2)]
-        self.assertNotEqual(paths[0], paths[1])
-        self.assertTrue(all(path.is_relative_to(self.directory) for path in paths))
-        self.assertNotEqual(self.manifest['aircraft 1']['config_hash'], self.manifest['aircraft 2']['config_hash'])
+    @staticmethod
+    def touch(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
 
-    def test_model_config_hash_targets_video_and_diagnostics_share_identity(self):
-        component = ASSETS/'models/gimbals/zhongke-d80'
-        sys.path.insert(0, str(component))
-        from common.config import load_config
-        expected_targets = ['rocket_zhongke_d80_1','rocket_zhongke_d80_2','xiaomotuo','xiaobianfu']
-        for number in (1,2):
+    @staticmethod
+    def executable(path, source):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+        path.chmod(0o755)
+
+    def calls(self, tool=None):
+        path = self.root/'calls.jsonl'
+        rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+        return [row for row in rows if tool is None or row['tool'] == tool]
+
+    def run_script(self, name='start.sh', argv=(), env=None):
+        return subprocess.run(['bash', str(self.scene/name), *argv], env=env or self.env,
+                              text=True, capture_output=True, timeout=30)
+
+    def start(self, model=MODELS[2], extra=()):
+        result = self.run_script(argv=['--aircraft-model',model,'--advertise-host','192.0.2.56',*extra])
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        return result
+
+    def commands(self, ending):
+        return [row['argv'] for row in self.calls() if any(isinstance(part,str) and part.endswith(ending) for part in row['argv'])]
+
+    @staticmethod
+    def option(argv, flag):
+        return argv[argv.index(flag)+1]
+
+    def test_three_models_share_the_public_flow_and_select_their_bridge(self):
+        for model, bridge, port in zip(MODELS, ('dyt_udp_bridge','aisheng_udp_bridge',None), (8770,8001,8880)):
+            with self.subTest(model=model):
+                (self.root/'started').unlink(missing_ok=True)
+                (self.root/'calls.jsonl').unlink(missing_ok=True)
+                if model == MODELS[2]:
+                    for name in ('px4-dyt_udp_bridge','px4-aisheng_udp_bridge'):
+                        (self.px4/f'build/px4_sitl_default/bin/{name}').unlink()
+                extra = ('--tracking-backend','csrt') if model != MODELS[2] else ()
+                self.start(model,extra)
+                generators = self.commands('generate_dynamic_model.py')
+                self.assertEqual(len(generators), 1)
+                self.assertIn('/assembledmodels/'+model+'/', generators[0][0])
+                self.assertEqual(self.option(generators[0],'--topic-prefix'), '/uav_1/pod')
+                self.assertEqual(len(self.commands('prepare_world.py')), 1)
+                self.assertEqual(self.option(self.commands('prepare_world.py')[0],'--tracking-backend'),
+                                 'csrt' if extra else 'sim_truth')
+                bridge_calls = [r for r in self.calls() if r['tool'].startswith('px4-')]
+                self.assertEqual({r['tool'] for r in bridge_calls}, {'px4-'+bridge} if bridge else set())
+                self.assertFalse(self.calls('make'),'已有PX4时中科不应因缺少JSON桥而触发构建')
+                ports = [r['argv'][1] for r in self.calls('port_bind')]
+                self.assertIn(port, ports)
+                self.assertTrue(self.runtime.joinpath('interfaces.tsv').exists())
+                self.assertFalse(list(self.runtime.rglob('*.ini')))
+
+    def test_two_zhongke_aircraft_use_identical_generator_and_gateway_overrides(self):
+        result = self.start(extra=('-n','2','--gui','--enable-collision'))
+        generators = self.commands('generate_dynamic_model.py')
+        gateways = [argv for argv in self.commands('gimbal_bridge.py') if any('zhongke-d80/controller/service/' in p for p in argv)]
+        self.assertEqual(len(generators), 2)
+        self.assertEqual(len(gateways), 2)
+        fields = ('--config','--model','--aircraft-id','--world','--udp-bind','--udp-port',
+                  '--rtsp-bind','--rtsp-port','--rtsp-mount','--topic-prefix')
+        for number, (generator,gateway) in enumerate(zip(generators,gateways), 1):
             with self.subTest(aircraft=number):
-                entry = self.manifest[f'aircraft {number}']
-                cfg = load_config(entry['config_path'])
-                model = self.world.find(f"model[@name='{entry['entity']}']")
+                for flag in fields:
+                    self.assertEqual(self.option(generator,flag), self.option(gateway,flag), flag)
+                self.assertEqual(self.option(generator,'--config'),
+                                 str(self.assets/'models/gimbals/zhongke-d80/parameters.ini'))
+                self.assertEqual(self.option(generator,'--model'), f'rocket_zhongke_d80_{number}')
+                self.assertEqual(self.option(generator,'--aircraft-id'), str(number))
+                self.assertEqual(self.option(generator,'--udp-port'), str(8879+number))
+                self.assertEqual(self.option(generator,'--rtsp-port'), str(8565+number))
+                self.assertEqual(self.option(generator,'--rtsp-mount'), f'/zhongke_d80_{number}')
+                targets = lambda argv: [argv[i+1] for i, item in enumerate(argv) if item == '--target-name']
+                expected = ['rocket_zhongke_d80_1','rocket_zhongke_d80_2','xiaomotuo','xiaobianfu']
+                self.assertEqual(targets(generator), expected)
+                self.assertEqual(targets(gateway), expected)
+        for script in ('target_manager.py','radar_manager.py','collision_manager.py'):
+            self.assertEqual(len(self.commands(script)), 1)
+        self.assertIn('--enable-collision', self.commands('collision_manager.py')[0])
+        self.assertIn('--target-control', self.commands('prepare_world.py')[0])
+        gazebo = [row for row in self.calls('setsid') if 'sim' in row['argv']]
+        self.assertEqual(len(gazebo), 2)
+        self.assertTrue(all(row['partition'] == 'px4_scenario_02_rocket_two_axis_pod' for row in gazebo))
+        self.assertTrue(all('two_axis_pod/scripts/server.config' not in (row['server_config'] or '') for row in gazebo))
+        stations = [shlex.split(line.split('command: ',1)[1]) for line in result.stdout.splitlines()
+                    if '地面站 command: ' in line]
+        self.assertEqual(len(stations), 2)
+        for number, command in enumerate(stations, 1):
+            self.assertIn('--config',command)
+            self.assertEqual(self.option(command,'--udp-port'), str(8879+number))
+            self.assertEqual(self.option(command,'--rtsp-url'), f'rtsp://192.0.2.56:{8565+number}/zhongke_d80_{number}')
+            self.assertNotIn('--station-config',command)
+        table = self.runtime.joinpath('interfaces.tsv').read_text()
+        self.assertIn('14280',table)
+        self.assertIn('14281',table)
+        self.assertNotIn('9000',table)
+        self.assertFalse(list(self.runtime.rglob('*.ini')))
+        checked_ports = {row['argv'][1] for row in self.calls('port_bind')}
+        self.assertTrue({8880,8881,8566,8567,14280,14281,18570,18571,14580,14581,13030,13031} <= checked_ports)
+        self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
+
+    def test_default_model_and_no_argument_stop_keep_public_contract(self):
+        result = self.run_script(argv=['--advertise-host','192.0.2.56'])
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('/rocket_two_axis_pod/',self.commands('generate_dynamic_model.py')[0][0])
+        result = self.run_script('stop.sh',argv=['--aircraft-model',MODELS[2]])
+        self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+
+    def test_removed_options_and_unsupported_tracking_fail_before_any_probe(self):
+        options = [('--config','x'),('--udp-base','1234'),('--rtsp-base','1234'),
+                   ('--runtime-dir','x'),('--partition','x'),('--prepare-only',),('--no-video',),
+                   ('--tracking-backend','csrt')]
+        for argv in options:
+            with self.subTest(argv=argv):
+                result = self.run_script(argv=['--aircraft-model',MODELS[2],*argv])
+                self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+                self.assertFalse(self.calls())
+
+    def test_existing_process_rejects_without_killing_it(self):
+        env = dict(self.env, FIXTURE_EXISTING='1')
+        result = self.run_script(argv=['--aircraft-model',MODELS[2]],env=env)
+        self.assertEqual(result.returncode,1)
+        self.assertTrue(self.calls('pgrep'))
+        self.assertFalse(self.calls('kill'))
+        self.assertFalse(self.calls('setsid'))
+
+    def test_occupied_port_rejects_before_start_and_closes_every_probe(self):
+        env = dict(self.env,FIXTURE_OCCUPIED_PORT='8881')
+        result = self.run_script(argv=['--aircraft-model',MODELS[2],'-n','2'],env=env)
+        self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+        self.assertIn('8881',result.stdout+result.stderr)
+        self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
+        self.assertFalse(self.calls('setsid'))
+        self.assertFalse(self.calls('kill'))
+
+    def test_dead_gateway_with_ready_log_runs_global_cleanup(self):
+        # 已退出网关即使留下就绪日志也必须失败；stop.sh 的 kill 仍由函数截获。
+        env = dict(self.env,FIXTURE_FAIL_GATEWAY='1')
+        result = self.run_script(argv=['--aircraft-model',MODELS[2]],env=env)
+        self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+        self.assertIn('清理已启动的进程',result.stderr)
+        self.assertFalse(self.runtime.exists())
+        self.assertTrue(any(row['argv'][0] == '-TERM' for row in self.calls('kill')))
+
+    def test_stop_discovers_zhongke_and_rtsp_globally_and_escalates(self):
+        (self.root/'started').touch()
+        (self.root/'alive').touch()
+        (self.runtime/'pids').mkdir(parents=True)
+        (self.runtime/'pids/gateway.pid').write_text('990001\n')
+        env = dict(self.env,FIXTURE_STOP='1',FIXTURE_STUBBORN='1')
+        result = self.run_script('stop.sh',env=env)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        patterns = '\n'.join(' '.join(row['argv']) for row in self.calls('pgrep'))
+        self.assertIn('zhongke',patterns.replace('[z]','z'))
+        self.assertIn('rtsp',patterns)
+        signals = [row['argv'][0] for row in self.calls('kill')]
+        self.assertEqual(signals.count('-TERM'),1,'重复的全局搜索结果应去重')
+        self.assertEqual(signals.count('-KILL'),1)
+        self.assertFalse((self.root/'alive').exists())
+
+
+@unittest.skipUnless((ASSETS/'assembledmodels/rocket_zhongke_d80/tools/generate_dynamic_model.py').exists(),
+                     '需要同级资产仓进行真实离线 world 集成验证')
+class PreparedWorldTests(unittest.TestCase):
+    def test_real_generator_cli_preserves_identity_and_hash_through_world_preparation(self):
+        source_ini = ASSETS/'models/gimbals/zhongke-d80/parameters.ini'
+        original_ini = source_ini.read_bytes()
+        targets = ['rocket_zhongke_d80_1','rocket_zhongke_d80_2','xiaomotuo','xiaobianfu']
+        generator = ASSETS/'assembledmodels/rocket_zhongke_d80/tools/generate_dynamic_model.py'
+        with tempfile.TemporaryDirectory(prefix='scenario02-world-') as directory:
+            root = Path(directory)
+            model_args = []
+            manifests = []
+            for number in (1,2):
+                output = root/f'generated/aircraft_{number}/rocket_zhongke_d80'
+                command = [sys.executable,str(generator),'--output-dir',str(output),
+                           '--model',f'rocket_zhongke_d80_{number}','--aircraft-id',str(number),
+                           '--world',WORLD,'--topic-prefix',f'/uav_{number}/pod',
+                           '--udp-bind','0.0.0.0','--udp-port',str(8879+number),
+                           '--rtsp-bind','0.0.0.0','--rtsp-port',str(8565+number),
+                           '--rtsp-mount',f'/zhongke_d80_{number}']
+                for target in targets:
+                    command += ['--target-name',target]
+                result = subprocess.run(command,text=True,capture_output=True,timeout=60)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                manifests.append(json.loads((output/'manifest.json').read_text()))
+                model_args += ['--model',str(number),str(output/'model.sdf')]
+            world_path = root/'run/world.sdf'
+            result = subprocess.run([sys.executable,str(HERE/'prepare_world.py'),
+                '--source-world',str(ASSETS/f'worlds/{WORLD}/world.sdf'),
+                '--output',str(world_path),'--model-basename','rocket_zhongke_d80',
+                '--target-control',*model_args],text=True,capture_output=True,timeout=60)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            world = ET.parse(world_path).getroot().find('world')
+            self.assertNotEqual(manifests[0]['config_hash'],manifests[1]['config_hash'])
+            for number, manifest in enumerate(manifests,1):
+                model = world.find(f"model[@name='rocket_zhongke_d80_{number}']")
                 self.assertIsNotNone(model)
                 plugin = model.find("plugin[@name='zhongke_d80::GimbalController']")
-                self.assertEqual(cfg['model']['name'], entry['entity'])
-                self.assertEqual(plugin.findtext('model_name'), entry['entity'])
-                self.assertEqual(plugin.findtext('config_hash'), cfg['config_hash'])
-                self.assertEqual(entry['config_hash'], cfg['config_hash'])
-                self.assertEqual(cfg['tracking']['target_names'], expected_targets)
-                self.assertEqual([v.text for v in plugin.findall('sim_truth_target_name')], expected_targets)
-                self.assertEqual(plugin.findtext('command_topic'), entry['topic_prefix']+'/command')
-                self.assertEqual(plugin.findtext('telemetry_topic'), entry['telemetry_topic'])
-                self.assertEqual(plugin.findtext('image_topic'), entry['image_topic'])
-                camera = model.find("link[@name='camera_link']/sensor[@name='camera']")
-                self.assertEqual(camera.findtext('topic'), entry['image_topic'])
-                self.assertEqual(entry['diagnostics_topic'], entry['topic_prefix']+'/diagnostics')
-                station = configparser.ConfigParser(interpolation=None)
-                station.read(entry['station_config_path'])
-                self.assertEqual(station['connection']['parameters_file'], entry['config_path'])
-                self.assertEqual(station['connection']['udp_port'], entry['udp_port'])
-                self.assertEqual(station['connection']['rtsp_url'], entry['rtsp_url'])
-                self.assertEqual(cfg['video']['rtsp_port'], int(entry['rtsp_port']))
-                self.assertEqual(cfg['video']['rtsp_mount'], entry['rtsp_mount'])
-                marker = self.world.find(f"model[@name='POD_LOCATION_MARKER_{number}']")
+                self.assertEqual(plugin.findtext('model_name'),f'rocket_zhongke_d80_{number}')
+                self.assertEqual(plugin.findtext('config_hash'),manifest['config_hash'])
+                self.assertEqual([item.text for item in plugin.findall('sim_truth_target_name')],targets)
+                self.assertEqual(plugin.findtext('command_topic'),f'/uav_{number}/pod/command')
+                self.assertEqual(plugin.findtext('telemetry_topic'),f'/uav_{number}/pod/telemetry')
+                self.assertEqual(model.findtext("link[@name='camera_link']/sensor[@name='camera']/topic"),
+                                 f'/uav_{number}/pod/image')
+                marker = world.find(f"model[@name='POD_LOCATION_MARKER_{number}']")
                 self.assertIsNotNone(marker)
                 self.assertFalse(marker.findall('.//collision'))
-
-    def test_runtime_partition_and_endpoints_are_independent_of_legacy_scene(self):
-        section = self.manifest['session']
-        self.assertIn('zhongke', section['gz_partition'])
-        self.assertNotEqual(section['gz_partition'], 'px4_scenario_02_rocket_two_axis_pod')
-        self.assertNotEqual(Path(section['runtime_dir']), Path('/tmp/px4-scenarios/02_rocket_two_axis_pod'))
-        self.assertEqual([self.manifest[f'aircraft {i}']['udp_port'] for i in (1,2)], ['38880','38881'])
-        self.assertEqual([self.manifest[f'aircraft {i}']['rtsp_port'] for i in (1,2)], ['38566','38567'])
+            self.assertEqual(source_ini.read_bytes(),original_ini)
+            self.assertFalse(list(root.rglob('*.ini')))
 
 
 if __name__ == '__main__':

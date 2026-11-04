@@ -361,7 +361,7 @@ def configure_gimbal_tracking(
         if tracking_backend != "sim_truth" or plugin.findtext("tracking_backend") != "sim_truth":
             raise ValueError("中科D80仅使用sim_truth真值跟踪")
         if configured_names != target_names:
-            raise ValueError("中科目标注册表必须在逐机性能INI中配置并重新生成，不得改写SDF导致hash失配")
+            raise ValueError("中科目标注册表必须通过生成器运行参数配置，不得改写SDF导致hash失配")
         return
     plugins = model.findall("./plugin[@name='two_axis::GimbalController']")
     if len(plugins) != 1:

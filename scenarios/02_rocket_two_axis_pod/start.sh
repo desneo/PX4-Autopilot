@@ -22,7 +22,6 @@ TARGET_MAVLINK_SYSID=200
 TRACKING_BACKEND=sim_truth
 ENABLE_COLLISION=0
 AIRCRAFT_MODEL=rocket_two_axis_pod
-ZHONGKE_OPTIONS=()
 
 usage() {
 	cat <<'EOF'
@@ -38,15 +37,12 @@ usage() {
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
       --tracking-backend TYPE
-                           单目标跟踪后端：sim_truth（默认）或 csrt
+                           单目标跟踪后端：sim_truth（默认）或 csrt；中科仅支持 sim_truth
       --aircraft-model NAME
                            组合飞机模型：rocket_two_axis_pod（默认）、rocket_aisheng_seeker 或 rocket_zhongke_d80
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
-      --runtime-dir PATH  中科独立运行目录（仅中科模式）
-      --prepare-only      仅离线生成中科场景，不启动进程
-      --no-video          中科内部验收时关闭转码，保留真实相机
   -h, --help              显示帮助
 
 环境变量：
@@ -98,15 +94,6 @@ while (($# > 0)); do
 			AIRCRAFT_MODEL=$2
 			shift 2
 			;;
-        --runtime-dir|--partition|--config|--udp-base|--rtsp-base)
-            require_value "$@"
-            ZHONGKE_OPTIONS+=("$1" "$2")
-            shift 2
-            ;;
-        --prepare-only|--no-video)
-            ZHONGKE_OPTIONS+=("$1")
-            shift
-            ;;
 		--target-qgc-address)
 			require_value "$@"
 			TARGET_QGC_ADDRESS=$2
@@ -145,6 +132,10 @@ if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aishen
 	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod、rocket_aisheng_seeker 或 rocket_zhongke_d80" >&2
 	exit 2
 fi
+if [[ $AIRCRAFT_MODEL == rocket_zhongke_d80 && $TRACKING_BACKEND != sim_truth ]]; then
+	echo "ERROR: 中科D80的 --tracking-backend 仅支持 sim_truth" >&2
+	exit 2
+fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
 	echo "ERROR: --advertise-host 不能包含空白字符" >&2
 	exit 2
@@ -163,28 +154,10 @@ if ((TARGET_MAVLINK_SYSID <= COUNT)); then
 	exit 2
 fi
 
-# 中科采用独立分区和登记PID，在旧模式的全局进程检查与清理之前分派。
-if [[ $AIRCRAFT_MODEL == rocket_zhongke_d80 ]]; then
-    if [[ -z ${GIMBAL_PYTHON:-} && -x "$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python" ]]; then
-        BRIDGE_PYTHON="$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python"
-    fi
-    zhongke_command=("$BRIDGE_PYTHON" "$SCRIPT_DIR/start_zhongke.py"
-        --count "$COUNT" --assets-root "$ASSETS_ROOT" --python "$BRIDGE_PYTHON"
-        --encoder "$ENCODER" --tracking-backend "$TRACKING_BACKEND"
-        --target-qgc-address "$TARGET_QGC_ADDRESS" --target-sysid "$TARGET_MAVLINK_SYSID")
-    ((GUI)) && zhongke_command+=(--gui)
-    ((ENABLE_COLLISION)) && zhongke_command+=(--enable-collision)
-    [[ -n $ADVERTISE_HOST ]] && zhongke_command+=(--advertise-host "$ADVERTISE_HOST")
-    exec "${zhongke_command[@]}" "${ZHONGKE_OPTIONS[@]}"
-fi
-if ((${#ZHONGKE_OPTIONS[@]})); then
-    echo "ERROR: --runtime-dir/--partition/--config/--udp-base/--rtsp-base/--prepare-only/--no-video 仅用于 rocket_zhongke_d80" >&2
-    exit 2
-fi
-
 if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '(^|[ /])gz sim([ ]|$)' >/dev/null \
 	|| pgrep -f '[g]imbal_bridge[.]py' >/dev/null \
+	|| pgrep -f '[z]hongke-d80/controller/service/rtsp_relay[.]py' >/dev/null \
 	|| pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/(main|video_worker|rtsp_server)[.]py' >/dev/null \
 	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
 	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null \
@@ -244,8 +217,20 @@ case "$AIRCRAFT_MODEL" in
 		PX4_UDP_BRIDGE=aisheng_udp_bridge
 		CONTROL_PORT_BASE=8001
 		;;
+	rocket_zhongke_d80)
+		MODEL_DIR="assembledmodels/rocket_zhongke_d80"
+		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/zhongke-d80/controller"
+		BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
+		BRIDGE_KIND=zhongke
+		PX4_UDP_BRIDGE=""
+		CONTROL_PORT_BASE=8880
+		if [[ -z ${GIMBAL_PYTHON:-} && -x "$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python" ]]; then
+			BRIDGE_PYTHON="$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python"
+		fi
+		;;
 esac
-PX4_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-${PX4_UDP_BRIDGE}"
+PX4_UDP_BRIDGE_BIN=""
+[[ -n $PX4_UDP_BRIDGE ]] && PX4_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-${PX4_UDP_BRIDGE}"
 GENERATOR="${ASSETS_ROOT}/${MODEL_DIR}/tools/generate_dynamic_model.py"
 required=("$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$ASSETS_ROOT/worlds/${WORLD}/metadata.json" \
@@ -254,8 +239,13 @@ required=("$WORLD_SOURCE" "$GENERATOR" "$CONTROLLER_DIR/CMakeLists.txt" \
 	"$SCRIPT_DIR/collision_manager.py" \
 	"$SCRIPT_DIR/target_manager.py" \
 	"$SCRIPT_DIR/radar_manager.py")
-if [[ $BRIDGE_KIND == two_axis ]]; then
+if [[ $BRIDGE_KIND == two_axis || $BRIDGE_KIND == zhongke ]]; then
 	required+=("$BRIDGE_SERVICE/gimbal_bridge.py")
+	if [[ $BRIDGE_KIND == zhongke ]]; then
+		required+=("$ASSETS_ROOT/models/gimbals/zhongke-d80/parameters.ini"
+			"$ASSETS_ROOT/models/gimbals/zhongke-d80/ground_station/ground_station.py"
+			"$BRIDGE_SERVICE/rtsp_relay.py")
+	fi
 else
 	required+=(
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
@@ -271,12 +261,15 @@ for command in gz setsid timeout git cmake make find; do
 	command -v "$command" >/dev/null || { echo "ERROR: 缺少命令：${command}" >&2; exit 1; }
 done
 
-if [[ ! -x $PX4_BIN || ! -x $PX4_UDP_BRIDGE_BIN || ! -d $PX4_ETC ]]; then
+if [[ ! -x $PX4_BIN || ! -d $PX4_ETC ]] \
+	|| [[ -n $PX4_UDP_BRIDGE_BIN && ! -x $PX4_UDP_BRIDGE_BIN ]]; then
 	echo "PX4 SITL 尚未构建，开始构建 px4_sitl_default。"
 	make -C "$PX4_DIR" px4_sitl_default
 fi
 
-if [[ $BRIDGE_KIND == two_axis ]]; then
+if [[ $BRIDGE_KIND == zhongke ]]; then
+	echo "增量构建中科D80控制插件。"
+elif [[ $BRIDGE_KIND == two_axis ]]; then
 	echo "增量构建两轴吊仓控制插件。"
 else
 	echo "增量构建艾晟导引头控制插件。"
@@ -305,6 +298,20 @@ fi
 
 python3 -c 'import numpy, gz.transport13, gz.msgs10.stringmsg_pb2, gz.msgs10.pose_v_pb2'
 "$BRIDGE_PYTHON" -c 'import gi, gz.transport13; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
+if [[ $BRIDGE_KIND == zhongke ]]; then
+	"$BRIDGE_PYTHON" - <<'PY_ZHONGKE_DEPS'
+import cv2, numpy, gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstRtspServer', '1.0')
+from gi.repository import Gst, GstRtspServer
+Gst.init(None)
+required = ['appsrc', 'videoconvert', 'nvcudah264enc', 'nvh264dec',
+            'rtph264pay', 'rtph264depay', 'udpsrc', 'udpsink']
+missing = [name for name in required if Gst.ElementFactory.find(name) is None]
+if missing:
+    raise SystemExit('ERROR: 缺少中科视频插件：' + ','.join(missing))
+PY_ZHONGKE_DEPS
+fi
 
 if [[ -z $ADVERTISE_HOST ]]; then
 	# 不使用 `ip route get` 查询公网地址：代理软件可能通过策略路由
@@ -326,19 +333,24 @@ import sys
 
 count = int(sys.argv[1])
 kind = sys.argv[2]
-ranges = [(8001 if kind == "aisheng" else 8770, count)]
+ranges = [(dict(aisheng=8001, two_axis=8770, zhongke=8880)[kind], count)]
 if kind == "aisheng":
     ranges += [(9000, count), (7001, count), (8554, count)]
+if kind == "zhongke":
+    ranges += [(14280, count), (18570, count), (14580, count), (13030, count)]
+probes = [(socket.SOCK_DGRAM, base + offset) for base, length in ranges for offset in range(length)]
+if kind == "zhongke":
+    probes += [(socket.SOCK_STREAM, 8566 + offset) for offset in range(count)]
 sockets = []
 try:
-    for base, length in ranges:
-        for port in range(base, base + length):
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sockets.append(sock)
-            try:
-                sock.bind(("0.0.0.0", port))
-            except OSError as error:
-                raise SystemExit(f"ERROR: 吊仓 UDP 端口 {port} 已被使用：{error}")
+    for kind, port in probes:
+        sock = socket.socket(socket.AF_INET, kind)
+        sockets.append(sock)
+        try:
+            sock.bind(("0.0.0.0", port))
+        except OSError as error:
+            protocol = "UDP" if kind == socket.SOCK_DGRAM else "RTSP TCP"
+            raise SystemExit(f"ERROR: 吊仓 {protocol} 端口 {port} 已被使用：{error}")
 finally:
     for sock in sockets:
         sock.close()
@@ -350,11 +362,33 @@ printf '%s\n' "$COUNT" > "$RUNTIME_DIR/count"
 printf '%s\n' "$ASSETS_ROOT" > "$RUNTIME_DIR/assets_root"
 printf '%s\n' "$ASSETS_REV" > "$RUNTIME_DIR/assets_revision"
 
+# 同一组运行字段分别传给生成器和网关，确保中科有效配置及hash一致。
+zhongke_targets=()
+for ((aircraft_id = 1; aircraft_id <= COUNT; aircraft_id++)); do
+	zhongke_targets+=(--target-name "${AIRCRAFT_MODEL}_${aircraft_id}")
+done
+zhongke_targets+=(--target-name xiaomotuo --target-name xiaobianfu)
+zhongke_runtime_args() {
+	local aircraft_id=$1
+	local index=$((aircraft_id - 1))
+	zhongke_args=(--config "$ASSETS_ROOT/models/gimbals/zhongke-d80/parameters.ini"
+		--model "${AIRCRAFT_MODEL}_${aircraft_id}" --aircraft-id "$aircraft_id"
+		--world "$WORLD" "${zhongke_targets[@]}" --udp-bind 0.0.0.0
+		--udp-port "$((CONTROL_PORT_BASE + index))" --rtsp-bind 0.0.0.0
+		--rtsp-port "$((8566 + index))" --rtsp-mount "/zhongke_d80_${aircraft_id}")
+}
+
 model_args=()
 for ((i = 0; i < COUNT; i++)); do
 	aircraft_id=$((i + 1))
 	generated="${RUNTIME_DIR}/generated/aircraft_${aircraft_id}/${AIRCRAFT_MODEL}"
-	python3 "$GENERATOR" --output-dir "$generated" --topic-prefix "/uav_${aircraft_id}/pod"
+	generator_command=(python3 "$GENERATOR" --output-dir "$generated" --topic-prefix "/uav_${aircraft_id}/pod")
+	if [[ $BRIDGE_KIND == zhongke ]]; then
+		zhongke_runtime_args "$aircraft_id"
+		generator_command=("$BRIDGE_PYTHON" "$GENERATOR" --output-dir "$generated"
+			--topic-prefix "/uav_${aircraft_id}/pod" "${zhongke_args[@]}")
+	fi
+	"${generator_command[@]}"
 	model_args+=(--model "$aircraft_id" "$generated/model.sdf")
 done
 
@@ -394,6 +428,11 @@ SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib"
 SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${TARGET_SYSTEM_PLUGIN_DIR}"
 SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
 SERVER_CONFIG_PATH="${ASSETS_ROOT}/models/gimbals/two_axis_pod/scripts/server.config"
+if [[ $BRIDGE_KIND == zhongke ]]; then
+	# 世界已声明物理与传感器系统，避免加载两轴吊仓专用配置。
+	SERVER_CONFIG_PATH="${RUNTIME_DIR}/server.config"
+	printf '<server_config><plugins/></server_config>\n' > "$SERVER_CONFIG_PATH"
+fi
 GUI_PLUGIN_PATH="${GUI_PLUGIN_DIR}/build:${SCENARIO_GUI_DIR}/build${GZ_GUI_PLUGIN_PATH:+:${GZ_GUI_PLUGIN_PATH}}"
 export GZ_PARTITION="$PARTITION"
 export GZ_IP=127.0.0.1
@@ -425,12 +464,12 @@ wait_for_log() {
 	pid=$(<"${RUNTIME_DIR}/pids/${name}.pid")
 	log_file="${RUNTIME_DIR}/logs/${name}.log"
 	for ((attempt = 0; attempt < timeout_seconds * 2; attempt++)); do
-		grep -q -- "$pattern" "$log_file" 2>/dev/null && return 0
 		if ! kill -0 "$pid" 2>/dev/null; then
 			echo "ERROR: ${name} 启动期间退出" >&2
 			tail -n 50 "$log_file" >&2 || true
 			return 1
 		fi
+		grep -q -- "$pattern" "$log_file" 2>/dev/null && return 0
 		sleep 0.5
 	done
 	echo "ERROR: 等待 ${name} 就绪超时" >&2
@@ -519,6 +558,8 @@ fi
 
 if [[ $BRIDGE_KIND == two_axis ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+elif [[ $BRIDGE_KIND == zhongke ]]; then
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 else
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\taisheng_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 fi
@@ -533,6 +574,10 @@ for ((i = 0; i < COUNT; i++)); do
 	mkdir -p "$rootfs"
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${RTSP_PORT}/two_axis_pod_${aircraft_id}"
+	elif [[ $BRIDGE_KIND == zhongke ]]; then
+		zhongke_runtime_args "$aircraft_id"
+		rtsp_port=$((8566 + i))
+		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}/zhongke_d80_${aircraft_id}"
 	else
 		video_port=$((7001 + i))
 		rtsp_port=$((8554 + i))
@@ -555,6 +600,13 @@ for ((i = 0; i < COUNT; i++)); do
 			--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
 			--udp-port "$udp_port" --rtsp-port "$RTSP_PORT"
 			--mount /two_axis_pod --aircraft-id "$aircraft_id" --encoder "$ENCODER")
+	elif [[ $BRIDGE_KIND == zhongke ]]; then
+		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+			GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+			"$BRIDGE_PYTHON" -u "$BRIDGE_SERVICE/gimbal_bridge.py"
+			--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
+			"${zhongke_args[@]}")
 	else
 		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
 			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
@@ -575,7 +627,9 @@ for ((i = 0; i < COUNT; i++)); do
 	printf '  PX4 command: '
 	printf '%q ' "${px4_command[@]}"
 	printf '\n'
-	if [[ $BRIDGE_KIND == two_axis ]]; then
+	if [[ $BRIDGE_KIND == zhongke ]]; then
+		printf '  中科网关 command: '
+	elif [[ $BRIDGE_KIND == two_axis ]]; then
 		printf '  吊仓网关 command: '
 	else
 		printf '  导引头网关 command: '
@@ -583,12 +637,16 @@ for ((i = 0; i < COUNT; i++)); do
 	printf '%q ' "${bridge_command[@]}"
 	printf '\n'
 	echo "  MAVSDK：        udpout://${ADVERTISE_HOST}:${mavsdk_port}"
-	if [[ $BRIDGE_KIND == two_axis ]]; then
+	if [[ $BRIDGE_KIND == zhongke ]]; then
+		echo "  中科指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}（16字节控制/32字节遥测）"
+	elif [[ $BRIDGE_KIND == two_axis ]]; then
 		echo "  吊仓指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}"
 	else
 		echo "  导引头指令/遥测：udp://${ADVERTISE_HOST}:${udp_port}"
 	fi
-	echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
+	if [[ -n $PX4_UDP_BRIDGE ]]; then
+		echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
+	fi
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		echo "  吊仓视频：      ${rtsp_url}"
 		printf '  地面站 command: '
@@ -598,6 +656,14 @@ for ((i = 0; i < COUNT; i++)); do
 			--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
 			--aircraft-id "$aircraft_id" --rtsp-port "$RTSP_PORT" \
 			--mount /two_axis_pod --decoder nvdec --window-title "Aircraft${aircraft_id}Gimbal"
+	elif [[ $BRIDGE_KIND == zhongke ]]; then
+		echo "  中科视频：      ${rtsp_url}"
+		printf '  地面站 command: '
+		printf '%q ' "$BRIDGE_PYTHON" \
+			"$ASSETS_ROOT/models/gimbals/zhongke-d80/ground_station/ground_station.py" \
+			--config "$ASSETS_ROOT/models/gimbals/zhongke-d80/parameters.ini" \
+			--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
+			--rtsp-url "$rtsp_url" --window-title "中科 D80 · 飞机 ${aircraft_id}"
 	else
 		echo "  导引头视频：    ${rtsp_url}（广角/长焦共用）"
 		printf '  地面站 command: '
@@ -611,20 +677,22 @@ for ((i = 0; i < COUNT; i++)); do
 
 	start_process "px4_${aircraft_id}" "${px4_command[@]}"
 	wait_for_log "px4_${aircraft_id}" 'Startup script returned successfully' 60 || exit 1
-	if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" start -p "$dyt_udp_port"; then
-		echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动失败" >&2
-		exit 1
-	fi
-	if [[ $BRIDGE_KIND == two_axis ]]; then
-		bridge_ready="listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}"
-	else
-		bridge_ready="完整遥测接收已就绪 UDP 0.0.0.0:${dyt_udp_port}"
-	fi
-	wait_for_log "px4_${aircraft_id}" "$bridge_ready" 10 || exit 1
-	sleep 0.2
-	if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" status >/dev/null; then
-		echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动后异常退出" >&2
-		exit 1
+	if [[ -n $PX4_UDP_BRIDGE_BIN ]]; then
+		if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" start -p "$dyt_udp_port"; then
+			echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动失败" >&2
+			exit 1
+		fi
+		if [[ $BRIDGE_KIND == two_axis ]]; then
+			bridge_ready="listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}"
+		else
+			bridge_ready="完整遥测接收已就绪 UDP 0.0.0.0:${dyt_udp_port}"
+		fi
+		wait_for_log "px4_${aircraft_id}" "$bridge_ready" 10 || exit 1
+		sleep 0.2
+		if ! "$PX4_UDP_BRIDGE_BIN" --instance "$i" status >/dev/null; then
+			echo "ERROR: 飞机 ${aircraft_id} 的 ${PX4_UDP_BRIDGE} 启动后异常退出" >&2
+			exit 1
+		fi
 	fi
 	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
 	if [[ $BRIDGE_KIND == two_axis ]]; then
@@ -632,6 +700,11 @@ for ((i = 0; i < COUNT; i++)); do
 		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
 		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
 			"$dyt_udp_port" "$rtsp_url" \
+			>> "$RUNTIME_DIR/interfaces.tsv"
+	elif [[ $BRIDGE_KIND == zhongke ]]; then
+		wait_for_log "bridge_${aircraft_id}" '中科网关启动' 30 || exit 1
+		wait_for_log "bridge_${aircraft_id}" '中科RTSP已启动' 60 || exit 1
+		printf '%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" "$rtsp_url" \
 			>> "$RUNTIME_DIR/interfaces.tsv"
 	else
 		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1

@@ -1,15 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 新中科模式只处理其清单；无参数继续使用原有场景停止方式。
 if (($# > 0)); then
-    if [[ ${1:-} == --aircraft-model && ${2:-} == rocket_zhongke_d80 ]]; then
-        shift 2
-        SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-        exec "${GIMBAL_PYTHON:-python3}" "$SCRIPT_DIR/start_zhongke.py" --stop "$@"
-    fi
-    echo "ERROR: 新中科停止方式：stop.sh --aircraft-model rocket_zhongke_d80 [--runtime-dir PATH]；旧模式使用无参数stop.sh" >&2
-    exit 2
+	echo "ERROR: 用法：stop.sh；全局停止当前 PX4 SITL/Gazebo/吊仓场景进程" >&2
+	exit 2
 fi
 
 RUNTIME_DIR="${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod"
@@ -36,6 +30,7 @@ while IFS= read -r pid; do add_pid "$pid"; done < <(
 		pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' || true
 		pgrep -f '(^|[ /])gz sim([ ]|$)' || true
 		pgrep -f '[g]imbal_bridge[.]py' || true
+		pgrep -f '[z]hongke-d80/controller/service/rtsp_relay[.]py' || true
 		pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/(main|video_worker|rtsp_server)[.]py' || true
 		pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' || true
 		pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' || true

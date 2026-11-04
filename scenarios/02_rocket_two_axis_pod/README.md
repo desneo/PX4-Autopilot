@@ -4,7 +4,7 @@
 
 两轴吊仓与艾晟两种组合模型总长均为 `590 mm`、质量 `5.00 kg`。每次启动从资产仓原生模型生成运行副本，继承质量、惯量、动力配置，以及装配生成器派生的重心参考、控制分配和 IMU/GPS 位置参数。
 
-中科D80使用[独立启动和停止入口](#中科d80独立入口)。以下原有启动、停止和协议说明适用于两轴吊仓/艾晟；中科必须使用带 `--aircraft-model rocket_zhongke_d80` 的显式停止命令，无参数 `stop.sh` 仍是原有全局停止方式。
+三个机型共用启动流程、运行目录 `${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod` 和 Gazebo 分区 `px4_scenario_02_rocket_two_axis_pod`。使用无参数 `stop.sh` 按 PID 文件和全局进程搜索停止当前场景。中科协议与地面站说明见[中科D80](#中科d80)。
 
 ## 启动和停止
 
@@ -15,7 +15,10 @@ bash scenarios/02_rocket_two_axis_pod/start.sh
 # 切换为火箭机 + 艾晟导引头组合模型
 bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_aisheng_seeker
 
-# 显式切换为 CSRT 图像跟踪
+# 两架中科D80，打开 Gazebo GUI
+bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_zhongke_d80 --gui -n 2
+
+# 两轴吊仓或艾晟显式切换为 CSRT 图像跟踪
 bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
 
 # 四架，打开 Gazebo GUI
@@ -35,9 +38,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 \
 bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。`--aircraft-model` 默认 `rocket_two_axis_pod`，可选 `rocket_aisheng_seeker`；两者使用相同的 world、PX4 飞行接口和 `/uav_<id>/pod` 话题前缀，但各自使用独立的生成器、控制器、网关和地面站。
+`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。`--aircraft-model` 默认 `rocket_two_axis_pod`，可选 `rocket_aisheng_seeker` 或 `rocket_zhongke_d80`；三个机型使用相同的 world、PX4 飞行接口和 `/uav_<id>/pod` 话题前缀，但各自使用独立的生成器、控制器、网关和地面站。
 
-吊仓/导引头单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部 `rocket_two_axis_pod_<id>` 或 `rocket_aisheng_seeker_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
+吊仓/导引头单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；两轴吊仓或艾晟只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪；中科仅支持 `sim_truth`，指定 `csrt` 会在启动前报错。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部所选机型的 `<aircraft-model>_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
 
 每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
 
@@ -69,7 +72,7 @@ sudo usermod -aG render,video "$USER"
 https://github.com/desneo/px4-gazebo-assets.git
 ```
 
-两轴吊仓与艾晟入口每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
+三个机型每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
 
 可用环境变量覆盖位置和下载地址：
 
@@ -79,7 +82,7 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
   bash scenarios/02_rocket_two_axis_pod/start.sh
 ```
 
-脚本会增量构建 PX4 SITL、两轴吊仓插件和本场景的碰撞监控插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动靶机和雷达管理服务。
+脚本会增量构建 PX4 SITL、所选机型的吊仓/导引头插件和本场景的碰撞监控插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动靶机和雷达管理服务。
 
 ## 吊仓姿态与定位
 
@@ -199,7 +202,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
        RTSP rtsp://192.168.1.56:8555/aisheng_seeker
 ```
 
-02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`。两个模块只编译进 SITL，均监听该飞机的 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题；每个实例只启动与机型对应的一个模块。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`。RTSP 内部 RTP 端口由资产仓网关自动分配。
+02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`。两个模块只编译进 SITL，均监听该飞机的 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题；每个实例只启动与机型对应的一个模块。中科没有对应的 PX4 JSON 接收桥，其实例不构建检查或启动上述模块。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`。中科接口表只包含 `aircraft_id`、`model`、`mavsdk_udp`、`control_udp` 和 `rtsp_url`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
 两轴机型的 JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
 
@@ -236,6 +239,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 当前v8单机组合飞机的目标惯性LOS、机械gyro、UDP→uORB、原生MAVSDK航线、落地、机械/光学接口及RTSP验证见[验证报告](docs/validation.md)；摘要在`docs/target_los_validation.json`，原始记录与源码快照保存在同级资产仓的装配模型测试目录。
 
 ```bash
+python3 -m unittest scenarios/02_rocket_two_axis_pod/test_zhongke_launcher.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_target_manager.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_radar_manager.py
@@ -288,45 +292,37 @@ bash scenarios/02_rocket_two_axis_pod/test_mavsdk_route.sh -n 1 \
 场景会在运行时机体副本中将 `EKF2_HGT_REF` 设为 GPS。该 world 的 GPS 海拔与气压高度原点不同，使用气压高度参考会使全局高度无效，PX4 因而拒绝 Mission 模式解锁；资产仓原文件不会被修改。
 
 
-## 中科D80独立入口
+## 中科D80
 
-中科组合使用 `assembledmodels/rocket_zhongke_d80` 的动态装配生成器，保留火箭机外形并使用顶部水平安装：中科底座在机体顶部、零位光轴朝机体+Z，安装高度0.289 m。默认组合质量4.955 kg，实际质量从性能INI继承。模型由正常刚体物理驱动，PX4启动后保持待命，不自动解锁或飞行。
+中科组合使用 `assembledmodels/rocket_zhongke_d80` 的动态装配生成器，保留火箭机外形并使用顶部水平安装：中科底座在机体顶部、零位光轴朝机体+Z，安装高度0.289 m。默认组合质量4.955 kg，实际质量从源 `models/gimbals/zhongke-d80/parameters.ini` 继承。模型由正常刚体物理驱动，PX4启动后保持待命，不自动解锁或飞行。
 
 ```bash
-# 单机、真实相机、标准中科二进制UDP和独立RTSP
+# 双机、真实相机、标准中科二进制 UDP 和逐机 RTSP
 bash scenarios/02_rocket_two_axis_pod/start.sh \
-  --aircraft-model rocket_zhongke_d80 --gui --advertise-host 192.168.1.56
+  --aircraft-model rocket_zhongke_d80 --gui -n 2 --advertise-host 192.168.1.56
 
-# 仅离线生成，不启动任何进程
-bash scenarios/02_rocket_two_axis_pod/start.sh \
-  --aircraft-model rocket_zhongke_d80 --prepare-only \
-  --runtime-dir /tmp/px4-scenarios/zhongke_offline
-
-# 只停止此中科运行目录；日志和session.ini保留
-bash scenarios/02_rocket_two_axis_pod/stop.sh \
-  --aircraft-model rocket_zhongke_d80
-
-# 自定义目录须在停止时使用同一路径
-bash scenarios/02_rocket_two_axis_pod/stop.sh \
-  --aircraft-model rocket_zhongke_d80 --runtime-dir /tmp/px4-scenarios/zhongke_offline
+# 全局停止场景
+bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-默认运行目录 `/tmp/px4-scenarios/02_rocket_zhongke_d80`，Gazebo分区由目录路径派生；可用 `--runtime-dir`、`--partition` 显式隔离验收实例，分区名须包含 `zhongke`。运行目录必须为空或已有有效的本模式清单，不能使用旧02默认目录，也不能覆盖其他非空目录。中科入口使用当前本机资产工作区，不执行原有入口的仓库下载或更新检查。先准备已有PX4可执行文件和中科控制器库；启动器只在新运行目录 `build/scenario_gui` 构建场景插件，不改基础模型构建配置。`GIMBAL_PYTHON` 显式指定网关/生成器解释器；未设置时，中科分支优先使用资产仓 `models/gimbals/.venv-zhongke-d80/bin/python`。启动场景进程前会检查 `gi/cv2/numpy/gz` 和NVENC/NVDEC视频插件；缺依赖时报告基础组件 `models/gimbals/zhongke-d80/scripts/setup.sh` 路径并退出，不修改环境。`--no-video` 供内部验收关闭NVENC/RTSP，Gazebo真实相机仍启用。
+启动器使用公共资产检查、构建、模型生成、world 准备、Gazebo、PX4 和碰撞致损流程；`--gui` 同时启用公共地图、靶机和雷达管理服务。控制器使用中科插件配置。`GIMBAL_PYTHON` 可指定网关和生成器解释器；未设置时，中科优先使用资产仓 `models/gimbals/.venv-zhongke-d80/bin/python`。启动进程前检查基础 Python、Gazebo 和 NVENC 视频依赖；缺失时先按基础组件 `models/gimbals/zhongke-d80/scripts/setup.sh` 配置环境。
 
-每机中科控制/遥测UDP从8880递增，RTSP从8566递增，MAVSDK接口从14280递增；`--udp-base`、`--rtsp-base` 可改中科端口起点。默认远端显示地址127.0.0.1，局域网访问须设置 `--advertise-host`。控制与遥测使用独立的16字节/32字节中科帧，没有UDP JSON控制或ACK。`session.ini` 的 `[aircraft 1]` 等节记录实体、话题、性能INI/hash、端口、视频和地面站配置；`[process 名称]` 保存PID及Linux启动时刻。端口占用时拒绝启动，不接管原服务；显式中科停止只按清单身份清理本目录进程和其子进程，不调用旧模式的全局搜索或清理。
+每机控制/遥测 UDP 从 `8880` 递增，RTSP 从 `8566` 递增，MAVSDK 从 `14280` 递增。实体名为 `rocket_zhongke_d80_<id>`，话题前缀为 `/uav_<id>/pod`，视频路径为 `/zhongke_d80_<id>`。未指定 `--advertise-host` 时使用默认路由接口地址，找不到时使用 `127.0.0.1`。控制和遥测使用16字节/32字节中科二进制帧。端口占用时拒绝启动。
 
-`config/aircraft_<id>.ini` 是保留注释的逐机性能配置副本，模型实体名为 `rocket_zhongke_d80_<id>`。它与该机网关、`config/ground_station_<id>.ini` 的 `parameters_file` 共用，注册本场景飞机和精确名称 `xiaomotuo`、`xiaobianfu`，模型与网关均校验相同配置hash。修改性能可用 `--config /绝对路径/parameters.ini` 指定源INI后重新生成，不能单独改SDF绕过配置。中科仅支持 `sim_truth`，手动、回零、双击指点、自动锁定和停止沿用基础中科组件；默认最远发现距离300 m，仅限制初选/重选，已锁超距继续。
+源性能 INI 保存质量、机械、光学等参数；场景通过 CLI 传递实体、飞机编号、world、目标名单、UDP 和 RTSP 接口覆盖。模型与网关从同一源 INI 和同一组运行参数计算有效配置及 hash，注册本场景全部飞机和精确名称 `xiaomotuo`、`xiaobianfu`。场景不生成逐机性能或地面站 INI，不读写 `session.ini`。修改性能时编辑源性能 INI 后重新启动。
 
-启动输出逐机地面站命令，也可直接运行：
+中科仅支持 `sim_truth`；手动、回零、双击指点、自动锁定和停止沿用基础中科组件。默认最远发现距离300 m，仅限制初选/重选，已锁超距继续。直立机体时零位看+Z，pitch=-80°看向机体+X上方约10°；pitch=-90°才接近水平且yaw对视线存在退化。应选择当前视场内、机械可达且300 m以内的空中目标进行初选验收。靶机面板默认2 km距离超出中科发现范围，需选择可见近距目标。
+
+启动输出每机完整地面站命令，操作者在独立终端启动。例如第一架：
 
 ```bash
 GIMBAL_PYTHON=../px4-gazebo-assets/models/gimbals/.venv-zhongke-d80/bin/python
 "$GIMBAL_PYTHON" ../px4-gazebo-assets/models/gimbals/zhongke-d80/ground_station/ground_station.py \
-  --station-config /tmp/px4-scenarios/02_rocket_zhongke_d80/config/ground_station_1.ini
+  --config ../px4-gazebo-assets/models/gimbals/zhongke-d80/parameters.ini \
+  --udp-host 192.168.1.56 --udp-port 8880 \
+  --rtsp-url rtsp://192.168.1.56:8566/zhongke_d80_1 --window-title Aircraft1ZhongkeD80
 ```
 
-地面站以外部独立模式连接实际二进制UDP和RTSP，不读取基础组件 `runs/` 会话，因此没有本地Gazebo身份诊断面板。地面站“发送中科报文”将实际接收且校验后的32字节遥测转换为JSON；默认转发地址127.0.0.1、端口9100起。场景没有PX4中科JSON接收桥，不启动 `dyt_udp_bridge` 或 `aisheng_udp_bridge`。本机验收可按清单的 `diagnostics_topic` 订阅只读Gazebo状态；物理测量仍须来自标准二进制遥测。
+地面站使用 CLI 中的连接地址，不依赖本地会话清单，独立连接模式不启用本机 Gazebo 身份诊断。它将实际接收且校验后的32字节遥测转换为 JSON；默认转发地址127.0.0.1、端口9000，可在界面修改。场景不启动 `dyt_udp_bridge` 或 `aisheng_udp_bridge`。本机可通过 `/uav_<id>/pod/diagnostics` 订阅只读 Gazebo 状态；物理测量仍须来自标准二进制遥测。
 
-地图中每机保留无碰撞橙黄色 `POD_LOCATION_MARKER_<id>`；GUI的“飞机定位与跟随”使用中科实体名。浏览相机近裁剪0.005 m，可在同一分区通过 `/gui/camera/view_control/sensitivity` 设置0.1；近景缩放先将鼠标指向实体表面、右键缓慢拖动。浏览相机与吊舱视频相机的光学设置分别生效。
-
-直立机体时零位看+Z，pitch=-80°看向机体+X上方约10°；pitch=-90°才接近水平且yaw对视线存在退化。应选择当前视场内、机械可达且300 m以内的空中目标进行初选验收。原靶机面板默认2 km距离超出中科发现范围，需由操作者选择可见近距目标；不将目标移到云台视场外后要求强制锁定。中科入口不启动载机自动飞行或碰撞致损控制服务；`--enable-collision` 只控制运行世界的机间刚体接触过滤。
+地图中每机保留无碰撞橙黄色 `POD_LOCATION_MARKER_<id>`；GUI的“飞机定位与跟随”使用中科实体名。浏览相机近裁剪0.005 m，可在公共分区通过 `/gui/camera/view_control/sensitivity` 设置0.1；近景缩放先将鼠标指向实体表面、右键缓慢拖动。浏览相机与吊舱视频相机的光学设置分别生效。
