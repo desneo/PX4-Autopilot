@@ -22,10 +22,11 @@ TARGET_MAVLINK_SYSID=200
 TRACKING_BACKEND=sim_truth
 ENABLE_COLLISION=0
 AIRCRAFT_MODEL=rocket_two_axis_pod
+FLIGHT_VIBRATION=off
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt] [--aircraft-model 模型]
+用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt] [--aircraft-model 模型] [--flight-vibration off|afly5]
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与顶部吊仓/导引头组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
@@ -40,6 +41,8 @@ usage() {
                            单目标跟踪后端：sim_truth（默认）或 csrt；中科仅支持 sim_truth
       --aircraft-model NAME
                            组合飞机模型：rocket_two_axis_pod（默认）、rocket_aisheng_seeker 或 rocket_zhongke_d80
+      --flight-vibration PROFILE
+                           悬停抖动配置：off（默认）或 afly5（实飞日志拟合）
       --target-qgc-address HOST:PORT
                            轻量靶机 MAVLink 目标（默认：127.0.0.1:14550）
       --target-sysid ID   QGC 中的靶机 SYSID（默认：200）
@@ -94,6 +97,11 @@ while (($# > 0)); do
 			AIRCRAFT_MODEL=$2
 			shift 2
 			;;
+		--flight-vibration)
+			require_value "$@"
+			FLIGHT_VIBRATION=$2
+			shift 2
+			;;
 		--target-qgc-address)
 			require_value "$@"
 			TARGET_QGC_ADDRESS=$2
@@ -134,6 +142,10 @@ if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aishen
 fi
 if [[ $AIRCRAFT_MODEL == rocket_zhongke_d80 && $TRACKING_BACKEND != sim_truth ]]; then
 	echo "ERROR: 中科D80的 --tracking-backend 仅支持 sim_truth" >&2
+	exit 2
+fi
+if [[ $FLIGHT_VIBRATION != off && $FLIGHT_VIBRATION != afly5 ]]; then
+	echo "ERROR: --flight-vibration 只接受 off 或 afly5" >&2
 	exit 2
 fi
 if [[ $ADVERTISE_HOST == *[[:space:]]* ]]; then
@@ -253,6 +265,12 @@ else
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/common/protocol.py"
 	)
 fi
+VIBRATION_MODEL_DIR="${ASSETS_ROOT}/models/vehicles/rocket_racing_quad"
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	required+=("$VIBRATION_MODEL_DIR/controller/CMakeLists.txt"
+		"$VIBRATION_MODEL_DIR/tools/configure_vibration.py"
+		"$VIBRATION_MODEL_DIR/config/flight_hover.json")
+fi
 for required_file in "${required[@]}"; do
 	[[ -f $required_file ]] || { echo "ERROR: 最新资产仓缺少必要文件：${required_file}" >&2; exit 1; }
 done
@@ -278,6 +296,13 @@ fi
 cmake -S "$CONTROLLER_DIR" -B "$CONTROLLER_DIR/build" \
 	-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build "$CONTROLLER_DIR/build" -j"$(nproc)"
+
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	echo "增量构建火箭机悬停抖动插件（${FLIGHT_VIBRATION}）。"
+	cmake -S "$VIBRATION_MODEL_DIR/controller" -B "$VIBRATION_MODEL_DIR/controller/build" \
+		-DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+	cmake --build "$VIBRATION_MODEL_DIR/controller/build" -j"$(nproc)"
+fi
 
 GUI_PLUGIN_DIR="${ASSETS_ROOT}/worlds/${WORLD}/gui"
 echo "增量构建 02 场景碰撞监控与靶机插件。"
@@ -399,6 +424,9 @@ prepare_world_command=(python3 "$SCRIPT_DIR/prepare_world.py"
 	--tracking-backend "$TRACKING_BACKEND" "${model_args[@]}")
 ((GUI)) && prepare_world_command+=(--target-control)
 ((ENABLE_COLLISION)) && prepare_world_command+=(--enable-collision)
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	prepare_world_command+=(--flight-vibration "$FLIGHT_VIBRATION")
+fi
 "${prepare_world_command[@]}"
 gz sdf -k "$WORLD_FILE"
 
@@ -420,12 +448,19 @@ fi
 # 本 world 的 GPS 海拔约为 4.2 m，而气压高度原点约为 0 m。使用 GPS
 # 高度参考，确保全局高度有效，Mission 航线模式可以通过解锁检查。
 sed -i 's/^param set-default EKF2_HGT_REF .*/param set-default EKF2_HGT_REF 1/' "$runtime_airframe"
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	python3 "$VIBRATION_MODEL_DIR/tools/configure_vibration.py" \
+		--airframe "$runtime_airframe" --profile "$VIBRATION_MODEL_DIR/config/flight_hover.json"
+fi
 
 TARGET_SYSTEM_PLUGIN_DIR="${SCENARIO_GUI_DIR}/build/target-system-plugins"
 
 RESOURCE_PATH="${RUNTIME_DIR}/models:${ASSETS_ROOT}/assembledmodels:${ASSETS_ROOT}/models/vehicles:${ASSETS_ROOT}/models/gimbals${GZ_SIM_RESOURCE_PATH:+:${GZ_SIM_RESOURCE_PATH}}"
 SYSTEM_PLUGIN_PATH="${CONTROLLER_DIR}/build/lib"
 SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${TARGET_SYSTEM_PLUGIN_DIR}"
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}:${VIBRATION_MODEL_DIR}/controller/build/lib"
+fi
 SYSTEM_PLUGIN_PATH="${SYSTEM_PLUGIN_PATH}${GZ_SIM_SYSTEM_PLUGIN_PATH:+:${GZ_SIM_SYSTEM_PLUGIN_PATH}}"
 SERVER_CONFIG_PATH="${ASSETS_ROOT}/models/gimbals/two_axis_pod/scripts/server.config"
 if [[ $BRIDGE_KIND == zhongke ]]; then
@@ -735,6 +770,9 @@ else
 	echo "场景已就绪：${COUNT} 架飞机，model=${AIRCRAFT_MODEL}，world=${WORLD}，资产版本=${ASSETS_REV}。"
 fi
 echo "飞机保持待命，不自动解锁或飞行。"
+if [[ $FLIGHT_VIBRATION != off ]]; then
+	echo "悬停抖动：      ${FLIGHT_VIBRATION}，已启用运行副本扰动；配置摘要 ${RUNTIME_DIR}/flight_vibration.json。"
+fi
 if [[ $BRIDGE_KIND == two_axis ]]; then
 	echo "吊仓单目标跟踪：${TRACKING_BACKEND}。"
 else

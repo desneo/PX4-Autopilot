@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import copy
+import importlib.util
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -14,6 +16,7 @@ import xml.etree.ElementTree as ET
 WORLD_NAME = "geo_32_217857_119_105878"
 MODEL_BASENAME = "rocket_two_axis_pod"
 TRACKING_BACKENDS = {"sim_truth", "csrt"}
+FLIGHT_VIBRATION_PROFILES = {"off", "afly5"}
 SIM_TRUTH_DYNAMIC_TARGETS = ("xiaomotuo", "xiaobianfu")
 TARGET_COMMAND_TOPIC = "/scenario/02/target/command"
 TARGET_STATUS_TOPIC = "/scenario/02/target/status"
@@ -676,6 +679,19 @@ def spawn_altitude(model_path: Path, override: float | None) -> float:
     return value
 
 
+def load_flight_vibration(source_world: Path):
+    """按需加载基础火箭模型能力；关闭时不依赖该模块或改变运行资产。"""
+    directory = source_world.parents[2] / "models/vehicles/rocket_racing_quad"
+    path = directory / "tools/configure_vibration.py"
+    profile = directory / "config/flight_hover.json"
+    if not path.is_file() or not profile.is_file():
+        raise ValueError(f"资产仓缺少悬停抖动工具或配置：{directory}")
+    spec = importlib.util.spec_from_file_location("rocket_flight_vibration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, profile
+
+
 def prepare(
     source_world: Path,
     output: Path,
@@ -686,6 +702,7 @@ def prepare(
     tracking_backend: str = "sim_truth",
     enable_aircraft_collision: bool = False,
     model_basename: str = MODEL_BASENAME,
+    flight_vibration: str = "off",
 ) -> Path:
     if not models:
         raise ValueError("至少需要一架飞机")
@@ -701,6 +718,9 @@ def prepare(
             or any(character.isspace() for character in model_basename)):
         raise ValueError("组合模型名必须是非空且不含空白的字符串")
 
+    if flight_vibration not in FLIGHT_VIBRATION_PROFILES:
+        raise ValueError("悬停抖动配置只接受 off 或 afly5")
+
     source_world = source_world.resolve()
     tree = ET.parse(source_world)
     world = tree.getroot().find("world")
@@ -708,6 +728,11 @@ def prepare(
         raise ValueError(f"SDF 中没有 world：{source_world}")
     world.set("name", WORLD_NAME)
     absolute_resources(world, source_world)
+    vibration = None
+    vibration_summaries = []
+    if flight_vibration != "off":
+        vibration, vibration_profile = load_flight_vibration(source_world)
+        vibration.configure_world(world, vibration_profile)
 
     columns = math.ceil(math.sqrt(len(models)))
     positions = [((index % columns + 1)*spacing + .25, (index // columns + 1)*spacing) for index in range(len(models))]
@@ -726,6 +751,8 @@ def prepare(
         spawn_z = ground_z + spawn_altitude(model_path.resolve(), altitude)
         roll, pitch = ground_roll_pitch(normal)
         set_text(model, "pose", f"{x:g} {y:g} {spawn_z:.12g} {roll:.12g} {pitch:.12g} 0")
+        if vibration is not None:
+            vibration_summaries.append(vibration.configure_model(model, vibration_profile, WORLD_NAME))
         world.append(model)
         add_aircraft_marker(world, aircraft_id, x, y, spawn_z)
 
@@ -750,6 +777,19 @@ def prepare(
     output.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(tree, space="  ")
     tree.write(output, encoding="utf-8", xml_declaration=True)
+    if vibration is not None:
+        profile_bytes = vibration_profile.read_bytes()
+        summary = {
+            "profile": flight_vibration,
+            "profile_sha256": hashlib.sha256(profile_bytes).hexdigest(),
+            "profile_values": json.loads(profile_bytes),
+            "world_max_step_size_s": float(world.findtext("physics/max_step_size")),
+            "models": vibration_summaries,
+        }
+        output.with_name("flight_vibration.json").write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    else:
+        output.with_name("flight_vibration.json").unlink(missing_ok=True)
     return output
 
 
@@ -790,6 +830,12 @@ def main() -> int:
         help="加入 Gazebo 靶机控制面板和场景航迹插件",
     )
     parser.add_argument(
+        "--flight-vibration",
+        choices=sorted(FLIGHT_VIBRATION_PROFILES),
+        default="off",
+        help="悬停抖动配置：off（默认）或 afly5；只修改运行副本",
+    )
+    parser.add_argument(
         "--enable-collision",
         action="store_true",
         help="启用飞机之间的刚体碰撞；默认只关闭机间碰撞",
@@ -808,6 +854,7 @@ def main() -> int:
                 tracking_backend=args.tracking_backend,
                 enable_aircraft_collision=args.enable_collision,
                 model_basename=args.model_basename,
+                flight_vibration=args.flight_vibration,
             )
         )
     except (OSError, ValueError, ET.ParseError) as error:

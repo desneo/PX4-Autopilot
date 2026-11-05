@@ -26,7 +26,8 @@ log = root / 'calls.jsonl'
 def record(tool, argv):
     row = {'tool':tool, 'argv':argv,
            'partition':os.environ.get('GZ_PARTITION'),
-           'server_config':os.environ.get('GZ_SIM_SERVER_CONFIG_PATH')}
+           'server_config':os.environ.get('GZ_SIM_SERVER_CONFIG_PATH'),
+           'system_plugin_path':os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH')}
     with log.open('a') as stream:
         stream.write(json.dumps(row, ensure_ascii=False)+'\n')
 record(name, args)
@@ -181,6 +182,53 @@ class UnifiedLauncherTests(unittest.TestCase):
     @staticmethod
     def option(argv, flag):
         return argv[argv.index(flag)+1]
+
+    def test_vibration_defaults_to_off_without_optional_asset_dependency(self):
+        self.start(extra=('--flight-vibration','off'))
+        self.assertFalse(any('rocket_racing_quad/controller' in ' '.join(row['argv'])
+                             for row in self.calls('cmake')))
+        prepare = self.commands('prepare_world.py')[0]
+        self.assertNotIn('--flight-vibration', prepare)
+        self.assertFalse(self.commands('configure_vibration.py'))
+        self.assertTrue(all('rocket_racing_quad/controller' not in (row['system_plugin_path'] or '')
+                            for row in self.calls('setsid')))
+
+    def test_vibration_enabled_builds_plugin_and_passes_profile_for_every_model(self):
+        # 外部工具被隔离替身截获；验证实际shell分支与传参。
+        directory = self.assets/'models/vehicles/rocket_racing_quad'
+        for file in ('controller/CMakeLists.txt','tools/configure_vibration.py','config/flight_hover.json'):
+            self.touch(directory/file)
+        for model in MODELS:
+            with self.subTest(model=model):
+                self.start(model,extra=('--flight-vibration','afly5','-n','2'))
+                build = [row['argv'] for row in self.calls('cmake')
+                         if str(directory/'controller') in row['argv']]
+                self.assertTrue(build)
+                prepare = self.commands('prepare_world.py')[-1]
+                self.assertEqual(self.option(prepare,'--flight-vibration'),'afly5')
+                self.assertEqual(prepare.count('--model'),2)
+                configure = self.commands('configure_vibration.py')[-1]
+                self.assertEqual(self.option(configure,'--profile'),str(directory/'config/flight_hover.json'))
+                self.assertIn('/etc/init.d-posix/airframes/',self.option(configure,'--airframe'))
+                gz = [row for row in self.calls('setsid') if 'gz' in row['argv']][-1]
+                self.assertIn(str(directory/'controller/build/lib'),
+                              next(part for part in gz['argv'] if part.startswith('GZ_SIM_SYSTEM_PLUGIN_PATH=')))
+                self.run_script('stop.sh')
+                (self.root/'started').unlink(missing_ok=True)
+                (self.root/'stopping').unlink(missing_ok=True)
+
+    def test_bad_or_missing_vibration_profile_fails_before_process_probe(self):
+        for argv in [('--flight-vibration',),('--flight-vibration','unknown')]:
+            with self.subTest(argv=argv):
+                result = self.run_script(argv=argv)
+                self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+                self.assertFalse(self.calls())
+
+    def test_enabled_vibration_missing_asset_reports_before_launch(self):
+        result = self.run_script(argv=('--flight-vibration','afly5'))
+        self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+        self.assertIn('rocket_racing_quad/controller/CMakeLists.txt', result.stderr)
+        self.assertFalse(self.calls('setsid'))
 
     def test_three_models_share_the_public_flow_and_select_their_bridge(self):
         for model, bridge, port in zip(MODELS, ('dyt_udp_bridge','aisheng_udp_bridge',None), (8770,8001,8880)):

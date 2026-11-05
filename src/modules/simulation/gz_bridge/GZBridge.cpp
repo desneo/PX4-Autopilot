@@ -449,6 +449,11 @@ void GZBridge::airspeedCallback(const gz::msgs::AirSpeed &msg)
 void GZBridge::imuCallback(const gz::msgs::IMU &msg)
 {
 	const uint64_t timestamp = hrt_absolute_time();
+	uint64_t timestamp_sample = timestamp;
+
+	if (!_imu_sample_time.update(msg.header(), timestamp, timestamp_sample)) {
+		return;
+	}
 
 	// FLU -> FRD
 	static const auto q_FLU_to_FRD = gz::math::Quaterniond(0, 1, 0, 0);
@@ -467,7 +472,7 @@ void GZBridge::imuCallback(const gz::msgs::IMU &msg)
 	// publish accel
 	sensor_accel_s accel{};
 
-	accel.timestamp_sample = timestamp;
+	accel.timestamp_sample = timestamp_sample;
 	accel.timestamp = timestamp;
 	accel.device_id = id.devid;
 
@@ -485,7 +490,7 @@ void GZBridge::imuCallback(const gz::msgs::IMU &msg)
 
 	// publish gyro
 	sensor_gyro_s gyro{};
-	gyro.timestamp_sample = timestamp;
+	gyro.timestamp_sample = timestamp_sample;
 	gyro.timestamp = timestamp;
 	gyro.device_id = id.devid;
 	gyro.x = gyro_b.X();

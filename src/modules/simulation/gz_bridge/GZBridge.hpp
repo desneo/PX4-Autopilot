@@ -37,6 +37,7 @@
 #include "GZMixingInterfaceServo.hpp"
 #include "GZMixingInterfaceWheel.hpp"
 #include "GZGimbal.hpp"
+#include "GZImuSampleTime.hpp"
 
 #include <px4_platform_common/atomic.h>
 #include <px4_platform_common/defines.h>
@@ -170,6 +171,7 @@ private:
 	matrix::Vector3d _velocity_prev{};
 	matrix::Vector3f _euler_prev{};
 	hrt_abstime _timestamp_prev{};
+	GZImuSampleTime _imu_sample_time{};
 
 	const std::string _world_name;
 	const std::string _model_name;

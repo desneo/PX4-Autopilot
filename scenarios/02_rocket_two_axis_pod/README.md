@@ -24,6 +24,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
 # 四架，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 4 --gui
 
+# 启用 A_fly5 悬停抖动配置；省略该选项或指定 off 使用原生行为
+bash scenarios/02_rocket_two_axis_pod/start.sh --flight-vibration afly5 --gui
+
 # 需要恢复飞机之间的刚体碰撞和互相致损时显式启用
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 --enable-collision
 
@@ -45,6 +48,23 @@ bash scenarios/02_rocket_two_axis_pod/stop.sh
 每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
 
 地形采用当前world的米制Z_UP、平移tile、单平铺实例DAE三角面，缺失、不支持或格点未被地形覆盖时启动报错；世界中心雷达保持在 `(0,0)`，出生点和镜头不会位于雷达杆内部。`GZ_IP=127.0.0.1` 只限制 Gazebo Transport 使用回环接口，不影响 MAVLink、吊仓 UDP 和 RTSP 的局域网访问。
+
+### 可选悬停抖动
+
+`--flight-vibration off|afly5` 默认 `off`。关闭时沿用原来的机体、IMU、世界物理步长和 PX4 参数，不加载或构建抖动插件。`afly5` 使用基础火箭模型的 `config/flight_hover.json`，只对当前运行 world 内全部普通飞机启用，不影响靶机或源资产；支持三个组合机型及多机。
+
+开启后，基础模型插件在离地且旋翼达到运行转速时逐渐加入低频机体外力/外力矩和随旋翼转速变化的 IMU 局部谐波，分别表示整机摆动与安装处的振动。世界物理最大步长缩小至 `0.001 s`，IMU 更新率按配置提高至 `1000 Hz`，相机、吊舱关节、网络端口、碰撞开关及跟踪配置保持原有接口。更高更新率会增加仿真负载，多机或完整地图下实时率可能降低。
+
+该配置是 `A_fly5.ulg` 悬停工况的经验扰动，不代表完整机架柔性或已辨识的高速动力学。开关不改写 PX4 控制增益；启用时只在运行副本机体文件末尾设置 `IMU_GYRO_CUTOFF=25 Hz` 和 `IMU_DGYRO_CUTOFF=20 Hz`，与日志滤波条件对齐，不自动解锁或起飞。姿态运动与 IMU 波动应分别验收，不能把 IMU 局部加速度当成整机运动。参数定义及适用边界见资产仓基础火箭模型的抖动说明。
+
+运行目录中的 `flight_vibration.json` 保存启用的配置值、SHA256、物理步长和每架飞机的 IMU 输入/输出话题，便于与日志对照；未启用时不保留该文件。仿真记录仍位于各 PX4 实例运行目录。关闭该选项后重新启动即可恢复原生行为。
+
+离线回归检查（不启动仿真）：
+
+```bash
+python3 -m unittest discover -s scenarios/02_rocket_two_axis_pod -p test_flight_vibration_scene.py -v
+python3 -m unittest discover -s scenarios/02_rocket_two_axis_pod -p test_zhongke_launcher.py -v
+```
 
 ### WSL 图形环境
 
