@@ -1,0 +1,7 @@
+menuconfig MODULES_SIMULATION_ZHONGKE_UDP_BRIDGE
+	bool "zhongke_udp_bridge"
+	default n
+	depends on PLATFORM_POSIX
+	---help---
+		Receive Zhongke D80 ground station JSON telemetry over UDP in SITL.
+		Publish the measurements to dyt_zhongke_telemetry.

@@ -41,15 +41,18 @@
 
 ## SITL UDP
 
-1. `dyt_udp_bridge` 只编译进 SITL，并由 02 场景为每个 PX4 实例启动。
+1. 02 场景根据机型为每个 PX4 实例启动一个 SITL 遥测桥：两轴吊仓使用 `dyt_udp_bridge`，艾晟使用 `aisheng_udp_bridge`，中科使用 `zhongke_udp_bridge`。
 2. instance 0 监听 UDP 9000，后续实例端口按 instance 序号递增。
-3. 模块解析艾盛 JSON 字段并发布 `dyt_aisheng_telemetry`；样例中不存在的字段保持消息默认值。
-4. `target_confidence` 写入 uORB 数组的第 0 个元素。
-5. UDP 输入发布时，`self_check` 和 `work_status` 固定为 `0x01`。
+3. `dyt_udp_bridge` 解析两轴吊仓的艾晟 JSON 字段并发布 `dyt_aisheng_telemetry`；报文未提供的字段保持消息默认值。
+4. `dyt_udp_bridge` 的 `target_confidence` 写入 uORB 数组的第 0 个元素。
+5. `dyt_udp_bridge` 发布时，`self_check` 和 `work_status` 固定为 `0x01`。
 6. UDP 输入发布时，`timestamp` 使用飞控启动后的微秒数。
-7. JSON `tracking_gate_w`、`tracking_gate_h` 映射至同名 uORB `uint16` 字段，
+7. 两轴 JSON `tracking_gate_w`、`tracking_gate_h` 映射至同名 uORB `uint16` 字段，
    接受 0～65535 的有限数值，按四舍五入（0.5 进 1）转换为整数像素。
    两字段独立可选，缺省为 0；负数、越界或非数值字段拒绝整包。
+8. `aisheng_udp_bridge` 接收除 `los_omega_n/e/d` 外完整的37字段 JSON，保留四目标数组并发布 `dyt_aisheng_telemetry`；未提供的 LOS 向量设为 `NaN`。
+9. `zhongke_udp_bridge` 接收地面站 `timestamp` 加14个中科遥测字段的 JSON，发布 `dyt_zhongke_telemetry`；字段名和单位与消息定义一致，不重复缩放，状态字段保留原始字节。完整字段及类型、范围校验通过后才发布。
+10. 中科地面站由操作者在界面设置对应飞机的 JSON 接收地址、端口，再手动点击“发送中科报文”开启转发；场景启动只开启接收桥。多机 JSON 接口记录在 `interfaces.tsv` 的 `zhongke_udp` 列。
 
 ## 验证要求
 

@@ -234,7 +234,7 @@ case "$AIRCRAFT_MODEL" in
 		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/zhongke-d80/controller"
 		BRIDGE_SERVICE="${CONTROLLER_DIR}/service"
 		BRIDGE_KIND=zhongke
-		PX4_UDP_BRIDGE=""
+		PX4_UDP_BRIDGE=zhongke_udp_bridge
 		CONTROL_PORT_BASE=8880
 		if [[ -z ${GIMBAL_PYTHON:-} && -x "$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python" ]]; then
 			BRIDGE_PYTHON="$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python"
@@ -362,7 +362,7 @@ ranges = [(dict(aisheng=8001, two_axis=8770, zhongke=8880)[kind], count)]
 if kind == "aisheng":
     ranges += [(9000, count), (7001, count), (8554, count)]
 if kind == "zhongke":
-    ranges += [(14280, count), (18570, count), (14580, count), (13030, count)]
+    ranges += [(9000, count), (14280, count), (18570, count), (14580, count), (13030, count)]
 probes = [(socket.SOCK_DGRAM, base + offset) for base, length in ranges for offset in range(length)]
 if kind == "zhongke":
     probes += [(socket.SOCK_STREAM, 8566 + offset) for offset in range(count)]
@@ -594,7 +594,7 @@ fi
 if [[ $BRIDGE_KIND == two_axis ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 elif [[ $BRIDGE_KIND == zhongke ]]; then
-	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tzhongke_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 else
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\taisheng_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 fi
@@ -679,7 +679,10 @@ for ((i = 0; i < COUNT; i++)); do
 	else
 		echo "  导引头指令/遥测：udp://${ADVERTISE_HOST}:${udp_port}"
 	fi
-	if [[ -n $PX4_UDP_BRIDGE ]]; then
+	if [[ $BRIDGE_KIND == zhongke ]]; then
+		echo "  中科 JSON：     udp://${ADVERTISE_HOST}:${dyt_udp_port}"
+		echo "  地面站转发：    将目标设为 ${ADVERTISE_HOST}:${dyt_udp_port}，手动点击“发送中科报文”开启。"
+	elif [[ -n $PX4_UDP_BRIDGE ]]; then
 		echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
 	fi
 	if [[ $BRIDGE_KIND == two_axis ]]; then
@@ -719,6 +722,8 @@ for ((i = 0; i < COUNT; i++)); do
 		fi
 		if [[ $BRIDGE_KIND == two_axis ]]; then
 			bridge_ready="listening for Aisheng JSON on UDP 0.0.0.0:${dyt_udp_port}"
+		elif [[ $BRIDGE_KIND == zhongke ]]; then
+			bridge_ready="中科遥测接收已就绪 UDP 0.0.0.0:${dyt_udp_port}"
 		else
 			bridge_ready="完整遥测接收已就绪 UDP 0.0.0.0:${dyt_udp_port}"
 		fi
@@ -739,7 +744,8 @@ for ((i = 0; i < COUNT; i++)); do
 	elif [[ $BRIDGE_KIND == zhongke ]]; then
 		wait_for_log "bridge_${aircraft_id}" '中科网关启动' 30 || exit 1
 		wait_for_log "bridge_${aircraft_id}" '中科RTSP已启动' 60 || exit 1
-		printf '%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" "$rtsp_url" \
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
+			"$dyt_udp_port" "$rtsp_url" \
 			>> "$RUNTIME_DIR/interfaces.tsv"
 	else
 		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1

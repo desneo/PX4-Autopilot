@@ -70,6 +70,11 @@ elif name.startswith('px4-'):
         with (runtime/f'logs/px4_{instance+1}.log').open('a') as stream:
             stream.write('listening for Aisheng JSON on UDP 0.0.0.0:'+value('-p')+'\n')
             stream.write('完整遥测接收已就绪 UDP 0.0.0.0:'+value('-p')+'\n')
+            stream.write('中科遥测接收已就绪 UDP 0.0.0.0:'+value('-p')+'\n')
+elif name == 'make':
+    bridge = root/'PX4-Autopilot/build/px4_sitl_default/bin/px4-zhongke_udp_bridge'
+    bridge.write_bytes(pathlib.Path(sys.argv[0]).read_bytes())
+    bridge.chmod(0o755)
 elif name in ('python3','component-python'):
     if args and args[0] == '-':
         source = sys.stdin.read()
@@ -136,7 +141,7 @@ class UnifiedLauncherTests(unittest.TestCase):
                          'ground_station/main.py','ground_station/ground_station.py',
                          'common/protocol.py','parameters.ini','scripts/server.config'):
                 self.touch(base/file)
-        for name in ('px4','px4-dyt_udp_bridge','px4-aisheng_udp_bridge'):
+        for name in ('px4','px4-dyt_udp_bridge','px4-aisheng_udp_bridge','px4-zhongke_udp_bridge'):
             self.executable(self.px4/f'build/px4_sitl_default/bin/{name}',
                             '#!'+sys.executable+'\n'+TOOL)
         (self.px4/'build/px4_sitl_default/etc/init.d-posix/airframes').mkdir(parents=True)
@@ -231,7 +236,7 @@ class UnifiedLauncherTests(unittest.TestCase):
         self.assertFalse(self.calls('setsid'))
 
     def test_three_models_share_the_public_flow_and_select_their_bridge(self):
-        for model, bridge, port in zip(MODELS, ('dyt_udp_bridge','aisheng_udp_bridge',None), (8770,8001,8880)):
+        for model, bridge, port in zip(MODELS, ('dyt_udp_bridge','aisheng_udp_bridge','zhongke_udp_bridge'), (8770,8001,8880)):
             with self.subTest(model=model):
                 (self.root/'started').unlink(missing_ok=True)
                 (self.root/'calls.jsonl').unlink(missing_ok=True)
@@ -248,8 +253,8 @@ class UnifiedLauncherTests(unittest.TestCase):
                 self.assertEqual(self.option(self.commands('prepare_world.py')[0],'--tracking-backend'),
                                  'csrt' if extra else 'sim_truth')
                 bridge_calls = [r for r in self.calls() if r['tool'].startswith('px4-')]
-                self.assertEqual({r['tool'] for r in bridge_calls}, {'px4-'+bridge} if bridge else set())
-                self.assertFalse(self.calls('make'),'已有PX4时中科不应因缺少JSON桥而触发构建')
+                self.assertEqual({r['tool'] for r in bridge_calls}, {'px4-'+bridge})
+                self.assertFalse(self.calls('make'),'对应机型的PX4和JSON桥齐全时无需构建')
                 ports = [r['argv'][1] for r in self.calls('port_bind')]
                 self.assertIn(port, ports)
                 self.assertTrue(self.runtime.joinpath('interfaces.tsv').exists())
@@ -297,11 +302,29 @@ class UnifiedLauncherTests(unittest.TestCase):
         table = self.runtime.joinpath('interfaces.tsv').read_text()
         self.assertIn('14280',table)
         self.assertIn('14281',table)
-        self.assertNotIn('9000',table)
+        rows = table.splitlines()
+        self.assertEqual(rows[0].split('\t'),
+                         ['aircraft_id','model','mavsdk_udp','control_udp','zhongke_udp','rtsp_url'])
+        for number, row in enumerate(rows[1:], 1):
+            self.assertEqual(row.split('\t')[4], str(8999+number))
+            self.assertIn(f'将目标设为 192.0.2.56:{8999+number}',result.stdout)
+        self.assertIn('手动点击“发送中科报文”开启',result.stdout)
+        bridge_calls = [row['argv'] for row in self.calls('px4-zhongke_udp_bridge') if 'start' in row['argv']]
+        self.assertEqual([(self.option(argv,'--instance'), self.option(argv,'-p')) for argv in bridge_calls],
+                         [('0','9000'),('1','9001')])
+        self.assertFalse(self.calls('px4-dyt_udp_bridge'))
+        self.assertFalse(self.calls('px4-aisheng_udp_bridge'))
         self.assertFalse(list(self.runtime.rglob('*.ini')))
         checked_ports = {row['argv'][1] for row in self.calls('port_bind')}
-        self.assertTrue({8880,8881,8566,8567,14280,14281,18570,18571,14580,14581,13030,13031} <= checked_ports)
+        self.assertTrue({8880,8881,9000,9001,8566,8567,14280,14281,18570,18571,14580,14581,13030,13031} <= checked_ports)
         self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
+
+    def test_missing_zhongke_bridge_triggers_sitl_build(self):
+        (self.px4/'build/px4_sitl_default/bin/px4-zhongke_udp_bridge').unlink()
+        self.start()
+        self.assertEqual(len(self.calls('make')),1)
+        self.assertIn('px4_sitl_default',self.calls('make')[0]['argv'])
+        self.assertTrue(self.calls('px4-zhongke_udp_bridge'))
 
     def test_default_model_and_no_argument_stop_keep_public_contract(self):
         result = self.run_script(argv=['--advertise-host','192.0.2.56'])
@@ -329,13 +352,16 @@ class UnifiedLauncherTests(unittest.TestCase):
         self.assertFalse(self.calls('setsid'))
 
     def test_occupied_port_rejects_before_start_and_closes_every_probe(self):
-        env = dict(self.env,FIXTURE_OCCUPIED_PORT='8881')
-        result = self.run_script(argv=['--aircraft-model',MODELS[2],'-n','2'],env=env)
-        self.assertEqual(result.returncode,1,result.stdout+result.stderr)
-        self.assertIn('8881',result.stdout+result.stderr)
-        self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
-        self.assertFalse(self.calls('setsid'))
-        self.assertFalse(self.calls('kill'))
+        for port in ('8881','9001'):
+            with self.subTest(port=port):
+                (self.root/'calls.jsonl').unlink(missing_ok=True)
+                env = dict(self.env,FIXTURE_OCCUPIED_PORT=port)
+                result = self.run_script(argv=['--aircraft-model',MODELS[2],'-n','2'],env=env)
+                self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+                self.assertIn(port,result.stdout+result.stderr)
+                self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
+                self.assertFalse(self.calls('setsid'))
+                self.assertFalse(self.calls('kill'))
 
     def test_dead_gateway_with_ready_log_runs_global_cleanup(self):
         # 已退出网关即使留下就绪日志也必须失败；stop.sh 的 kill 仍由函数截获。

@@ -195,9 +195,10 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 第 `i` 架飞机使用：
 
 - PX4/MAVSDK UDP：`14280 + i - 1`；
-- Aisheng JSON UDP：`9000 + i - 1`；
+- PX4 遥测 JSON UDP：`9000 + i - 1`，按机型接收艾晟或中科 JSON；
 - `rocket_two_axis_pod`：指令/遥测 UDP `8770 + i - 1`，共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
 - `rocket_aisheng_seeker`：指令/遥测共用 UDP `8001 + i - 1`，RTSP `rtsp://主机:(8554+i-1)/aisheng_seeker`（广角/长焦共用）；
+- `rocket_zhongke_d80`：指令/遥测共用 UDP `8880 + i - 1`，RTSP `rtsp://主机:(8566+i-1)/zhongke_d80_i`；
 - Gazebo 话题：`/uav_i/pod/*`。
 
 例如两架飞机：
@@ -222,7 +223,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
        RTSP rtsp://192.168.1.56:8555/aisheng_seeker
 ```
 
-02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`。两个模块只编译进 SITL，均监听该飞机的 Aisheng JSON UDP 端口，并将有效报文发布到该实例的 `dyt_aisheng_telemetry` uORB 主题；每个实例只启动与机型对应的一个模块。中科没有对应的 PX4 JSON 接收桥，其实例不构建检查或启动上述模块。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`。中科接口表只包含 `aircraft_id`、`model`、`mavsdk_udp`、`control_udp` 和 `rtsp_url`。RTSP 内部 RTP 端口由资产仓网关自动分配。
+02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择一个遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`，两者发布该实例的 `dyt_aisheng_telemetry`；`rocket_zhongke_d80` 使用 `zhongke_udp_bridge`，发布 `dyt_zhongke_telemetry`。这些模块只配置进 SITL，监听该飞机的 JSON UDP 端口。场景启动接收模块，地面站由操作者手动开启转发。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令及 JSON 接收地址，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`，中科机型为 `zhongke_udp`。RTSP 内部 RTP 端口由资产仓网关自动分配。
 
 两轴机型的 JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
 
@@ -260,6 +261,8 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 ```bash
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_zhongke_launcher.py
+python3 src/modules/simulation/zhongke_udp_bridge/test_json_parser.py
+python3 src/modules/simulation/zhongke_udp_bridge/test_sitl_udp.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_prepare_world.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_target_manager.py
 python3 -m unittest scenarios/02_rocket_two_axis_pod/test_radar_manager.py
@@ -327,7 +330,7 @@ bash scenarios/02_rocket_two_axis_pod/stop.sh
 
 启动器使用公共资产检查、构建、模型生成、world 准备、Gazebo、PX4 和碰撞致损流程；`--gui` 同时启用公共地图、靶机和雷达管理服务。控制器使用中科插件配置。`GIMBAL_PYTHON` 可指定网关和生成器解释器；未设置时，中科优先使用资产仓 `models/gimbals/.venv-zhongke-d80/bin/python`。启动进程前检查基础 Python、Gazebo 和 NVENC 视频依赖；缺失时先按基础组件 `models/gimbals/zhongke-d80/scripts/setup.sh` 配置环境。
 
-每机控制/遥测 UDP 从 `8880` 递增，RTSP 从 `8566` 递增，MAVSDK 从 `14280` 递增。实体名为 `rocket_zhongke_d80_<id>`，话题前缀为 `/uav_<id>/pod`，视频路径为 `/zhongke_d80_<id>`。未指定 `--advertise-host` 时使用默认路由接口地址，找不到时使用 `127.0.0.1`。控制和遥测使用16字节/32字节中科二进制帧。端口占用时拒绝启动。
+每机控制/遥测 UDP 从 `8880` 递增，PX4 JSON 接收 UDP 从 `9000` 递增，RTSP 从 `8566` 递增，MAVSDK 从 `14280` 递增。实体名为 `rocket_zhongke_d80_<id>`，话题前缀为 `/uav_<id>/pod`，视频路径为 `/zhongke_d80_<id>`。未指定 `--advertise-host` 时使用默认路由接口地址，找不到时使用 `127.0.0.1`。控制和遥测使用16字节/32字节中科二进制帧，地面站转发到 PX4 的数据使用 JSON。端口占用时拒绝启动。
 
 源性能 INI 保存质量、机械、光学等参数；场景通过 CLI 传递实体、飞机编号、world、目标名单、UDP 和 RTSP 接口覆盖。模型与网关从同一源 INI 和同一组运行参数计算有效配置及 hash，注册本场景全部飞机和精确名称 `xiaomotuo`、`xiaobianfu`。场景不生成逐机性能或地面站 INI，不读写 `session.ini`。修改性能时编辑源性能 INI 后重新启动。
 
@@ -343,6 +346,8 @@ GIMBAL_PYTHON=../px4-gazebo-assets/models/gimbals/.venv-zhongke-d80/bin/python
   --rtsp-url rtsp://192.168.1.56:8566/zhongke_d80_1 --window-title Aircraft1ZhongkeD80
 ```
 
-地面站使用 CLI 中的连接地址，不依赖本地会话清单，独立连接模式不启用本机 Gazebo 身份诊断。它将实际接收且校验后的32字节遥测转换为 JSON；默认转发地址127.0.0.1、端口9000，可在界面修改。场景不启动 `dyt_udp_bridge` 或 `aisheng_udp_bridge`。本机可通过 `/uav_<id>/pod/diagnostics` 订阅只读 Gazebo 状态；物理测量仍须来自标准二进制遥测。
+地面站使用 CLI 中的连接地址，不依赖本地会话清单，独立连接模式不启用本机 Gazebo 身份诊断。它将实际接收且校验后的32字节遥测转换为 JSON；转发地址从地面站本地偏好读取，未配置时为 `127.0.0.1:9000`。在每个地面站界面将 JSON 目标地址、端口设为启动输出中的对应飞机地址，例如 `192.168.1.56:9000`、`192.168.1.56:9001`，再手动点击“发送中科报文”；每次启动地面站时转发默认关闭，场景不自动开启。远程地面站应填写仿真主机地址。
+
+场景逐实例启动 `zhongke_udp_bridge` 接收这些 JSON。输入为 `timestamp` 加14个中科遥测字段，字段名和物理单位与 `msg/DytZhongkeTelemetry.msg` 一致；状态位保留原始字节，角度为度、角速度为度/秒、距离为米。桥接模块校验完整字段及类型、范围后，直接映射为 `dyt_zhongke_telemetry`，不重复应用厂商倍率；uORB `timestamp` 使用 PX4 本机 hrt 微秒。接收约束和独立模块用法见[中科遥测桥](../../src/modules/simulation/zhongke_udp_bridge/README.md)。在对应 PX4 控制台使用 `zhongke_udp_bridge status` 和 `listener dyt_zhongke_telemetry` 检查接收和发布。`strike_model_tyfw` 当前订阅 `dyt_aisheng_telemetry`。本机可通过 `/uav_<id>/pod/diagnostics` 订阅只读 Gazebo 状态；物理测量仍须来自标准二进制遥测。
 
 地图中每机保留无碰撞橙黄色 `POD_LOCATION_MARKER_<id>`；GUI的“飞机定位与跟随”使用中科实体名。浏览相机近裁剪0.005 m，可在公共分区通过 `/gui/camera/view_control/sensitivity` 设置0.1；近景缩放先将鼠标指向实体表面、右键缓慢拖动。浏览相机与吊舱视频相机的光学设置分别生效。
