@@ -38,9 +38,10 @@ usage() {
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
       --tracking-backend TYPE
-                           单目标跟踪后端：sim_truth（默认）或 csrt；中科仅支持 sim_truth
+                           单目标跟踪后端：sim_truth（默认）或 csrt；中科和A2416A仅支持 sim_truth
       --aircraft-model NAME
-                           组合飞机模型：rocket_two_axis_pod（默认）、rocket_aisheng_seeker 或 rocket_zhongke_d80
+                           组合飞机模型：rocket_two_axis_pod（默认）、rocket_aisheng_seeker、
+                           rocket_zhongke_d80 或 rocket_jielian_a2416a
       --flight-vibration PROFILE
                            悬停抖动配置：off（默认）或 afly5（实飞日志拟合）
       --target-qgc-address HOST:PORT
@@ -136,12 +137,14 @@ if [[ $TRACKING_BACKEND != sim_truth && $TRACKING_BACKEND != csrt ]]; then
 	echo "ERROR: --tracking-backend 只接受 sim_truth 或 csrt" >&2
 	exit 2
 fi
-if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aisheng_seeker && $AIRCRAFT_MODEL != rocket_zhongke_d80 ]]; then
-	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod、rocket_aisheng_seeker 或 rocket_zhongke_d80" >&2
+if [[ $AIRCRAFT_MODEL != rocket_two_axis_pod && $AIRCRAFT_MODEL != rocket_aisheng_seeker \
+	&& $AIRCRAFT_MODEL != rocket_zhongke_d80 && $AIRCRAFT_MODEL != rocket_jielian_a2416a ]]; then
+	echo "ERROR: --aircraft-model 只接受 rocket_two_axis_pod、rocket_aisheng_seeker、rocket_zhongke_d80 或 rocket_jielian_a2416a" >&2
 	exit 2
 fi
-if [[ $AIRCRAFT_MODEL == rocket_zhongke_d80 && $TRACKING_BACKEND != sim_truth ]]; then
-	echo "ERROR: 中科D80的 --tracking-backend 仅支持 sim_truth" >&2
+if [[ ($AIRCRAFT_MODEL == rocket_zhongke_d80 || $AIRCRAFT_MODEL == rocket_jielian_a2416a) \
+	&& $TRACKING_BACKEND != sim_truth ]]; then
+	echo "ERROR: 中科D80和A2416A的 --tracking-backend 仅支持 sim_truth" >&2
 	exit 2
 fi
 if [[ $FLIGHT_VIBRATION != off && $FLIGHT_VIBRATION != afly5 ]]; then
@@ -171,6 +174,7 @@ if pgrep -f '[/]build/px4_sitl[^/]*/bin/px4' >/dev/null \
 	|| pgrep -f '[g]imbal_bridge[.]py' >/dev/null \
 	|| pgrep -f '[z]hongke-d80/controller/service/rtsp_relay[.]py' >/dev/null \
 	|| pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/(main|video_worker|rtsp_server)[.]py' >/dev/null \
+	|| pgrep -f '[j]ielian-A2416A/(gateway/main|video/rtsp_server)[.]py' >/dev/null \
 	|| pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' >/dev/null \
 	|| pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null \
 	|| pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' >/dev/null; then
@@ -240,6 +244,17 @@ case "$AIRCRAFT_MODEL" in
 			BRIDGE_PYTHON="$ASSETS_ROOT/models/gimbals/.venv-zhongke-d80/bin/python"
 		fi
 		;;
+	rocket_jielian_a2416a)
+		MODEL_DIR="assembledmodels/rocket_jielian_a2416a"
+		CONTROLLER_DIR="${ASSETS_ROOT}/models/gimbals/jielian-A2416A"
+		BRIDGE_SERVICE=""
+		BRIDGE_KIND=jielian
+		PX4_UDP_BRIDGE=aisheng_udp_bridge
+		CONTROL_PORT_BASE=8001
+		if [[ -z ${GIMBAL_PYTHON:-} && -x "$ASSETS_ROOT/.venv-linux/bin/python" ]]; then
+			BRIDGE_PYTHON="$ASSETS_ROOT/.venv-linux/bin/python"
+		fi
+		;;
 esac
 PX4_UDP_BRIDGE_BIN=""
 [[ -n $PX4_UDP_BRIDGE ]] && PX4_UDP_BRIDGE_BIN="${PX4_DIR}/build/px4_sitl_default/bin/px4-${PX4_UDP_BRIDGE}"
@@ -258,11 +273,19 @@ if [[ $BRIDGE_KIND == two_axis || $BRIDGE_KIND == zhongke ]]; then
 			"$ASSETS_ROOT/models/gimbals/zhongke-d80/ground_station/ground_station.py"
 			"$BRIDGE_SERVICE/rtsp_relay.py")
 	fi
-else
+elif [[ $BRIDGE_KIND == aisheng ]]; then
 	required+=(
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/gateway/main.py"
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/ground_station/main.py"
 		"$ASSETS_ROOT/models/gimbals/aisheng-ASD-2-075-DD0/common/protocol.py"
+	)
+else
+	required+=(
+		"$ASSETS_ROOT/models/gimbals/jielian-A2416A/gateway/main.py"
+		"$ASSETS_ROOT/models/gimbals/jielian-A2416A/video/rtsp_server.py"
+		"$ASSETS_ROOT/models/gimbals/jielian-A2416A/ground_station/run.sh"
+		"$ASSETS_ROOT/models/gimbals/jielian-A2416A/ground_station/config.ini"
+		"$ASSETS_ROOT/models/gimbals/jielian-A2416A/video/hardware.py"
 	)
 fi
 VIBRATION_MODEL_DIR="${ASSETS_ROOT}/models/vehicles/rocket_racing_quad"
@@ -289,6 +312,8 @@ if [[ $BRIDGE_KIND == zhongke ]]; then
 	echo "增量构建中科D80控制插件。"
 elif [[ $BRIDGE_KIND == two_axis ]]; then
 	echo "增量构建两轴吊仓控制插件。"
+elif [[ $BRIDGE_KIND == jielian ]]; then
+	echo "增量构建A2416A捷联导引头控制插件。"
 else
 	echo "增量构建艾晟导引头控制插件。"
 fi
@@ -336,6 +361,22 @@ missing = [name for name in required if Gst.ElementFactory.find(name) is None]
 if missing:
     raise SystemExit('ERROR: 缺少中科视频插件：' + ','.join(missing))
 PY_ZHONGKE_DEPS
+elif [[ $BRIDGE_KIND == jielian ]]; then
+	PYTHONPATH="$CONTROLLER_DIR" "$BRIDGE_PYTHON" - <<'PY_JIELIAN_DEPS'
+import cv2, gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GstRtspServer', '1.0')
+from gi.repository import Gst, GstRtspServer
+from video.hardware import require_nvcodec
+Gst.init(None)
+require_nvcodec(need_encoder=True, need_decoder=True)
+missing = [name for name in ('appsrc', 'videoconvert', 'rtph264pay',
+                              'rtph264depay', 'h264parse', 'shmsink', 'shmsrc',
+                              'udpsrc', 'udpsink')
+           if Gst.ElementFactory.find(name) is None]
+if missing:
+    raise SystemExit('ERROR: 缺少A2416A视频插件：' + ','.join(missing))
+PY_JIELIAN_DEPS
 fi
 
 if [[ -z $ADVERTISE_HOST ]]; then
@@ -358,14 +399,19 @@ import sys
 
 count = int(sys.argv[1])
 kind = sys.argv[2]
-ranges = [(dict(aisheng=8001, two_axis=8770, zhongke=8880)[kind], count)]
+ranges = [(dict(aisheng=8001, two_axis=8770, zhongke=8880, jielian=8001)[kind], count)]
 if kind == "aisheng":
     ranges += [(9000, count), (7001, count), (8554, count)]
+if kind == "jielian":
+    ranges += [(9000, count), (7001, count), (14280, count),
+               (18570, count), (14580, count), (13030, count)]
 if kind == "zhongke":
     ranges += [(9000, count), (14280, count), (18570, count), (14580, count), (13030, count)]
 probes = [(socket.SOCK_DGRAM, base + offset) for base, length in ranges for offset in range(length)]
 if kind == "zhongke":
     probes += [(socket.SOCK_STREAM, 8566 + offset) for offset in range(count)]
+if kind == "jielian":
+    probes += [(socket.SOCK_STREAM, 8554 + offset) for offset in range(count)]
 sockets = []
 try:
     for kind, port in probes:
@@ -382,7 +428,8 @@ finally:
 PY_PORTS
 
 rm -rf -- "$RUNTIME_DIR"
-mkdir -p -- "$RUNTIME_DIR/models" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/pids" "$RUNTIME_DIR/target"
+mkdir -p -- "$RUNTIME_DIR/models" "$RUNTIME_DIR/logs" "$RUNTIME_DIR/pids" \
+	"$RUNTIME_DIR/target" "$RUNTIME_DIR/ground_station"
 printf '%s\n' "$COUNT" > "$RUNTIME_DIR/count"
 printf '%s\n' "$ASSETS_ROOT" > "$RUNTIME_DIR/assets_root"
 printf '%s\n' "$ASSETS_REV" > "$RUNTIME_DIR/assets_revision"
@@ -595,6 +642,8 @@ if [[ $BRIDGE_KIND == two_axis ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tgimbal_udp\tdyt_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 elif [[ $BRIDGE_KIND == zhongke ]]; then
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\tzhongke_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
+elif [[ $BRIDGE_KIND == jielian ]]; then
+	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\taisheng_udp\trtsp_url\tground_station_config\n' > "$RUNTIME_DIR/interfaces.tsv"
 else
 	printf 'aircraft_id\tmodel\tmavsdk_udp\tcontrol_udp\taisheng_udp\trtsp_url\n' > "$RUNTIME_DIR/interfaces.tsv"
 fi
@@ -613,10 +662,29 @@ for ((i = 0; i < COUNT; i++)); do
 		zhongke_runtime_args "$aircraft_id"
 		rtsp_port=$((8566 + i))
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}/zhongke_d80_${aircraft_id}"
-	else
+	elif [[ $BRIDGE_KIND == aisheng ]]; then
 		video_port=$((7001 + i))
 		rtsp_port=$((8554 + i))
 		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}/aisheng_seeker"
+	else
+		video_port=$((7001 + i))
+		rtsp_port=$((8554 + i))
+		rtsp_mount=/jielian_a2416a
+		rtsp_url="rtsp://${ADVERTISE_HOST}:${rtsp_port}${rtsp_mount}"
+		ground_station_config="${RUNTIME_DIR}/ground_station/aircraft_${aircraft_id}.ini"
+		{
+			printf '[network]\n'
+			printf '# 导引头网关的控制/遥测共用端口。\n'
+			printf 'host = %s\nport = %d\n\n' "$ADVERTISE_HOST" "$udp_port"
+			printf '[forward]\n'
+			printf '# “发送艾晟报文”将每个100 Hz有效遥测帧发送到本机飞控监听端口。\n'
+			printf 'ip = %s\nport = %d\n\n' "$ADVERTISE_HOST" "$dyt_udp_port"
+			printf '[video]\n'
+			printf '# A2416A H.264 RTSP流。\n'
+			printf 'rtsp_url = %s\nwidth = 1920\nheight = 1080\nfps = 25\n\n' "$rtsp_url"
+			printf '[display]\n'
+			printf 'width = 960\nheight = 540\nwindow_title = A2416A 捷联导引头地面站 · 飞机 %d\n' "$aircraft_id"
+		} > "$ground_station_config"
 	fi
 
 	px4_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
@@ -642,7 +710,7 @@ for ((i = 0; i < COUNT; i++)); do
 			"$BRIDGE_PYTHON" -u "$BRIDGE_SERVICE/gimbal_bridge.py"
 			--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
 			"${zhongke_args[@]}")
-	else
+	elif [[ $BRIDGE_KIND == aisheng ]]; then
 		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
 			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
 			GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
@@ -655,6 +723,18 @@ for ((i = 0; i < COUNT; i++)); do
 			--video --video-port "$video_port"
 			--rtsp-port "$rtsp_port" --rtsp-mount /aisheng_seeker
 			--verbose)
+	else
+		bridge_command=(env GZ_PARTITION="$PARTITION" GZ_IP=127.0.0.1
+			GZ_SIM_RESOURCE_PATH="$RESOURCE_PATH" GZ_SIM_SYSTEM_PLUGIN_PATH="$SYSTEM_PLUGIN_PATH"
+			GZ_SIM_SERVER_CONFIG_PATH="$SERVER_CONFIG_PATH"
+			PYTHONPATH="$CONTROLLER_DIR"
+			"$BRIDGE_PYTHON" -u "$CONTROLLER_DIR/gateway/main.py"
+			--host 0.0.0.0 --port "$udp_port"
+			--topic-prefix "$topic_prefix" --image-topic "$topic_prefix/image"
+			--rtp-host 127.0.0.1 --rtp-port "$video_port" --verbose)
+		rtsp_command=(env PYTHONPATH="$CONTROLLER_DIR"
+			"$BRIDGE_PYTHON" -u "$CONTROLLER_DIR/video/rtsp_server.py"
+			--rtp-port "$video_port" --rtsp-port "$rtsp_port" --mount "$rtsp_mount")
 	fi
 
 	echo
@@ -671,6 +751,11 @@ for ((i = 0; i < COUNT; i++)); do
 	fi
 	printf '%q ' "${bridge_command[@]}"
 	printf '\n'
+	if [[ $BRIDGE_KIND == jielian ]]; then
+		printf '  A2416A RTSP command: '
+		printf '%q ' "${rtsp_command[@]}"
+		printf '\n'
+	fi
 	echo "  MAVSDK：        udpout://${ADVERTISE_HOST}:${mavsdk_port}"
 	if [[ $BRIDGE_KIND == zhongke ]]; then
 		echo "  中科指令/遥测： udp://${ADVERTISE_HOST}:${udp_port}（16字节控制/32字节遥测）"
@@ -684,6 +769,9 @@ for ((i = 0; i < COUNT; i++)); do
 		echo "  地面站转发：    将目标设为 ${ADVERTISE_HOST}:${dyt_udp_port}，手动点击“发送中科报文”开启。"
 	elif [[ -n $PX4_UDP_BRIDGE ]]; then
 		echo "  Aisheng JSON：  udp://${ADVERTISE_HOST}:${dyt_udp_port}"
+		if [[ $BRIDGE_KIND == jielian ]]; then
+			echo "  地面站转发：    点击“发送艾晟报文”后发送到飞控监听端口。"
+		fi
 	fi
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		echo "  吊仓视频：      ${rtsp_url}"
@@ -702,7 +790,7 @@ for ((i = 0; i < COUNT; i++)); do
 			--config "$ASSETS_ROOT/models/gimbals/zhongke-d80/parameters.ini" \
 			--udp-host "$ADVERTISE_HOST" --udp-port "$udp_port" \
 			--rtsp-url "$rtsp_url" --window-title "中科 D80 · 飞机 ${aircraft_id}"
-	else
+	elif [[ $BRIDGE_KIND == aisheng ]]; then
 		echo "  导引头视频：    ${rtsp_url}（广角/长焦共用）"
 		printf '  地面站 command: '
 		printf '%q ' "$BRIDGE_PYTHON" \
@@ -710,6 +798,12 @@ for ((i = 0; i < COUNT; i++)); do
 			--host "$ADVERTISE_HOST" --control-port "$udp_port" \
 			--forward-host "$ADVERTISE_HOST" --forward-port "$dyt_udp_port" \
 			--rtsp-url "$rtsp_url"
+	else
+		echo "  A2416A视频：    ${rtsp_url}"
+		echo "  地面站配置：    ${ground_station_config}"
+		printf '  地面站 command: '
+		printf '%q ' bash "$CONTROLLER_DIR/ground_station/run.sh" \
+			--config "$ground_station_config"
 	fi
 	printf '\n'
 
@@ -734,7 +828,15 @@ for ((i = 0; i < COUNT; i++)); do
 			exit 1
 		fi
 	fi
+	if [[ $BRIDGE_KIND == jielian ]]; then
+		start_process "rtsp_${aircraft_id}" "${rtsp_command[@]}"
+	fi
 	start_process "bridge_${aircraft_id}" "${bridge_command[@]}"
+	if [[ $BRIDGE_KIND == jielian ]]; then
+		# RTSP服务会在启动时预备udpsrc并等待首帧；网关必须并行启动，
+		# 不能在启动网关之前阻塞等待RTSP就绪日志。
+		wait_for_log "rtsp_${aircraft_id}" 'A2416A RTSP服务：' 30 || exit 1
+	fi
 	if [[ $BRIDGE_KIND == two_axis ]]; then
 		wait_for_log "bridge_${aircraft_id}" '遥测/指令服务' 30 || exit 1
 		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1
@@ -747,6 +849,12 @@ for ((i = 0; i < COUNT; i++)); do
 		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" "$mavsdk_port" "$udp_port" \
 			"$dyt_udp_port" "$rtsp_url" \
 			>> "$RUNTIME_DIR/interfaces.tsv"
+	elif [[ $BRIDGE_KIND == jielian ]]; then
+		wait_for_log "bridge_${aircraft_id}" 'A2416A网关：' 30 || exit 1
+		wait_for_log "bridge_${aircraft_id}" 'A2416A H.264视频：' 30 || exit 1
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$aircraft_id" "$entity" \
+			"$mavsdk_port" "$udp_port" "$dyt_udp_port" "$rtsp_url" \
+			"$ground_station_config" >> "$RUNTIME_DIR/interfaces.tsv"
 	else
 		wait_for_log "bridge_${aircraft_id}" '网关启动' 30 || exit 1
 		wait_for_log "bridge_${aircraft_id}" 'RTSP 服务已启动' 60 || exit 1

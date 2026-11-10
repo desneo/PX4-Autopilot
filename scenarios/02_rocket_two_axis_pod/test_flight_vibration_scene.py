@@ -15,7 +15,8 @@ import xml.etree.ElementTree as ET
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parents[2] / 'px4-gazebo-assets'
 WORLD = 'geo_32_217857_119_105878'
-MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker', 'rocket_zhongke_d80')
+MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker', 'rocket_zhongke_d80',
+          'rocket_jielian_a2416a')
 SPEC = importlib.util.spec_from_file_location('vibration_scene_prepare', HERE/'prepare_world.py')
 PREPARE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREPARE)

@@ -26,6 +26,7 @@ RATE_RANGE_HZ = (1.0, 2.0)
 PROFILE_RANGES_M = {
     "rocket_two_axis_pod": 3000.0,
     "rocket_aisheng_seeker": 3000.0,
+    "rocket_jielian_a2416a": 3000.0,
     "xiaomotuo": 5000.0,
     "xiaobianfu": 5000.0,
 }
@@ -65,6 +66,8 @@ def profile_for_model(name: str) -> tuple[str, float] | None:
         return "small_uav", PROFILE_RANGES_M["rocket_two_axis_pod"]
     if name.startswith("rocket_aisheng_seeker_"):
         return "small_uav", PROFILE_RANGES_M["rocket_aisheng_seeker"]
+    if name.startswith("rocket_jielian_a2416a_"):
+        return "small_uav", PROFILE_RANGES_M["rocket_jielian_a2416a"]
     if name in ("xiaomotuo", "xiaobianfu"):
         return "small_target", PROFILE_RANGES_M[name]
     return None

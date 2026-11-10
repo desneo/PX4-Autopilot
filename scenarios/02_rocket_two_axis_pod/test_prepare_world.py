@@ -39,7 +39,7 @@ class PrepareWorldTest(unittest.TestCase):
 
     def make_model(self, aircraft_id: int, basename: str = "rocket_two_axis_pod") -> Path:
         directory = self.root / f"generated_{aircraft_id}" / basename
-        (directory / "meshes").mkdir(parents=True)
+        (directory / "meshes").mkdir(parents=True, exist_ok=True)
         (directory / "meshes" / "body.stl").write_text("mesh")
         (directory / "parameters.json").write_text(json.dumps({"simulation": {"spawn_pose": "0 0 0.24 0 0 0"}}))
         path = directory / "model.sdf"
@@ -52,6 +52,25 @@ class PrepareWorldTest(unittest.TestCase):
             "</mesh></geometry></visual></link>"
             "<plugin name='two_axis::GimbalController' filename='lib.so'>"
             f"<command_topic>/uav_{aircraft_id}/pod/command</command_topic>"
+            "</plugin></model></sdf>"
+        )
+        return path
+
+    def make_strapdown_model(self, aircraft_id: int) -> Path:
+        basename = "rocket_jielian_a2416a"
+        directory = self.root / f"generated_{aircraft_id}" / basename
+        (directory / "meshes").mkdir(parents=True, exist_ok=True)
+        (directory / "parameters.json").write_text(
+            json.dumps({"simulation": {"spawn_pose": "0 0 0.24 0 0 0"}})
+        )
+        path = directory / "model.sdf"
+        path.write_text(
+            f"<sdf version='1.10'><model name='{basename}'><static>false</static>"
+            "<link name='base_link'><collision name='body_collision'><geometry><box>"
+            "<size>1 1 1</size></box></geometry></collision></link>"
+            "<plugin name='jielian_a2416a::StrapdownController' filename='lib.so'>"
+            f"<command_topic>/uav_{aircraft_id}/pod/command</command_topic>"
+            "<sim_truth_target_name>stale_target</sim_truth_target_name>"
             "</plugin></model></sdf>"
         )
         return path
@@ -110,6 +129,50 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(
             [item.text for item in plugin.findall("sim_truth_target_name")],
             ["rocket_aisheng_seeker_1", "xiaomotuo", "xiaobianfu"])
+
+    def test_jielian_strapdown_targets_and_gui_prefix_follow_selected_model(self):
+        output = self.root / "run" / "world.sdf"
+        MODULE.prepare(
+            self.root / "world" / "world.sdf",
+            output,
+            [(1, self.make_strapdown_model(1)), (2, self.make_strapdown_model(2))],
+            model_basename="rocket_jielian_a2416a",
+            tracking_backend="sim_truth",
+            target_control=True,
+        )
+        world = ET.parse(output).getroot().find("world")
+        target_names = [
+            "rocket_jielian_a2416a_1",
+            "rocket_jielian_a2416a_2",
+            "xiaomotuo",
+            "xiaobianfu",
+        ]
+        for aircraft_id in (1, 2):
+            plugin = world.find(
+                f"model[@name='rocket_jielian_a2416a_{aircraft_id}']/"
+                "plugin[@name='jielian_a2416a::StrapdownController']"
+            )
+            self.assertEqual(
+                [item.text for item in plugin.findall("sim_truth_target_name")],
+                target_names,
+            )
+        target_control = world.find("gui/plugin[@filename='TargetControl']")
+        self.assertEqual(
+            target_control.findtext("aircraft_prefix"), "rocket_jielian_a2416a_"
+        )
+        collision = world.find("plugin[@name='scenario02::CollisionMonitor']")
+        self.assertEqual(
+            collision.findtext("aircraft_prefix"), "rocket_jielian_a2416a_"
+        )
+
+        with self.assertRaisesRegex(ValueError, "A2416A.*sim_truth"):
+            MODULE.prepare(
+                self.root / "world" / "world.sdf",
+                output,
+                [(1, self.make_strapdown_model(1))],
+                model_basename="rocket_jielian_a2416a",
+                tracking_backend="csrt",
+            )
 
     def test_missing_unsupported_or_uncovered_real_terrain_never_falls_back_to_zero(self):
         source, path = self.add_terrain_tile()

@@ -355,6 +355,24 @@ def configure_gimbal_tracking(
     target_names: list[str],
 ) -> None:
     """配置单目标跟踪后端与场景内可锁定的飞机实体。"""
+    strapdown_plugins = model.findall(
+        "./plugin[@name='jielian_a2416a::StrapdownController']"
+    )
+    if strapdown_plugins:
+        if (
+            len(strapdown_plugins) != 1
+            or not model.get("name", "").startswith("rocket_jielian_a2416a_")
+        ):
+            raise ValueError("A2416A组合必须且只能包含一个捷联控制器")
+        if tracking_backend != "sim_truth":
+            raise ValueError("A2416A捷联导引头仅使用sim_truth真值跟踪")
+        plugin = strapdown_plugins[0]
+        for old in plugin.findall("sim_truth_target_name"):
+            plugin.remove(old)
+        for target_name in target_names:
+            candidate = ET.SubElement(plugin, "sim_truth_target_name")
+            candidate.text = target_name
+        return
     zhongke_plugins = model.findall("./plugin[@name='zhongke_d80::GimbalController']")
     if zhongke_plugins:
         if len(zhongke_plugins) != 1 or not model.get("name", "").startswith("rocket_zhongke_d80_"):
@@ -767,10 +785,9 @@ def prepare(
         set_text(clip, "near", 0.005)
 
     if target_control:
-        if model_basename == "rocket_zhongke_d80":
-            add_target_control(world, len(models), aircraft_prefix="rocket_zhongke_d80_")
-        else:
-            add_target_control(world, len(models))
+        add_target_control(
+            world, len(models), aircraft_prefix=f"{model_basename}_"
+        )
         add_target_trajectory(world)
 
     output = output.resolve()

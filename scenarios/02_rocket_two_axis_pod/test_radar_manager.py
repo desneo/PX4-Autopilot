@@ -43,6 +43,7 @@ class RadarManagerTest(unittest.TestCase):
     def test_profiles_use_three_and_five_kilometre_nominal_ranges(self):
         self.assertEqual(MODULE.profile_for_model("rocket_two_axis_pod_3"), ("small_uav", 3000.0))
         self.assertEqual(MODULE.profile_for_model("rocket_aisheng_seeker_1"), ("small_uav", 3000.0))
+        self.assertEqual(MODULE.profile_for_model("rocket_jielian_a2416a_2"), ("small_uav", 3000.0))
         self.assertEqual(MODULE.profile_for_model("xiaomotuo"), ("small_target", 5000.0))
         self.assertEqual(MODULE.profile_for_model("xiaobianfu"), ("small_target", 5000.0))
         self.assertIsNone(MODULE.profile_for_model("terrain"))

@@ -15,7 +15,8 @@ import xml.etree.ElementTree as ET
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parents[1].parent / 'px4-gazebo-assets'
 WORLD = 'geo_32_217857_119_105878'
-MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker', 'rocket_zhongke_d80')
+MODELS = ('rocket_two_axis_pod', 'rocket_aisheng_seeker', 'rocket_zhongke_d80',
+          'rocket_jielian_a2416a')
 
 # 所有外部进程、端口检测及 kill 均被截获；shell 分支、参数和清理流程保持真实。
 TOOL = r'''import json, os, pathlib, sys, time, types
@@ -62,7 +63,7 @@ elif name == 'setsid':
         (root/'failed_pid').write_text(str(os.getpid()))
         print('中科网关启动\n中科RTSP已启动\n测试网关启动失败', flush=True)
     else:
-        print('Startup script returned successfully\n遥测/指令服务\n网关启动\n中科网关启动\n中科RTSP已启动\nRTSP 服务已启动\n靶机管理服务已就绪\n雷达管理服务已就绪\n碰撞致损服务已就绪', flush=True)
+        print('Startup script returned successfully\n遥测/指令服务\n网关启动\n中科网关启动\n中科RTSP已启动\nRTSP 服务已启动\nA2416A网关：\nA2416A H.264视频：\nA2416A RTSP服务：\n靶机管理服务已就绪\n雷达管理服务已就绪\n碰撞致损服务已就绪', flush=True)
 elif name.startswith('px4-'):
     runtime = pathlib.Path(os.environ['TMPDIR'])/'px4-scenarios/02_rocket_two_axis_pod'
     if 'start' in args:
@@ -141,6 +142,11 @@ class UnifiedLauncherTests(unittest.TestCase):
                          'ground_station/main.py','ground_station/ground_station.py',
                          'common/protocol.py','parameters.ini','scripts/server.config'):
                 self.touch(base/file)
+        base = self.assets/'models/gimbals/jielian-A2416A'
+        for file in ('CMakeLists.txt','gateway/main.py','video/rtsp_server.py',
+                     'video/hardware.py','ground_station/run.sh',
+                     'ground_station/config.ini'):
+            self.touch(base/file)
         for name in ('px4','px4-dyt_udp_bridge','px4-aisheng_udp_bridge','px4-zhongke_udp_bridge'):
             self.executable(self.px4/f'build/px4_sitl_default/bin/{name}',
                             '#!'+sys.executable+'\n'+TOOL)
@@ -235,15 +241,14 @@ class UnifiedLauncherTests(unittest.TestCase):
         self.assertIn('rocket_racing_quad/controller/CMakeLists.txt', result.stderr)
         self.assertFalse(self.calls('setsid'))
 
-    def test_three_models_share_the_public_flow_and_select_their_bridge(self):
-        for model, bridge, port in zip(MODELS, ('dyt_udp_bridge','aisheng_udp_bridge','zhongke_udp_bridge'), (8770,8001,8880)):
+    def test_four_models_share_the_public_flow_and_select_their_bridge(self):
+        bridges = ('dyt_udp_bridge','aisheng_udp_bridge','zhongke_udp_bridge','aisheng_udp_bridge')
+        ports = (8770,8001,8880,8001)
+        for model, bridge, port in zip(MODELS, bridges, ports):
             with self.subTest(model=model):
                 (self.root/'started').unlink(missing_ok=True)
                 (self.root/'calls.jsonl').unlink(missing_ok=True)
-                if model == MODELS[2]:
-                    for name in ('px4-dyt_udp_bridge','px4-aisheng_udp_bridge'):
-                        (self.px4/f'build/px4_sitl_default/bin/{name}').unlink()
-                extra = ('--tracking-backend','csrt') if model != MODELS[2] else ()
+                extra = ('--tracking-backend','csrt') if model in MODELS[:2] else ()
                 self.start(model,extra)
                 generators = self.commands('generate_dynamic_model.py')
                 self.assertEqual(len(generators), 1)
@@ -258,7 +263,12 @@ class UnifiedLauncherTests(unittest.TestCase):
                 ports = [r['argv'][1] for r in self.calls('port_bind')]
                 self.assertIn(port, ports)
                 self.assertTrue(self.runtime.joinpath('interfaces.tsv').exists())
-                self.assertFalse(list(self.runtime.rglob('*.ini')))
+                configs = list(self.runtime.rglob('*.ini'))
+                if model == MODELS[3]:
+                    self.assertEqual(len(configs), 1)
+                    self.assertIn('发送艾晟报文', configs[0].read_text())
+                else:
+                    self.assertFalse(configs)
 
     def test_two_zhongke_aircraft_use_identical_generator_and_gateway_overrides(self):
         result = self.start(extra=('-n','2','--gui','--enable-collision'))
@@ -318,6 +328,52 @@ class UnifiedLauncherTests(unittest.TestCase):
         checked_ports = {row['argv'][1] for row in self.calls('port_bind')}
         self.assertTrue({8880,8881,9000,9001,8566,8567,14280,14281,18570,18571,14580,14581,13030,13031} <= checked_ports)
         self.assertEqual(len(self.calls('port_bind')),len(self.calls('port_close')))
+
+    def test_two_jielian_aircraft_isolate_gateway_rtsp_gcs_and_reuse_aisheng_bridge(self):
+        result = self.start(MODELS[3], extra=('-n', '2', '--gui'))
+        gateways = self.commands('main.py')
+        rtsp_servers = self.commands('rtsp_server.py')
+        self.assertEqual(len(gateways), 2)
+        self.assertEqual(len(rtsp_servers), 2)
+        for number, (gateway, rtsp) in enumerate(zip(gateways, rtsp_servers), 1):
+            index = number - 1
+            self.assertTrue(any('/jielian-A2416A/gateway/main.py' in part for part in gateway))
+            self.assertEqual(self.option(gateway, '--port'), str(8001 + index))
+            self.assertEqual(self.option(gateway, '--topic-prefix'), f'/uav_{number}/pod')
+            self.assertEqual(self.option(gateway, '--rtp-port'), str(7001 + index))
+            self.assertTrue(any('/jielian-A2416A/video/rtsp_server.py' in part for part in rtsp))
+            self.assertEqual(self.option(rtsp, '--rtp-port'), str(7001 + index))
+            self.assertEqual(self.option(rtsp, '--rtsp-port'), str(8554 + index))
+            self.assertEqual(self.option(rtsp, '--mount'), '/jielian_a2416a')
+
+        bridge_calls = [row['argv'] for row in self.calls('px4-aisheng_udp_bridge')
+                        if 'start' in row['argv']]
+        self.assertEqual(
+            [(self.option(argv, '--instance'), self.option(argv, '-p'))
+             for argv in bridge_calls],
+            [('0', '9000'), ('1', '9001')],
+        )
+        self.assertFalse(self.calls('px4-jielian_udp_bridge'))
+        configs = sorted(self.runtime.glob('ground_station/aircraft_*.ini'))
+        self.assertEqual(len(configs), 2)
+        for number, config in enumerate(configs, 1):
+            text = config.read_text()
+            self.assertIn(f'port = {8000 + number}', text)
+            self.assertIn(f'port = {8999 + number}', text)
+            self.assertIn(f'rtsp://192.0.2.56:{8553 + number}/jielian_a2416a', text)
+            self.assertIn('发送艾晟报文', text)
+        rows = self.runtime.joinpath('interfaces.tsv').read_text().splitlines()
+        self.assertEqual(
+            rows[0].split('\t'),
+            ['aircraft_id', 'model', 'mavsdk_udp', 'control_udp', 'aisheng_udp',
+             'rtsp_url', 'ground_station_config'],
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertIn('点击“发送艾晟报文”后发送到飞控监听端口', result.stdout)
+        checked_ports = {row['argv'][1] for row in self.calls('port_bind')}
+        self.assertTrue({8001, 8002, 9000, 9001, 7001, 7002, 8554, 8555}
+                        <= checked_ports)
+        self.assertEqual(len(self.calls('port_bind')), len(self.calls('port_close')))
 
     def test_missing_zhongke_bridge_triggers_sitl_build(self):
         (self.px4/'build/px4_sitl_default/bin/px4-zhongke_udp_bridge').unlink()

@@ -32,6 +32,7 @@ while IFS= read -r pid; do add_pid "$pid"; done < <(
 		pgrep -f '[g]imbal_bridge[.]py' || true
 		pgrep -f '[z]hongke-d80/controller/service/rtsp_relay[.]py' || true
 		pgrep -f '[a]isheng-ASD-2-075-DD0/gateway/(main|video_worker|rtsp_server)[.]py' || true
+		pgrep -f '[j]ielian-A2416A/(gateway/main|video/rtsp_server)[.]py' || true
 		pgrep -f '[c]ollision_manager[.]py.*--aircraft-count' || true
 		pgrep -f '[t]arget_manager[.]py.*--world geo_32_217857_119_105878' || true
 		pgrep -f '[r]adar_manager[.]py.*--world geo_32_217857_119_105878' || true

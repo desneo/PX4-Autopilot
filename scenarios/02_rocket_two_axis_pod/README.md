@@ -1,10 +1,10 @@
-# 场景 02：火箭穿越机与两轴吊仓/艾晟/中科D80
+# 场景 02：火箭穿越机与两轴吊仓/艾晟/中科D80/A2416A
 
-在资产仓的 `geo_32_217857_119_105878` world 中启动火箭穿越机与顶部组合模型。`--aircraft-model` 选择 `rocket_two_axis_pod`（默认，两轴吊仓）或 `rocket_aisheng_seeker`（艾晟导引头），或显式选择 `rocket_zhongke_d80`（中科D80）。所有飞机使用同一个 world，默认启动一架、不开启 Gazebo GUI，启动后保持待命，不自动解锁或飞行。
+在资产仓的 `geo_32_217857_119_105878` world 中启动火箭穿越机与顶部组合模型。`--aircraft-model` 选择 `rocket_two_axis_pod`（默认，两轴吊仓）、`rocket_aisheng_seeker`（艾晟导引头）、`rocket_zhongke_d80`（中科D80）或 `rocket_jielian_a2416a`（A2416A捷联导引头）。所有飞机使用同一个 world，默认启动一架、不开启 Gazebo GUI，启动后保持待命，不自动解锁或飞行。
 
 两轴吊仓与艾晟两种组合模型总长均为 `590 mm`、质量 `5.00 kg`。每次启动从资产仓原生模型生成运行副本，继承质量、惯量、动力配置，以及装配生成器派生的重心参考、控制分配和 IMU/GPS 位置参数。
 
-三个机型共用启动流程、运行目录 `${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod` 和 Gazebo 分区 `px4_scenario_02_rocket_two_axis_pod`。使用无参数 `stop.sh` 按 PID 文件和全局进程搜索停止当前场景。中科协议与地面站说明见[中科D80](#中科d80)。
+四个机型共用启动流程、运行目录 `${TMPDIR:-/tmp}/px4-scenarios/02_rocket_two_axis_pod` 和 Gazebo 分区 `px4_scenario_02_rocket_two_axis_pod`。使用无参数 `stop.sh` 按 PID 文件和全局进程搜索停止当前场景。A2416A和中科的接口说明分别见[A2416A捷联导引头](#a2416a捷联导引头)和[中科D80](#中科d80)。
 
 ## 启动和停止
 
@@ -17,6 +17,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_aisheng_s
 
 # 两架中科D80，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_zhongke_d80 --gui -n 2
+
+# A2416A捷联导引头，打开Gazebo GUI和靶机/雷达控制
+bash scenarios/02_rocket_two_axis_pod/start.sh --aircraft-model rocket_jielian_a2416a --gui
 
 # 两轴吊仓或艾晟显式切换为 CSRT 图像跟踪
 bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
@@ -41,9 +44,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh -n 2 \
 bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。`--aircraft-model` 默认 `rocket_two_axis_pod`，可选 `rocket_aisheng_seeker` 或 `rocket_zhongke_d80`；三个机型使用相同的 world、PX4 飞行接口和 `/uav_<id>/pod` 话题前缀，但各自使用独立的生成器、控制器、网关和地面站。
+`-n` 支持 1～10，默认为 1。飞机在 world 中按 5 米间隔排列，首机平面位置为 ENU `(5.25,5) m`，后续飞机从该偏移按网格展开；格点避开当前地形三角面的对角共边，使尾底位于单一平面内。`--aircraft-model` 默认 `rocket_two_axis_pod`，可选 `rocket_aisheng_seeker`、`rocket_zhongke_d80` 或 `rocket_jielian_a2416a`；四个机型使用相同的 world、PX4 飞行接口和 `/uav_<id>/pod` 话题前缀，但各自使用独立的生成器、控制器、网关和地面站。
 
-吊仓/导引头单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；两轴吊仓或艾晟只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪；中科仅支持 `sim_truth`，指定 `csrt` 会在启动前报错。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部所选机型的 `<aircraft-model>_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
+吊仓/导引头单目标跟踪默认使用 `sim_truth`，用于优先验证后续导引算法；两轴吊仓或艾晟只有显式指定 `--tracking-backend csrt` 才使用 CSRT 图像跟踪；中科和A2416A仅支持 `sim_truth`，指定 `csrt` 会在启动前报错。`sim_truth` 的自动锁定从视野中选择最靠近画面中心的飞机，手动框选只在选框内的飞机中选择；锁定后绑定该 Gazebo 实体，不因多目标交叉而自动换锁。可锁定候选包含本场景全部所选机型的 `<aircraft-model>_<id>` 普通飞机，以及运行时动态出现的 `xiaomotuo` 和 `xiaobianfu`，不将地形或标志物当作候选。
 
 每机出生绝对 Z 取对应静态地形碰撞三角面的插值高度，加该机生成目录 `parameters.json` 中 `simulation.spawn_pose` 的 Z（当前0.215 m）；`prepare_world.py --altitude` 可显式覆盖这一竖直相对高度。初始yaw为0，roll/pitch将机体+Z对齐该三角面的向上单位法线，吊仓相对机体的安装保持继承，实体随后按正常刚体物理演化。当前双机默认坐标约为 `(5.25,5,-0.036526112) m`、`(10.25,5,-0.268718752) m`，初始RPY约为 `(−0.0884°,2.6588°,0°)`；对应地面高度为−0.251526112 m、−0.483718752 m，圆柱尾底到当地地面的最小法向间隙约4.77 mm。
 
@@ -51,7 +54,7 @@ bash scenarios/02_rocket_two_axis_pod/stop.sh
 
 ### 可选悬停抖动
 
-`--flight-vibration off|afly5` 默认 `off`。关闭时沿用原来的机体、IMU、世界物理步长和 PX4 参数，不加载或构建抖动插件。`afly5` 使用基础火箭模型的 `config/flight_hover.json`，只对当前运行 world 内全部普通飞机启用，不影响靶机或源资产；支持三个组合机型及多机。
+`--flight-vibration off|afly5` 默认 `off`。关闭时沿用原来的机体、IMU、世界物理步长和 PX4 参数，不加载或构建抖动插件。`afly5` 使用基础火箭模型的 `config/flight_hover.json`，只对当前运行 world 内全部普通飞机启用，不影响靶机或源资产；支持四个组合机型及多机。
 
 开启后，基础模型插件在离地且旋翼达到运行转速时逐渐加入低频机体外力/外力矩和随旋翼转速变化的 IMU 局部谐波，分别表示整机摆动与安装处的振动。世界物理最大步长缩小至 `0.001 s`，IMU 更新率按配置提高至 `1000 Hz`，相机、吊舱关节、网络端口、碰撞开关及跟踪配置保持原有接口。更高更新率会增加仿真负载，多机或完整地图下实时率可能降低。
 
@@ -92,7 +95,7 @@ sudo usermod -aG render,video "$USER"
 https://github.com/desneo/px4-gazebo-assets.git
 ```
 
-三个机型每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
+四个机型每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
 
 可用环境变量覆盖位置和下载地址：
 
@@ -131,7 +134,7 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 
 - 360° 方位覆盖，俯仰覆盖 `-5°～60°`，最小作用距离 `50 m`；
 - 航迹频率默认 `1 Hz`，可在界面修改为 `1.0～2.0 Hz`，支持 `1.5 Hz` 等小数；非法值会阻止启动，运行期间频率锁定；
-- 对 `rocket_two_axis_pod_*` 等大疆级小型飞机的标称稳定探测距离为 `3 km`，对“小摩托”和“小蝙蝠”的标称稳定探测距离为 `5 km`；
+- 对 `rocket_two_axis_pod_*`、`rocket_aisheng_seeker_*` 和 `rocket_jielian_a2416a_*` 等小型飞机的标称稳定探测距离为 `3 km`，对“小摩托”和“小蝙蝠”的标称稳定探测距离为 `5 km`；
 - 标称距离内、满足视线和俯仰条件时稳定检出；标称距离外10%的过渡区按距离衰减，之后不检出；
 - 使用资产地形瓦片高度近似低空地形遮挡，并叠加随距离增大的距离/角度误差、径向速度误差以及 `120～200 ms` 的处理延迟抖动；
 - 连续两帧命中后确认航迹，短时丢失最多保持三帧；随机种子固定，便于重复验证；默认不生成虚警；
@@ -199,6 +202,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 - `rocket_two_axis_pod`：指令/遥测 UDP `8770 + i - 1`，共享 RTSP 端口 `8555`，视频路径 `/two_axis_pod_i`；
 - `rocket_aisheng_seeker`：指令/遥测共用 UDP `8001 + i - 1`，RTSP `rtsp://主机:(8554+i-1)/aisheng_seeker`（广角/长焦共用）；
 - `rocket_zhongke_d80`：指令/遥测共用 UDP `8880 + i - 1`，RTSP `rtsp://主机:(8566+i-1)/zhongke_d80_i`；
+- `rocket_jielian_a2416a`：指令/遥测共用 UDP `8001 + i - 1`，艾晟兼容JSON发送到飞控 UDP `9000 + i - 1`，H.264 RTSP `rtsp://主机:(8554+i-1)/jielian_a2416a`；
 - Gazebo 话题：`/uav_i/pod/*`。
 
 例如两架飞机：
@@ -223,7 +227,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
        RTSP rtsp://192.168.1.56:8555/aisheng_seeker
 ```
 
-02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择一个遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`，`rocket_aisheng_seeker` 使用专用 `aisheng_udp_bridge`，两者发布该实例的 `dyt_aisheng_telemetry`；`rocket_zhongke_d80` 使用 `zhongke_udp_bridge`，发布 `dyt_zhongke_telemetry`。这些模块只配置进 SITL，监听该飞机的 JSON UDP 端口。场景启动接收模块，地面站由操作者手动开启转发。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令及 JSON 接收地址，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟机型为 `aisheng_udp`，中科机型为 `zhongke_udp`。RTSP 内部 RTP 端口由资产仓网关自动分配。
+02 场景根据 `--aircraft-model` 为每个 PX4 SITL 实例选择一个遥测桥接模块：`rocket_two_axis_pod` 使用 `dyt_udp_bridge`；`rocket_aisheng_seeker` 和 `rocket_jielian_a2416a` 复用 `aisheng_udp_bridge`，发布该实例的 `dyt_aisheng_telemetry`，不新增功能重复的捷联桥；`rocket_zhongke_d80` 使用 `zhongke_udp_bridge`，发布 `dyt_zhongke_telemetry`。这些模块只配置进 SITL，监听该飞机的 JSON UDP 端口。场景启动接收模块，地面站由操作者手动开启转发。每架飞机启动前都会输出完整 PX4、吊仓网关和地面站命令及 JSON 接收地址，并将对应关系保存到运行目录的 `interfaces.tsv`。两轴机型的 JSON 端口列为 `dyt_udp`，艾晟和A2416A机型为 `aisheng_udp`，中科机型为 `zhongke_udp`。A2416A的逐机地面站INI路径另存于 `ground_station_config` 列。
 
 两轴机型的 JSON `tracking_gate_w`、`tracking_gate_h` 分别映射为 uORB 的波门宽度和高度，保留 `uint16` 类型。输入接受 0～65535 的有限数值，并按四舍五入（0.5 进 1）转换为整数像素；各字段缺省为 0，负数、越界或非数值会拒绝整包。
 
@@ -233,7 +237,7 @@ PX4 与靶机碰撞后，PX4 关闭全部电机，靶机冻结在碰撞位置，
 
 艾晟完整 JSON 使用 `msg/DytAishengTelemetry.msg` 中除 `los_omega_n/e/d` 之外的 37 个字段，字段名与消息定义一致。`target_type`、`target_confidence`、`target_lon`、`target_lat`、`target_alt` 均为四元素数组，保留标准帧的全部目标槽位；`target_lon/target_lat` 使用 `1e-7 deg` 原始整数。`timestamp` 是地面站收到该条遥测时的本机单调时钟微秒，转发时保留该接收时间；`device_timestamp` 是导引头上电毫秒。PX4 发布的 uORB `timestamp` 使用本机 hrt 微秒。专用桥接模块校验全部字段及类型、范围后发布遥测，不接受字段缺失或标量目标置信度。
 
-最新资产仓的两轴吊仓和艾晟导引头网关均使用 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。
+最新资产仓的两轴吊仓、艾晟和A2416A导引头网关均使用 NVIDIA 硬件编码，场景默认使用 `nvenc`；`--encoder` 保留用于显式配置，但当前只接受 `nvenc`。A2416A启动前同时检查可加载的H.264 NVENC、`nvh264dec`、H.264 RTP/parser及`shmsink/shmsrc`，不提供软件回退。
 
 ## 目标惯性 LOS 遥测采集
 
@@ -313,6 +317,31 @@ bash scenarios/02_rocket_two_axis_pod/test_mavsdk_route.sh -n 1 \
 测试应在独立机器上运行。当前 `v4.0.6-udp-dyt` 的 `udpout://HOST:PORT` 会在测试机本地绑定同一个端口；若测试程序和 PX4 在同一台机器，`14280+i` 会与 PX4 自己的端口冲突。`--sitl-host` 因此为必填参数。
 
 场景会在运行时机体副本中将 `EKF2_HGT_REF` 设为 GPS。该 world 的 GPS 海拔与气压高度原点不同，使用气压高度参考会使全局高度无效，PX4 因而拒绝 Mission 模式解锁；资产仓原文件不会被修改。
+
+## A2416A捷联导引头
+
+A2416A组合使用 `assembledmodels/rocket_jielian_a2416a` 的动态生成器。相机与机体刚性连接，光轴沿机体 `+Z`，不含机械转动关节；场景只允许 `sim_truth`，把本次全部 `rocket_jielian_a2416a_<id>`、`xiaomotuo` 和 `xiaobianfu` 注册为真实飞机目标。GUI的飞机定位列表、碰撞监控和雷达航迹均使用 `rocket_jielian_a2416a_` 前缀。雷达按小型飞机3 km标称距离处理捷联组合，不泄露实体名到航迹报文。
+
+场景为每架飞机启动一个A2416A二进制UDP网关和一个独立H.264 RTSP服务。控制/遥测端口从8001递增，网关到RTSP的本机RTP端口从7001递增，RTSP端口从8554递增，路径统一为 `/jielian_a2416a`。RTSP服务启动即以常驻接收器绑定RTP端口，通过共享内存媒体源支持首次连接和断线重连；服务与网关并行启动。所有端口启动前检查占用；`stop.sh`同时按PID文件和A2416A进程路径清理网关及RTSP服务。
+
+每次启动会生成只属于当前运行的逐机地面站配置：
+
+```text
+/tmp/px4-scenarios/02_rocket_two_axis_pod/ground_station/aircraft_<id>.ini
+```
+
+启动器打印 `ground_station/run.sh --config <运行INI>` 命令。INI包含对应网关地址、RTSP地址，以及飞控的 `9000 + id - 1` 监听端口；地面站启动后仍需人工点击“发送艾晟报文”，不会自动向飞控注入遥测。每个有效100 Hz捷联遥测帧转为艾晟兼容的顶层37字段JSON，由现有 `aisheng_udp_bridge`接收并发布 `dyt_aisheng_telemetry`。
+
+双机接口示例：
+
+```text
+飞机1：指令/遥测 udp://192.168.1.56:8001
+       艾晟兼容JSON udp://192.168.1.56:9000
+       RTSP rtsp://192.168.1.56:8554/jielian_a2416a
+飞机2：指令/遥测 udp://192.168.1.56:8002
+       艾晟兼容JSON udp://192.168.1.56:9001
+       RTSP rtsp://192.168.1.56:8555/jielian_a2416a
+```
 
 
 ## 中科D80
