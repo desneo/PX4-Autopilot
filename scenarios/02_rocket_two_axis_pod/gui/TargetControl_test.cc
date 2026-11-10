@@ -5,6 +5,7 @@
 #include <QQuickItem>
 #include <QSettings>
 #include <QtTest/QtTest>
+#include <atomic>
 #include <cmath>
 #include <functional>
 #include <gz/common/MouseEvent.hh>
@@ -21,8 +22,62 @@ class TargetControlTest : public QObject
 {
   Q_OBJECT
 
+  private slots: void FollowsConfiguredAircraft_data();
+  private slots: void FollowsConfiguredAircraft();
   private slots: void PublishesStartAndReceivesStatus();
 };
+
+void TargetControlTest::FollowsConfiguredAircraft_data()
+{
+  QTest::addColumn<int>("aircraftCount");
+  QTest::addColumn<QString>("aircraftPrefix");
+  QTest::newRow("single-default-model") << 1 << QString("rocket_two_axis_pod_");
+  QTest::newRow("single-aisheng-model") << 1 << QString("rocket_aisheng_seeker_");
+  QTest::newRow("single-zhongke-model") << 1 << QString("rocket_zhongke_d80_");
+  QTest::newRow("single-jielian-model") << 1 << QString("rocket_jielian_a2416a_");
+  QTest::newRow("multiple-configured-model") << 2 << QString("rocket_zhongke_d80_");
+}
+
+void TargetControlTest::FollowsConfiguredAircraft()
+{
+  QFETCH(int, aircraftCount);
+  QFETCH(QString, aircraftPrefix);
+  const auto configText = QStringLiteral(R"(
+    <plugin filename="TargetControl">
+      <follow_service>/test/gui/configured_follow</follow_service>
+      <aircraft_count>%1</aircraft_count>
+      <aircraft_prefix>%2</aircraft_prefix>
+    </plugin>)").arg(aircraftCount).arg(aircraftPrefix).toUtf8();
+  tinyxml2::XMLDocument config;
+  QVERIFY(config.Parse(configText.constData()) == tinyxml2::XML_SUCCESS);
+
+  const QString expectedEntity = aircraftPrefix + QStringLiteral("1");
+  std::atomic<int> followRequests{0};
+  gz::transport::Node node;
+  std::function<bool(const gz::msgs::StringMsg &, gz::msgs::Boolean &)>
+      followHandler = [&followRequests, expectedEntity](
+          const gz::msgs::StringMsg &_request, gz::msgs::Boolean &_response)
+  {
+    ++followRequests;
+    _response.set_data(_request.data() == expectedEntity.toStdString());
+    return true;
+  };
+  QVERIFY(node.Advertise("/test/gui/configured_follow", followHandler));
+
+  scenario_02::TargetControl plugin;
+  plugin.Load(config.RootElement());
+  auto *aircraftCombo = plugin.PluginItem()->findChild<QQuickItem *>(
+      "aircraftFollowCombo");
+  QVERIFY(aircraftCombo);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      aircraftCombo->property("count").toInt(), aircraftCount + 1, 1000);
+  QCOMPARE(aircraftCombo->property("currentIndex").toInt(), 0);
+  aircraftCombo->setProperty("currentIndex", 1);
+  QTRY_COMPARE_WITH_TIMEOUT(followRequests.load(), 1, 2000);
+  QTRY_VERIFY_WITH_TIMEOUT(plugin.Following(), 2000);
+  QCOMPARE(plugin.FollowingEntity(), expectedEntity);
+  QCOMPARE(plugin.FollowingLabel(), QStringLiteral("飞机 1 · PX4"));
+}
 
 void TargetControlTest::PublishesStartAndReceivesStatus()
 {

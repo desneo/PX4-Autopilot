@@ -16,12 +16,14 @@ Item {
   property bool observedFollowing: TargetControl.following
   property bool observedCameraBusy: TargetControl.cameraBusy
   property int observedAircraftCount: TargetControl.aircraftCount
+  property string observedAircraftPrefix: TargetControl.aircraftPrefix
 
   onObservedTargetRunningChanged: root.refreshAircraftModel()
   onObservedTargetModelChanged: root.refreshAircraftModel()
   onObservedFollowingChanged: root.syncAircraftSelection()
   onObservedCameraBusyChanged: root.syncAircraftSelection()
   onObservedAircraftCountChanged: root.refreshAircraftModel()
+  onObservedAircraftPrefixChanged: root.refreshAircraftModel()
 
   function selectedModel() {
     return targetModel.currentIndex === 1 ? "xiaomotuo" :
