@@ -530,7 +530,8 @@ void TargetControl::OnStatus(const gz::msgs::StringMsg &_message)
     this->running = state == QStringLiteral("starting") ||
         state == QStringLiteral("running") ||
         state == QStringLiteral("collided") ||
-        state == QStringLiteral("stopping");
+        state == QStringLiteral("stopping") ||
+        (state == QStringLiteral("error") && !model.isEmpty());
     const QString previousTargetModel = this->targetModel;
     this->targetModel = this->running ? model : QString{};
     this->status = message.isEmpty() ? QStringLiteral("等待操作") : message;

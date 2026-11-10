@@ -182,7 +182,9 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QCOMPARE(distanceRange->property("text").toString(),
       QStringLiteral("100～10000 m"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("startTargetButton"));
-  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("stopTargetButton"));
+  auto *stopTargetButton = plugin.PluginItem()->findChild<QQuickItem *>(
+      "stopTargetButton");
+  QVERIFY(stopTargetButton);
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("startRadarButton"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("stopRadarButton"));
   auto *radarRateRange = plugin.PluginItem()->findChild<QQuickItem *>(
@@ -317,6 +319,31 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QCOMPARE(plugin.Status(), QStringLiteral("靶机飞行中"));
   QCOMPARE(plugin.TargetModel(), QStringLiteral("xiaomotuo"));
   QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 4, 1000);
+
+  status.set_data(
+      R"({"state":"error","message":"靶机清理失败，请重试终止","model":"xiaomotuo","error":"移除模型失败"})");
+  statusPublisher.Publish(status);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      plugin.Status(), QStringLiteral("靶机清理失败，请重试终止"), 2000);
+  QVERIFY(plugin.Running());
+  QVERIFY(!plugin.Busy());
+  QCOMPARE(plugin.TargetModel(), QStringLiteral("xiaomotuo"));
+  QTRY_VERIFY_WITH_TIMEOUT(stopTargetButton->property("enabled").toBool(), 1000);
+  QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 4, 1000);
+  command.clear();
+  QVERIFY(QMetaObject::invokeMethod(stopTargetButton, "clicked"));
+  QTRY_VERIFY_WITH_TIMEOUT(!command.isEmpty(), 2000);
+  QCOMPARE(QJsonDocument::fromJson(command.toUtf8()).object()
+      .value("command").toString(), QStringLiteral("stop"));
+
+  status.set_data(R"({"state":"error","message":"启动参数无效"})");
+  statusPublisher.Publish(status);
+  QTRY_COMPARE_WITH_TIMEOUT(plugin.Status(), QStringLiteral("启动参数无效"), 2000);
+  QVERIFY(!plugin.Running());
+  QVERIFY(!plugin.Busy());
+  QVERIFY(plugin.TargetModel().isEmpty());
+  QTRY_VERIFY_WITH_TIMEOUT(!stopTargetButton->property("enabled").toBool(), 1000);
+  QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 3, 1000);
 
   status.set_data(R"({"state":"collided","message":"靶机已碰撞"})");
   statusPublisher.Publish(status);

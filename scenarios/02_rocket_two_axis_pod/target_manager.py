@@ -48,6 +48,18 @@ def coordinate_offset(
     return latitude, longitude
 
 
+def local_position(
+    center_latitude: float, center_longitude: float,
+    latitude: float, longitude: float,
+) -> tuple[float, float]:
+    """当前场景经纬度局部近似的逆变换，返回东、北坐标（米）。"""
+    east = math.radians(longitude - center_longitude) * EARTH_RADIUS_M * math.cos(
+        math.radians(center_latitude)
+    )
+    north = math.radians(latitude - center_latitude) * EARTH_RADIUS_M
+    return east, north
+
+
 def parse_station(value: str) -> tuple[str, int]:
     host, separator, port_text = value.strip().rpartition(":")
     if not separator or not host:
@@ -72,13 +84,33 @@ class TargetConfig:
     model: str
     speed: float
     altitude: float
-    distance: float
-    direction: str
+    distance: float = 0.0
+    direction: str = ""
+    mode: str = "center_pass"
+    initial_xy: tuple[float, float] = (0.0, 0.0)
+    initial_heading: float = 0.0
 
     @property
     def source_xy(self) -> tuple[float, float]:
+        if self.mode == "continuous":
+            return self.initial_xy
         unit = DIRECTIONS[self.direction]["unit"]
         return self.distance * unit[0], self.distance * unit[1]
+
+    @property
+    def heading(self) -> float:
+        if self.mode == "continuous":
+            return self.initial_heading
+        return DIRECTIONS[self.direction]["heading"]
+
+    @property
+    def yaw(self) -> float:
+        return math.radians(90.0 - self.heading)
+
+    @property
+    def velocity_unit(self) -> tuple[float, float]:
+        heading = math.radians(self.heading)
+        return math.sin(heading), math.cos(heading)
 
     @property
     def endpoint_xy(self) -> tuple[float, float]:
@@ -124,23 +156,42 @@ def validate_config(payload: dict, terrain: TerrainMap) -> TargetConfig:
     model = str(payload.get("model", ""))
     if model not in MODEL_RULES:
         raise ValueError("靶机型号必须选择小摩托或小蝙蝠")
-    direction = str(payload.get("direction", ""))
-    if direction not in DIRECTIONS:
-        raise ValueError("来源方向无效")
+    mode = payload.get("mode", "center_pass")
+    if mode not in ("center_pass", "continuous"):
+        raise ValueError("靶机模式只支持 center_pass 或 continuous")
+    fields = ("speed", "altitude", "latitude", "longitude", "heading") if mode == "continuous" else (
+        "speed", "altitude", "distance",
+    )
     try:
-        speed = float(payload["speed"])
-        altitude = float(payload["altitude"])
-        distance = float(payload["distance"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError("速度、海拔高度和距离必须是有效数值") from error
-    if not all(math.isfinite(value) for value in (speed, altitude, distance)):
-        raise ValueError("速度、海拔高度和距离必须是有限数值")
+        if any(isinstance(payload[field], bool) for field in fields):
+            raise ValueError("不能使用布尔值")
+        values = [float(payload[field]) for field in fields]
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise ValueError("速度、海拔高度及航迹参数必须完整且为有效数值") from error
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("速度、海拔高度及航迹参数必须是有限数值")
+    speed, altitude = values[:2]
     minimum_speed, maximum_speed = MODEL_RULES[model]["speed"]
     if not minimum_speed <= speed <= maximum_speed:
         raise ValueError(
             f"{MODEL_RULES[model]['display']}巡航速度必须在 "
             f"{minimum_speed:g}～{maximum_speed:g} m/s"
         )
+    if mode == "continuous":
+        latitude, longitude, heading = values[2:]
+        if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+            raise ValueError("纬度必须在 -90～90 度，经度必须在 -180～180 度")
+        return TargetConfig(
+            model, speed, altitude, mode=mode,
+            initial_xy=local_position(
+                terrain.center_latitude, terrain.center_longitude, latitude, longitude,
+            ),
+            initial_heading=heading % 360.0,
+        )
+    distance = values[2]
+    direction = str(payload.get("direction", ""))
+    if direction not in DIRECTIONS:
+        raise ValueError("来源方向无效")
     if not 100 <= distance <= 10000:
         raise ValueError("来源距离必须在 100～10000 米")
     unit = DIRECTIONS[direction]["unit"]
@@ -271,16 +322,23 @@ class MavlinkTargetProxy:
             self._send(0, heartbeat, 50)
             self.last_heartbeat = now
 
-        heading = int(round(DIRECTIONS[config.direction]["heading"] * 100)) % 36000
-        unit_east, unit_north = DIRECTIONS[config.direction]["unit"]
+        heading = int(round(config.heading * 100)) % 36000
+        unit_east, unit_north = config.velocity_unit
         velocity = 0.0 if done else speed
-        velocity_east = -unit_east * velocity
-        velocity_north = -unit_north * velocity
+        velocity_east = unit_east * velocity
+        velocity_north = unit_north * velocity
         boot_ms = int((now - self.started_at) * 1000) & 0xFFFFFFFF
         altitude_mm = int(round(config.altitude * 1000))
         relative_altitude_mm = int(round((config.altitude - origin_elevation) * 1000))
 
         if now - self.last_position >= 0.2:
+            # QGC 地图机头读取姿态 yaw，不读取 GLOBAL_POSITION_INT.hdg。
+            # MAVLink 使用北为零、顺时针为正的 NED yaw，与 Gazebo ENU yaw 不同。
+            yaw_ned = math.radians((config.heading + 180.0) % 360.0 - 180.0)
+            attitude = struct.pack(
+                "<Iffffff", boot_ms, 0.0, 0.0, yaw_ned, 0.0, 0.0, 0.0,
+            )
+            self._send(30, attitude, 39)
             global_position = struct.pack(
                 "<IiiiihhhH",
                 boot_ms,
@@ -342,9 +400,19 @@ class TargetSession:
         self.mavlink_failed = False
         self.model_created = False
         self.cleaned = False
+        self.state = "starting"
 
     def _status(self, state: str, message: str) -> None:
-        self.manager.publish_status(state, message, self.config.model)
+        with self.manager.lock:
+            if state in ("starting", "running") and (
+                self.stop_event.is_set() or self.collided_event.is_set()
+            ):
+                return
+            self.state = state
+            if state == "error":
+                self.manager.publish_status(state, message, self.config.model, error=message)
+            else:
+                self.manager.publish_status(state, message, self.config.model)
 
     def _run_gz_service(self, service: str, request_type: str, request: str) -> bool:
         command = [
@@ -368,7 +436,7 @@ class TargetSession:
         make_visual_model(source, output, self.config.model)
         x, y = self.config.source_xy
         z = self.config.altitude - self.manager.terrain.origin_elevation
-        yaw = math.radians(90.0 - DIRECTIONS[self.config.direction]["heading"])
+        yaw = self.config.yaw
         request = (
             f'sdf_filename: "{output}" '
             f'name: "{self.config.model}" allow_renaming: false '
@@ -394,9 +462,14 @@ class TargetSession:
 
     def trajectory_command(self) -> str:
         start_x, start_y = self.config.source_xy
-        end_x, end_y = self.config.endpoint_xy
         z = self.config.altitude - self.manager.terrain.origin_elevation
-        yaw = math.radians(90.0 - DIRECTIONS[self.config.direction]["heading"])
+        yaw = self.config.yaw
+        if self.config.mode == "continuous":
+            return (
+                f"START_CONTINUOUS {self.config.model} {start_x:.12g} {start_y:.12g} "
+                f"{z:.12g} {self.config.speed:.12g} {yaw:.12g}"
+            )
+        end_x, end_y = self.config.endpoint_xy
         return (
             f"START {self.config.model} {start_x:.12g} {start_y:.12g} "
             f"{z:.12g} {end_x:.12g} {end_y:.12g} "
@@ -413,14 +486,14 @@ class TargetSession:
         self.truth_event.set()
 
     def on_collision(self, relative_speed: float) -> None:
-        if self.collided_event.is_set():
+        if self.collided_event.is_set() or self.stop_event.is_set():
             return
         self.collided_event.set()
         self.manager.publish_trajectory("STOP")
         self._status(
             "collided",
             f"靶机已与 PX4 飞机碰撞（相对速度 {relative_speed:.1f} m/s），"
-            "航迹和 QGC 状态已停止，请点击终止靶机清理模型",
+            "航迹和 QGC 状态已停止，请终止靶机清理模型",
         )
 
     def _send_mavlink(self) -> None:
@@ -443,7 +516,7 @@ class TargetSession:
                 longitude,
                 self.manager.terrain.origin_elevation,
             )
-        except OSError as error:
+        except (OSError, ValueError, OverflowError, struct.error) as error:
             if not self.mavlink_failed:
                 self.mavlink_failed = True
                 self._status(
@@ -457,48 +530,58 @@ class TargetSession:
             self._status("running", "QGC 状态发送已恢复，靶机继续运行")
 
     def run(self) -> None:
+        if self.stop_event.is_set():
+            return
         self._status("starting", "正在生成靶机视觉模型…")
         self.create_model()
         if self.stop_event.is_set():
             return
         command = self.trajectory_command()
         deadline = time.monotonic() + 10.0
-        while time.monotonic() < deadline and not self.stop_event.is_set():
-            self.manager.publish_trajectory(command)
+        while (time.monotonic() < deadline and not self.stop_event.is_set()
+               and not self.collided_event.is_set()):
+            with self.manager.lock:
+                if self.stop_event.is_set() or self.collided_event.is_set():
+                    break
+                self.manager.publish_trajectory(command)
             if self.truth_event.wait(0.2):
                 break
         else:
             if self.stop_event.is_set():
                 return
-            raise RuntimeError("场景航迹插件未返回靶机位置")
+            if not self.collided_event.is_set():
+                raise RuntimeError("场景航迹插件未返回靶机位置")
 
-        self._status(
-            "running",
-            f"{MODEL_RULES[self.config.model]['display']}正以 "
-            f"{self.config.speed:g} m/s 飞向中心点",
-        )
+        if not self.stop_event.is_set() and not self.collided_event.is_set():
+            destination = (
+                f"沿航向 {self.config.heading:g}° 持续飞行，等待 agent 停止"
+                if self.config.mode == "continuous" else "飞向中心点"
+            )
+            self._status(
+                "running",
+                f"{MODEL_RULES[self.config.model]['display']}正以 "
+                f"{self.config.speed:g} m/s {destination}",
+            )
         endpoint_reported = False
         while not self.stop_event.wait(0.05):
-            if self.collided_event.is_set():
-                continue
-            self._send_mavlink()
+            with self.manager.lock:
+                if self.stop_event.is_set() or self.collided_event.is_set():
+                    continue
+                self._send_mavlink()
             with self.truth_lock:
                 done = self.truth is not None and self.truth[4]
-            if done and not endpoint_reported:
+            if self.config.mode != "continuous" and done and not endpoint_reported:
                 self._status("running", "靶机已越过中心点500米，正在终点等待")
                 endpoint_reported = True
 
     def cleanup(self) -> None:
         if self.cleaned:
             return
-        self.cleaned = True
         self.stop_event.set()
         self.manager.publish_trajectory("STOP")
         self.mavlink_proxy.close()
-        try:
-            self.remove_model()
-        except Exception as error:
-            print(f"移除靶机视觉模型失败：{error}", flush=True)
+        self.remove_model()
+        self.cleaned = True
 
 
 class TargetManager:
@@ -516,6 +599,12 @@ class TargetManager:
             raise ValueError("靶机 MAVLink SYSID 必须在 1～254 范围内")
         world_dir = self.assets_root / "worlds" / self.world
         self.terrain = TerrainMap(world_dir / "metadata.json", world_dir / "assets")
+        # transport 回调可能在订阅成功后立即到达，先准备所有共享状态。
+        self.lock = threading.RLock()
+        self.session: TargetSession | None = None
+        self.pending_config: TargetConfig | None = None
+        self.worker: threading.Thread | None = None
+        self.shutdown_event = threading.Event()
         self.node = Node()
         self.status_publisher = self.node.advertise(STATUS_TOPIC, StringMsg)
         self.trajectory_publisher = self.node.advertise(
@@ -531,10 +620,6 @@ class TargetManager:
             StringMsg, COLLISION_EVENT_TOPIC, self.on_collision_event
         ):
             raise RuntimeError(f"无法订阅碰撞事件话题：{COLLISION_EVENT_TOPIC}")
-        self.lock = threading.Lock()
-        self.session: TargetSession | None = None
-        self.worker: threading.Thread | None = None
-        self.shutdown_event = threading.Event()
 
     def _message(self, value: str):
         message = self.StringMsg()
@@ -544,13 +629,26 @@ class TargetManager:
     def publish_trajectory(self, value: str) -> None:
         self.trajectory_publisher.publish(self._message(value))
 
-    def publish_status(self, state: str, message: str, model: str | None = None) -> None:
+    def publish_status(
+        self, state: str, message: str, model: str | None = None,
+        *, error: str | None = None,
+    ) -> None:
         payload = {"state": state, "message": message}
         if model:
             payload["model"] = model
+        if error:
+            payload["error"] = error
         value = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         self.status_publisher.publish(self._message(value))
         print(value, flush=True)
+
+    def reject_command(self, message: str) -> None:
+        """拒绝请求时保留当前会话状态，避免 GUI 将仍在飞行的靶机隐藏。"""
+        with self.lock:
+            session = self.session
+            state = session.state if session is not None else "error"
+            model = session.config.model if session is not None else None
+            self.publish_status(state, message, model, error=message)
 
     def on_trajectory_status(self, message) -> None:
         fields = message.data.split()
@@ -564,8 +662,8 @@ class TargetManager:
             return
         with self.lock:
             session = self.session
-        if session is not None:
-            session.on_truth(model, x, y, z, speed, done)
+            if session is not None:
+                session.on_truth(model, x, y, z, speed, done)
 
     def on_command(self, message) -> None:
         try:
@@ -580,11 +678,13 @@ class TargetManager:
             else:
                 raise ValueError("未知靶机命令")
         except (json.JSONDecodeError, ValueError) as error:
-            self.publish_status("error", str(error))
+            self.reject_command(str(error))
 
     def on_collision_event(self, message) -> None:
         try:
             payload = json.loads(message.data)
+            if not isinstance(payload, dict):
+                return
             if payload.get("collision_type") != "px4_target":
                 return
             relative_speed = float(payload["relative_speed_m_s"])
@@ -595,75 +695,109 @@ class TargetManager:
             return
         with self.lock:
             session = self.session
-        if session is not None and target_model == session.config.model:
-            session.on_collision(relative_speed)
+            if session is not None and target_model == session.config.model:
+                session.on_collision(relative_speed)
+
+    def _ensure_worker(self) -> None:
+        """由持有 lock 的调用者启动唯一的会话工作线程。"""
+        if self.worker is None:
+            self.worker = threading.Thread(target=self._run_sessions, daemon=True)
+            self.worker.start()
 
     def start(self, payload: dict) -> None:
         with self.lock:
-            if self.session is not None:
-                self.publish_status(
-                    "running", "靶机正在运行，请先终止靶机", self.session.config.model
-                )
+            if self.shutdown_event.is_set():
+                self.reject_command("靶机管理服务正在退出")
+                return
+            if payload.get("mode", "center_pass") == "center_pass" and (
+                self.session is not None or self.pending_config is not None
+            ):
+                self.reject_command("靶机正在运行，请先终止靶机")
                 return
             try:
                 config = validate_config(payload, self.terrain)
             except ValueError as error:
-                self.publish_status("error", str(error))
+                self.reject_command(str(error))
                 return
-            self.session = TargetSession(self, config)
-            self.worker = threading.Thread(target=self._run_session, daemon=True)
-            self.worker.start()
+            # 替换期间只保留最新有效配置；旧会话清理完才消费它。
+            self.pending_config = config
+            if self.session is not None:
+                self.session.stop_event.set()
+                self.session._status("stopping", "正在清理当前靶机并准备替换…")
+            self._ensure_worker()
 
-    def _run_session(self) -> None:
-        with self.lock:
-            session = self.session
-        if session is None:
-            return
-        error = None
-        stopped = False
-        try:
-            session.run()
-            stopped = session.stop_event.is_set()
-        except Exception as caught:
-            if session.stop_event.is_set():
-                stopped = True
-                print(f"靶机启动过程已按请求终止：{caught}", flush=True)
-            else:
-                error = caught
-                print(f"靶机运行失败：{caught}", flush=True)
-        finally:
-            session.cleanup()
+    def _run_sessions(self) -> None:
+        while True:
             with self.lock:
-                if self.session is session:
-                    self.session = None
+                if self.shutdown_event.is_set():
+                    self.pending_config = None
+                if self.session is None:
+                    config = self.pending_config
+                    self.pending_config = None
+                    if config is None:
+                        self.worker = None
+                        return
+                    try:
+                        self.session = TargetSession(self, config)
+                    except Exception as error:
+                        self.worker = None
+                        self.publish_status("error", f"无法创建靶机会话：{error}")
+                        return
+                session = self.session
+            error = None
+            try:
+                session.run()
+            except Exception as caught:
+                if session.stop_event.is_set():
+                    print(f"靶机启动过程已按请求终止：{caught}", flush=True)
+                else:
+                    error = caught
+                    print(f"靶机运行失败：{caught}", flush=True)
+            try:
+                session.cleanup()
+            except Exception as caught:
+                # 保留旧会话以便 stop 重试清理，禁止生成同名或第二个模型。
+                with self.lock:
+                    self.pending_config = None
                     self.worker = None
-            if error is not None:
-                self.publish_status("error", f"靶机启动或航迹控制失败：{error}")
-            elif stopped and not self.shutdown_event.is_set():
-                self.publish_status("idle", "靶机已终止，航迹和 QGC 状态已停止")
+                    session._status("error", f"靶机清理失败，未启动新靶机：{caught}")
+                return
+            with self.lock:
+                self.session = None
+                if self.shutdown_event.is_set():
+                    self.pending_config = None
+                if self.pending_config is not None:
+                    continue
+                self.worker = None
+                if not self.shutdown_event.is_set():
+                    if error is not None:
+                        self.publish_status("error", f"靶机启动或航迹控制失败：{error}")
+                    else:
+                        self.publish_status("idle", "靶机已终止，航迹和 QGC 状态已停止")
+                return
 
     def stop(self) -> None:
         with self.lock:
+            self.pending_config = None
             session = self.session
-        if session is None:
-            self.publish_status("idle", "当前没有运行中的靶机")
-            return
-        self.publish_status(
-            "stopping", "正在终止靶机并停止航迹与 QGC 状态…", session.config.model
-        )
-        session.stop_event.set()
+            if session is None:
+                self.publish_status("idle", "当前没有运行中的靶机")
+                return
+            session.stop_event.set()
+            session._status("stopping", "正在终止靶机并停止航迹与 QGC 状态…")
+            self._ensure_worker()
 
     def shutdown(self) -> None:
         self.shutdown_event.set()
         with self.lock:
+            self.pending_config = None
             session = self.session
+            if session:
+                session.stop_event.set()
+                self._ensure_worker()
             worker = self.worker
-        if session:
-            session.stop_event.set()
         if worker and worker is not threading.current_thread():
-            worker.join(timeout=12)
-        if session and worker and worker.is_alive():
-            session.cleanup()
+            worker.join(timeout=20)
 
 
 def main() -> int:

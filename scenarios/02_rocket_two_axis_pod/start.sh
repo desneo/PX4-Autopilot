@@ -30,6 +30,7 @@ usage() {
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与顶部吊仓/导引头组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
+靶机 command 服务默认启用，不自动生成靶机。
 
 选项：
   -n, --count COUNT       飞机数量，1～10（默认：1）
@@ -338,7 +339,7 @@ if ((GUI)); then
 else
 	cmake -S "$SCENARIO_GUI_DIR" -B "$SCENARIO_GUI_DIR/build" \
 		-DCMAKE_BUILD_TYPE=Release -DSCENARIO02_BUILD_GUI=OFF -DBUILD_TESTING=OFF
-	cmake --build "$SCENARIO_GUI_DIR/build" --target CollisionMonitor -j"$(nproc)"
+	cmake --build "$SCENARIO_GUI_DIR/build" --target CollisionMonitor TargetTrajectory -j"$(nproc)"
 fi
 if ((GUI)); then
 	echo "增量构建 world 的 Gazebo GUI 插件。"
@@ -611,17 +612,17 @@ for ((i = 0; i < COUNT; i++)); do
 	fi
 done
 
-if ((GUI)); then
-	target_manager_command=(python3 -u "$SCRIPT_DIR/target_manager.py"
-		--world "$WORLD" --runtime-dir "$RUNTIME_DIR" --assets-root "$ASSETS_ROOT"
-		--qgc-address "$TARGET_QGC_ADDRESS"
-		--mavlink-system-id "$TARGET_MAVLINK_SYSID")
-	printf '靶机管理服务 command: '
-	printf '%q ' "${target_manager_command[@]}"
-	printf '\n'
-	start_process target_manager "${target_manager_command[@]}"
-	wait_for_log target_manager '靶机管理服务已就绪' 15 || exit 1
+target_manager_command=(python3 -u "$SCRIPT_DIR/target_manager.py"
+	--world "$WORLD" --runtime-dir "$RUNTIME_DIR" --assets-root "$ASSETS_ROOT"
+	--qgc-address "$TARGET_QGC_ADDRESS"
+	--mavlink-system-id "$TARGET_MAVLINK_SYSID")
+printf '靶机管理服务 command: '
+printf '%q ' "${target_manager_command[@]}"
+printf '\n'
+start_process target_manager "${target_manager_command[@]}"
+wait_for_log target_manager '靶机管理服务已就绪' 15 || exit 1
 
+if ((GUI)); then
 	radar_manager_command=(python3 -u "$SCRIPT_DIR/radar_manager.py"
 		--world "$WORLD" --metadata "$ASSETS_ROOT/worlds/$WORLD/metadata.json")
 	printf '雷达管理服务 command: '
@@ -898,10 +899,11 @@ else
 	echo "机间碰撞：      已关闭刚体接触和互相致损；可用 --enable-collision 启用。"
 fi
 echo "其他碰撞：      飞机与地形/建筑物/靶机的检测和致损保持启用；事件记录 ${RUNTIME_DIR}/logs/collision-events.jsonl。"
+echo "靶机 command： /scenario/02/target/command（默认无靶机，等待启动命令）。"
+echo "QGC 靶机：      udp://${TARGET_QGC_ADDRESS}，SYSID=${TARGET_MAVLINK_SYSID}（只读轻量代理）。"
 if ((GUI)); then
 	echo "雷达/靶机控制：使用 Gazebo 地图右侧的固定控制面板。"
 	echo "地面站 JSON：   雷达航迹默认 1 Hz（可设 1～2 Hz）。"
-	echo "QGC 靶机：      udp://${TARGET_QGC_ADDRESS}，SYSID=${TARGET_MAVLINK_SYSID}（只读轻量代理）。"
 fi
 echo "接口表：${RUNTIME_DIR}/interfaces.tsv"
 echo "日志目录：${RUNTIME_DIR}/logs"

@@ -105,7 +105,7 @@ PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
   bash scenarios/02_rocket_two_axis_pod/start.sh
 ```
 
-脚本会增量构建 PX4 SITL、所选机型的吊仓/导引头插件和本场景的碰撞监控插件；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动靶机和雷达管理服务。
+脚本会增量构建 PX4 SITL、所选机型的吊仓/导引头插件及本场景的碰撞监控和靶机航迹插件，默认启动靶机 command 服务；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动雷达管理服务。
 
 ## 吊仓姿态与定位
 
@@ -152,9 +152,11 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 
 ## 靶机控制
 
-使用 `--gui` 启动时，Gazebo 界面右侧显示“靶机控制”面板。面板的“启用靶机”下拉框包含“不启用”“小摩托”和“小蝙蝠”。选择机型后显示巡航速度、海拔高度、来源距离、来源方向以及启动/终止按钮。场景默认无 GUI，因此不启动靶机和雷达管理服务；无 GUI 的既有用法保持不变。
+所有启动方式默认加载靶机航迹插件并启动靶机 command 服务，等待指令，不自动生成靶机。使用 `--gui` 启动时，Gazebo 界面右侧显示“靶机控制”面板。面板的“启用靶机”下拉框包含“不启用”“小摩托”和“小蝙蝠”。选择机型后显示巡航速度、海拔高度、来源距离、来源方向以及启动/终止按钮。雷达管理服务随 `--gui` 启用。
 
 靶机使用资产仓模型的视觉部分，由 Gazebo 场景航迹插件按仿真时间直接控制位姿；它不启动独立 PX4、不运行传感器或气动插件，也不占用普通飞机的 MAVLink 端口。同一时间只允许一架靶机。重复点击“启动靶机”会提示先终止当前靶机；点击“终止靶机”会从 world 删除模型，并立即停止航迹和 QGC 状态发送。普通火箭机和吊仓仍使用真实 PX4 SITL，不受影响。
+
+小摩托和小蝙蝠均以机体 `+X` 为机头。航迹插件使用同一个方向向量计算位移和机头朝向：面板的有限航迹由起终点决定方向，command 连续航迹沿指定航向前进；终点等待或碰撞冻结时保留飞行朝向。
 
 机型切换时自动设置经过模型飞行验证的默认巡航速度，并在界面显示有效范围：
 
@@ -165,9 +167,72 @@ world 中心固定放置一套无碰撞体的雷达外观，天线相位中心�
 
 “从东向西”在中心正东方生成靶机，“从东北45度”在中心东北方向生成靶机。模型直接生成在配置的海拔高度，随后按配置巡航速度直线飞向 world 中心；穿过中心后继续飞行500米，并在终点保持静止，直到终止靶机。该模式用于场景目标和吊仓搜索测试，不模拟靶机自身的起飞、姿态动力学或飞控故障。
 
-启用 GUI 靶机和雷达功能需要系统 Python 能导入 `gz.transport13` 和 `gz.msgs10`，不需要 `pymavlink`。靶机位姿按每个仿真步更新，管理服务以20 Hz接收位置状态。靶机不再发送独立 UDP 真值数据。
+靶机 command 服务和雷达功能需要系统 Python 能导入 `gz.transport13` 和 `gz.msgs10`，不需要 `pymavlink`。靶机位姿按每个仿真步更新，管理服务以20 Hz接收位置状态。靶机不发送独立 UDP 真值数据。
 
-靶机同时通过轻量 MAVLink 代理出现在 QGroundControl 中。默认发送到 `127.0.0.1:14550`，使用独立 `SYSID=200`；可通过 `--target-qgc-address HOST:PORT` 和 `--target-sysid ID` 修改。代理只发送 `HEARTBEAT`、`GLOBAL_POSITION_INT`、`GPS_RAW_INT` 和 `VFR_HUD`，不监听或执行 QGC 控制指令，也不占用普通飞机的 `14280+i` 端口。启动脚本会拒绝与当前普通飞机 `SYSID 1～n` 重叠的靶机 SYSID。终止靶机后代理立即停止发送，QGC 会在心跳超时后将该靶机显示为断开或移除。
+靶机同时通过轻量 MAVLink 代理出现在 QGroundControl 中。默认发送到 `127.0.0.1:14550`，使用独立 `SYSID=200`；可通过 `--target-qgc-address HOST:PORT` 和 `--target-sysid ID` 修改。代理只发送 `HEARTBEAT`、`ATTITUDE`、`GLOBAL_POSITION_INT`、`GPS_RAW_INT` 和 `VFR_HUD`，不监听或执行 QGC 控制指令，也不占用普通飞机的 `14280+i` 端口。`ATTITUDE` 与位置消息均为5 Hz，姿态使用 NED yaw（北0°、东90°），驱动 QGC 地图图标朝向；从东向西飞行时 yaw 为 −90°，位置航向为270°，到达终点时保留朝向。启动脚本会拒绝与当前普通飞机 `SYSID 1～n` 重叠的靶机 SYSID。终止靶机后代理立即停止发送，QGC 会在心跳超时后将该靶机显示为断开或移除。
+
+### Agent command 连续飞行
+
+agent 在与场景相同的 `GZ_PARTITION=px4_scenario_02_rocket_two_axis_pod`、`GZ_IP=127.0.0.1` 环境下，向 `/scenario/02/target/command` 发布 `gz.msgs.StringMsg`，`data` 为 JSON。命令增加 `"mode":"continuous"` 后，通过 `latitude`、`longitude`、`altitude`、`heading` 指定起始经纬高和航向，所有启动参数必填。速度使用 m/s，海拔为 MSL 米，航向为度、北0°东90°，任意有限航向按360°归一化。机型和速度范围同上。
+
+连续模式不使用 `distance` 或 `direction`，不检查地形覆盖、地图边界或30米净空。经纬度输入分别限制在 `[-90,90]` 和 `[-180,180]`，并沿用当前场景中心的局部 ENU 近似换算；海拔使用现有场景的垂直基准。靶机固定高度、速度和航向持续直飞，没有终点或运行时限，越过地图边界后继续。暂停 Gazebo 时停止推进，恢复仿真后继续。与 PX4 碰撞后仍冻结并停止 QGC 遥测，等待 agent 停止或替换。
+
+有效的连续模式 `start` 自动停止并清理当前靶机，再按新参数生成，同型号和已碰撞靶机也可替换。替换期间只保留最新有效 `start`；`stop` 取消待启动配置并清理当前靶机。非法请求不改变当前航迹或待启动配置。清理失败时报告错误并禁止生成新靶机，可用 `stop` 重试清理。未指定 `mode`（或使用 `center_pass`）时使用面板的有限航迹与校验规则，运行中重复启动仍被拒绝。
+
+订阅 `/scenario/02/target/status` 等待 `starting`、`stopping`、`running`、`collided`、`idle` 或 `error`。请求被拒绝时，状态中的 `error` 字段说明原因；有靶机时保留其当前 `state` 和 `model`，因此不能只用 `state=running` 判定请求成功。QGC 发送或编码异常只报告状态并持续重试，不终止航迹。下面的 Python 示例等待 command 连接及每条命令的执行结果，可嵌入 agent：
+
+```bash
+export GZ_PARTITION=px4_scenario_02_rocket_two_axis_pod
+export GZ_IP=127.0.0.1
+```
+
+```python
+import json
+import queue
+import time
+from gz.msgs10.stringmsg_pb2 import StringMsg
+from gz.transport13 import Node
+
+node = Node()
+statuses = queue.Queue()
+def on_status(message):
+    statuses.put(json.loads(message.data))
+
+assert node.subscribe(StringMsg, "/scenario/02/target/status", on_status)
+publisher = node.advertise("/scenario/02/target/command", StringMsg)
+deadline = time.monotonic() + 5
+while not publisher.has_connections():
+    if time.monotonic() >= deadline:
+        raise TimeoutError("靶机 command 服务未连接，请检查场景和 GZ_PARTITION")
+    time.sleep(0.05)
+
+def command(payload, expected):
+    while not statuses.empty():
+        statuses.get_nowait()
+    if not publisher.publish(StringMsg(data=json.dumps(payload))):
+        raise RuntimeError("发送靶机命令失败")
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            status = statuses.get(timeout=max(0.01, deadline - time.monotonic()))
+        except queue.Empty as error:
+            raise TimeoutError("等待靶机状态超时") from error
+        if status.get("error") or status["state"] == "error":
+            raise RuntimeError(status["message"])
+        if status["state"] == expected:
+            return status
+        if time.monotonic() >= deadline:
+            raise TimeoutError("等待靶机状态超时")
+
+command({
+    "command": "start", "mode": "continuous", "model": "xiaomotuo",
+    "speed": 35, "latitude": 32.2178573781, "longitude": 119.1058778441,
+    "altitude": 104.02, "heading": 73.5,
+}, "running")
+# 在此执行 agent 的训练回合；新回合可直接再次调用上面的 start。
+# 回合结束、需要停止靶机时调用：
+# command({"command": "stop"}, "idle")
+```
 
 ## 碰撞致损
 
@@ -285,6 +350,9 @@ ctest --test-dir scenarios/02_rocket_two_axis_pod/gui/build --output-on-failure
 # 独立 Gazebo 分区：零速碰撞、三维姿态、实际部件偏置与接触去重
 python3 scenarios/02_rocket_two_axis_pod/test_collision_integration.py
 
+# 独立 headless Gazebo：command 连续航迹、替换、暂停、碰撞冻结与清理
+python3 scenarios/02_rocket_two_axis_pod/test_target_command_integration.py
+
 # 独立 Gazebo 分区：当前9个CAD mesh、局部中心、节点变换及活动关节交会
 python3 scenarios/02_rocket_two_axis_pod/test_mesh_collision_integration.py
 
@@ -357,7 +425,7 @@ bash scenarios/02_rocket_two_axis_pod/start.sh \
 bash scenarios/02_rocket_two_axis_pod/stop.sh
 ```
 
-启动器使用公共资产检查、构建、模型生成、world 准备、Gazebo、PX4 和碰撞致损流程；`--gui` 同时启用公共地图、靶机和雷达管理服务。控制器使用中科插件配置。`GIMBAL_PYTHON` 可指定网关和生成器解释器；未设置时，中科优先使用资产仓 `models/gimbals/.venv-zhongke-d80/bin/python`。启动进程前检查基础 Python、Gazebo 和 NVENC 视频依赖；缺失时先按基础组件 `models/gimbals/zhongke-d80/scripts/setup.sh` 配置环境。
+启动器使用公共资产检查、构建、模型生成、world 准备、Gazebo、PX4 和碰撞致损流程，默认提供靶机 command 服务；`--gui` 启用公共地图、靶机控制面板和雷达管理服务。控制器使用中科插件配置。`GIMBAL_PYTHON` 可指定网关和生成器解释器；未设置时，中科优先使用资产仓 `models/gimbals/.venv-zhongke-d80/bin/python`。启动进程前检查基础 Python、Gazebo 和 NVENC 视频依赖；缺失时先按基础组件 `models/gimbals/zhongke-d80/scripts/setup.sh` 配置环境。
 
 每机控制/遥测 UDP 从 `8880` 递增，PX4 JSON 接收 UDP 从 `9000` 递增，RTSP 从 `8566` 递增，MAVSDK 从 `14280` 递增。实体名为 `rocket_zhongke_d80_<id>`，话题前缀为 `/uav_<id>/pod`，视频路径为 `/zhongke_d80_<id>`。未指定 `--advertise-host` 时使用默认路由接口地址，找不到时使用 `127.0.0.1`。控制和遥测使用16字节/32字节中科二进制帧，地面站转发到 PX4 的数据使用 JSON。端口占用时拒绝启动。
 

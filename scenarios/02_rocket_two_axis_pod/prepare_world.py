@@ -776,6 +776,7 @@ def prepare(
 
     add_collision_systems(world, model_basename)
     add_radar_model(world)
+    add_target_trajectory(world)
 
     scene = world.find('./gui/plugin[@filename="MinimalScene"]')
     if scene is not None:
@@ -788,7 +789,6 @@ def prepare(
         add_target_control(
             world, len(models), aircraft_prefix=f"{model_basename}_"
         )
-        add_target_trajectory(world)
 
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -844,7 +844,7 @@ def main() -> int:
     parser.add_argument(
         "--target-control",
         action="store_true",
-        help="加入 Gazebo 靶机控制面板和场景航迹插件",
+        help="加入 Gazebo 靶机控制面板（场景航迹插件默认加载）",
     )
     parser.add_argument(
         "--flight-vibration",

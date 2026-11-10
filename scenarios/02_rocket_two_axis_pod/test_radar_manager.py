@@ -9,6 +9,7 @@ import random
 import sys
 import threading
 import unittest
+from unittest import mock
 
 
 HERE = Path(__file__).resolve().parent
@@ -73,8 +74,12 @@ class RadarManagerTest(unittest.TestCase):
 
     def test_target_outside_nominal_and_fade_zone_is_not_detected(self):
         manager = self.make_manager()
-        target = MODULE.Observation(5600.0, 0.0, 100.0, sample_time=1.0)
-        self.assertFalse(manager._detected(target, 5000.0))
+        with mock.patch.object(manager.terrain, "line_of_sight") as line_of_sight:
+            for distance in (5600.0, 1_000_000_000.0):
+                with self.subTest(distance=distance):
+                    target = MODULE.Observation(distance, 0.0, 100.0, sample_time=1.0)
+                    self.assertFalse(manager._detected(target, 5000.0))
+            line_of_sight.assert_not_called()
 
     def test_confirmed_track_coasts_three_scans_before_deletion(self):
         manager = self.make_manager()

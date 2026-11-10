@@ -35,6 +35,7 @@ class TargetTrajectory final : public gz::sim::System,
     double endY{0.0};
     double speed{0.0};
     double yaw{0.0};
+    bool continuous{false};
     std::uint64_t generation{0};
   };
 
@@ -73,6 +74,8 @@ public:
       {
         this->current = command;
         this->progress = 0.0;
+        this->x = command.startX;
+        this->y = command.startY;
         this->active = true;
         this->done = false;
         this->entity = gz::sim::kNullEntity;
@@ -92,26 +95,45 @@ public:
         return;
     }
 
-    const double dx = this->current.endX - this->current.startX;
-    const double dy = this->current.endY - this->current.startY;
-    const double length = std::hypot(dx, dy);
-    if (!this->done && length > 0.0)
+    const double dt = std::max(
+        0.0, std::chrono::duration<double>(_info.dt).count());
+    double headingX = std::cos(this->current.yaw);
+    double headingY = std::sin(this->current.yaw);
+    if (this->current.continuous)
     {
-      const double dt = std::max(
-          0.0, std::chrono::duration<double>(_info.dt).count());
-      this->progress = std::min(length, this->progress + this->current.speed * dt);
-      this->done = this->progress >= length;
+      this->x += this->current.speed * headingX * dt;
+      this->y += this->current.speed * headingY * dt;
     }
-    else if (length <= 0.0)
+    else
     {
-      this->done = true;
+      const double dx = this->current.endX - this->current.startX;
+      const double dy = this->current.endY - this->current.startY;
+      const double length = std::hypot(dx, dy);
+      if (length > 0.0)
+      {
+        headingX = dx / length;
+        headingY = dy / length;
+      }
+      if (!this->done && length > 0.0)
+      {
+        this->progress = std::min(
+            length, this->progress + this->current.speed * dt);
+        this->done = this->progress >= length;
+      }
+      else if (length <= 0.0)
+      {
+        this->done = true;
+      }
+
+      const double fraction = length > 0.0 ? this->progress / length : 1.0;
+      this->x = this->current.startX + fraction * dx;
+      this->y = this->current.startY + fraction * dy;
     }
 
-    const double fraction = length > 0.0 ? this->progress / length : 1.0;
-    const double x = this->current.startX + fraction * dx;
-    const double y = this->current.startY + fraction * dy;
+    // 两款靶机均以机体 +X 为机头，朝向和位移使用相同的航迹方向。
+    const double yaw = std::atan2(headingY, headingX);
     const gz::math::Pose3d pose(
-        x, y, this->current.z, 0.0, 0.0, this->current.yaw);
+        this->x, this->y, this->current.z, 0.0, 0.0, yaw);
     gz::sim::Model(this->entity).SetWorldPoseCmd(_ecm, pose);
 
     if (_info.simTime - this->lastPublish >= std::chrono::milliseconds(50))
@@ -119,7 +141,7 @@ public:
       gz::msgs::StringMsg status;
       std::ostringstream stream;
       stream << std::setprecision(12) << "POSE " << this->current.model << ' '
-             << x << ' ' << y << ' ' << this->current.z << ' '
+             << this->x << ' ' << this->y << ' ' << this->current.z << ' '
              << (this->done ? 0.0 : this->current.speed) << ' '
              << (this->done ? 1 : 0);
       status.set_data(stream.str());
@@ -139,11 +161,14 @@ private:
     {
       command.action = Command::Action::Stop;
     }
-    else if (action == "START")
+    else if (action == "START" || action == "START_CONTINUOUS")
     {
       command.action = Command::Action::Start;
-      stream >> command.model >> command.startX >> command.startY >> command.z
-             >> command.endX >> command.endY >> command.speed >> command.yaw;
+      command.continuous = action == "START_CONTINUOUS";
+      stream >> command.model >> command.startX >> command.startY >> command.z;
+      if (!command.continuous)
+        stream >> command.endX >> command.endY;
+      stream >> command.speed >> command.yaw;
       if (!stream || command.model.empty() || !std::isfinite(command.startX) ||
           !std::isfinite(command.startY) || !std::isfinite(command.z) ||
           !std::isfinite(command.endX) || !std::isfinite(command.endY) ||
@@ -157,6 +182,18 @@ private:
     }
 
     std::lock_guard<std::mutex> guard(this->mutex);
+    // 管理服务会重发启动命令，直到收到 POSE；同一会话不能因此跳回起点。
+    if (command.action == this->pending.action &&
+        command.model == this->pending.model &&
+        command.startX == this->pending.startX &&
+        command.startY == this->pending.startY &&
+        command.z == this->pending.z &&
+        command.endX == this->pending.endX &&
+        command.endY == this->pending.endY &&
+        command.speed == this->pending.speed &&
+        command.yaw == this->pending.yaw &&
+        command.continuous == this->pending.continuous)
+      return;
     command.generation = ++this->generation;
     this->pending = command;
   }
@@ -173,6 +210,8 @@ private:
   gz::sim::Entity entity{gz::sim::kNullEntity};
   std::chrono::steady_clock::duration lastPublish{};
   double progress{0.0};
+  double x{0.0};
+  double y{0.0};
   bool active{false};
   bool done{false};
 };

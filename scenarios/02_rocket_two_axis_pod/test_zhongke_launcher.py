@@ -204,6 +204,25 @@ class UnifiedLauncherTests(unittest.TestCase):
         self.assertTrue(all('rocket_racing_quad/controller' not in (row['system_plugin_path'] or '')
                             for row in self.calls('setsid')))
 
+    def test_headless_starts_target_command_service_without_gui_or_radar(self):
+        result = self.start(extra=('--target-qgc-address', '127.0.0.2:14551',
+                                   '--target-sysid', '201'))
+        managers = self.commands('target_manager.py')
+        self.assertEqual(len(managers), 1)
+        self.assertEqual(self.option(managers[0], '--qgc-address'), '127.0.0.2:14551')
+        self.assertEqual(self.option(managers[0], '--mavlink-system-id'), '201')
+        self.assertFalse(self.commands('radar_manager.py'))
+        self.assertNotIn('--target-control', self.commands('prepare_world.py')[0])
+        gazebo = [row['argv'] for row in self.calls('setsid') if 'sim' in row['argv']]
+        self.assertEqual(len(gazebo), 1)
+        self.assertIn('-s', gazebo[0])
+        builds = [row['argv'] for row in self.calls('cmake')
+                  if '--target' in row['argv']]
+        self.assertTrue(any('CollisionMonitor' in argv and 'TargetTrajectory' in argv
+                            for argv in builds))
+        self.assertIn('/scenario/02/target/command', result.stdout)
+        self.assertIn('udp://127.0.0.2:14551，SYSID=201', result.stdout)
+
     def test_vibration_enabled_builds_plugin_and_passes_profile_for_every_model(self):
         # 外部工具被隔离替身截获；验证实际shell分支与传参。
         directory = self.assets/'models/vehicles/rocket_racing_quad'

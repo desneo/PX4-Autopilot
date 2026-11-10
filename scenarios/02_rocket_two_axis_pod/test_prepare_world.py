@@ -427,7 +427,7 @@ class PrepareWorldTest(unittest.TestCase):
             "104.019969",
         )
 
-    def test_headless_world_does_not_load_target_plugins(self):
+    def test_headless_world_loads_target_trajectory_without_control_panel(self):
         output = self.root / "run" / "world.sdf"
         MODULE.prepare(
             self.root / "world" / "world.sdf",
@@ -437,7 +437,13 @@ class PrepareWorldTest(unittest.TestCase):
         world = ET.parse(output).getroot().find("world")
         self.assertIsNone(world.find("./gui/plugin[@filename='TargetControl']"))
         self.assertIsNotNone(world.find("./gui/plugin[@filename='MapCenter']"))
-        self.assertIsNone(world.find("./plugin[@name='scenario02::TargetTrajectory']"))
+        trajectory = world.find("./plugin[@name='scenario02::TargetTrajectory']")
+        self.assertIsNotNone(trajectory)
+        self.assertEqual(trajectory.get("filename"), "libTargetTrajectory.so")
+        self.assertEqual(
+            trajectory.findtext("command_topic"),
+            "/scenario/02/target/trajectory/command",
+        )
         self.assertIsNotNone(
             world.find("./plugin[@name='scenario02::CollisionMonitor']")
         )

@@ -306,12 +306,12 @@ class RadarManager:
         elevation = math.degrees(math.atan2(dz, math.hypot(dx, dy)))
         if distance < MIN_RANGE_M or elevation < MIN_ELEVATION_DEG or elevation > MAX_ELEVATION_DEG:
             return False
+        if distance > nominal_range * 1.1:
+            return False
         if not self.terrain.line_of_sight(observation):
             return False
         if distance <= nominal_range:
             return True
-        if distance > nominal_range * 1.1:
-            return False
         probability = 1.0 - (distance - nominal_range) / (nominal_range * 0.1)
         return self.random.random() < probability
 
