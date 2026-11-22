@@ -35,7 +35,14 @@ record(name, args)
 def value(flag):
     return args[args.index(flag)+1]
 if name == 'git':
-    if 'branch' in args: print('main')
+    if 'branch' in args: print(os.environ.get('FIXTURE_ASSETS_BRANCH', 'main'))
+    if 'fetch' in args and os.environ.get('FIXTURE_FETCH_FAIL'):
+        print('测试远程资产仓访问失败', file=sys.stderr)
+        sys.exit(1)
+    if 'merge-base' in args and os.environ.get('FIXTURE_ASSETS_BEHIND'):
+        sys.exit(1)
+    if 'status' in args and os.environ.get('FIXTURE_ASSETS_DIRTY'):
+        print(' M models/local.sdf')
     if 'rev-parse' in args: print('fixture12345')
 elif name == 'pgrep':
     if os.environ.get('FIXTURE_EXISTING') or (root/'started').exists():
@@ -193,6 +200,70 @@ class UnifiedLauncherTests(unittest.TestCase):
     @staticmethod
     def option(argv, flag):
         return argv[argv.index(flag)+1]
+
+    def test_online_fetch_failure_stops_before_build_or_launch(self):
+        result = self.run_script(env=dict(self.env, FIXTURE_FETCH_FAIL='1'))
+        self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+        self.assertIn('无法获取资产仓 origin/main', result.stderr)
+        git_calls = [row['argv'] for row in self.calls('git')]
+        self.assertEqual(sum('fetch' in argv for argv in git_calls), 1)
+        self.assertFalse(any('merge-base' in argv for argv in git_calls))
+        self.assertFalse(self.calls('cmake'))
+        self.assertFalse(self.calls('setsid'))
+        self.assertFalse(self.runtime.exists())
+
+    def test_online_outdated_assets_stop_before_build_or_launch(self):
+        result = self.run_script(env=dict(self.env, FIXTURE_ASSETS_BEHIND='1'))
+        self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+        self.assertIn('本地 main 未包含最新 origin/main', result.stderr)
+        git_calls = [row['argv'] for row in self.calls('git')]
+        self.assertTrue(any('fetch' in argv for argv in git_calls))
+        self.assertTrue(any('merge-base' in argv for argv in git_calls))
+        self.assertFalse(self.calls('cmake'))
+        self.assertFalse(self.calls('setsid'))
+        self.assertFalse(self.runtime.exists())
+
+    def test_offline_uses_local_worktree_without_remote_or_ancestry_check(self):
+        # 即使远程不可达、本地未包含远程提交且工作区有修改，也可显式离线启动。
+        self.env.update(FIXTURE_FETCH_FAIL='1', FIXTURE_ASSETS_BEHIND='1',
+                        FIXTURE_ASSETS_DIRTY='1')
+        result = self.start(extra=('--offline',))
+        git_calls = [row['argv'] for row in self.calls('git')]
+        self.assertFalse(any('fetch' in argv or 'merge-base' in argv or 'clone' in argv
+                             for argv in git_calls))
+        self.assertTrue(any('rev-parse' in argv for argv in git_calls))
+        self.assertTrue(self.calls('setsid'))
+        self.assertTrue(self.runtime.joinpath('interfaces.tsv').exists())
+        self.assertIn('离线', result.stdout)
+        self.assertIn('fixture12345', result.stdout)
+
+    def test_offline_missing_assets_does_not_clone_or_create_directories(self):
+        missing_assets = self.root/'missing-parent/assets'
+        result = self.run_script(argv=('--offline',),
+                                 env=dict(self.env, PX4_GAZEBO_ASSETS_ROOT=str(missing_assets)))
+        self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+        self.assertIn('离线', result.stderr)
+        self.assertIn(str(missing_assets), result.stderr)
+        self.assertFalse(missing_assets.parent.exists())
+        self.assertFalse(self.calls('git'))
+        self.assertFalse(self.calls('cmake'))
+        self.assertFalse(self.calls('setsid'))
+
+    def test_offline_rejects_assets_outside_main(self):
+        result = self.run_script(argv=('--offline',),
+                                 env=dict(self.env, FIXTURE_ASSETS_BRANCH='feature/local'))
+        self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+        self.assertIn('资产仓当前不是 main 分支', result.stderr)
+        git_calls = [row['argv'] for row in self.calls('git')]
+        self.assertTrue(any('branch' in argv for argv in git_calls))
+        self.assertFalse(any('fetch' in argv or 'merge-base' in argv for argv in git_calls))
+        self.assertFalse(self.calls('setsid'))
+
+    def test_help_lists_offline_without_probing_tools(self):
+        result = self.run_script(argv=('--help',))
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('--offline', result.stdout)
+        self.assertFalse(self.calls())
 
     def test_vibration_defaults_to_off_without_optional_asset_dependency(self):
         self.start(extra=('--flight-vibration','off'))

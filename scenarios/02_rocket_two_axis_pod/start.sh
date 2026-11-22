@@ -12,6 +12,7 @@ BRIDGE_PYTHON="${GIMBAL_PYTHON:-python3}"
 SCENARIO_GUI_DIR="${SCRIPT_DIR}/gui"
 COUNT=1
 GUI=0
+OFFLINE=0
 ENCODER=nvenc
 ADVERTISE_HOST=""
 WORLD=geo_32_217857_119_105878
@@ -26,7 +27,7 @@ FLIGHT_VIBRATION=off
 
 usage() {
 	cat <<'EOF'
-用法：start.sh [-n 架数] [--gui] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt] [--aircraft-model 模型] [--flight-vibration off|afly5]
+用法：start.sh [-n 架数] [--gui] [--offline] [--enable-collision] [--advertise-host 地址] [--encoder nvenc] [--tracking-backend sim_truth|csrt] [--aircraft-model 模型] [--flight-vibration off|afly5]
 
 在 geo_32_217857_119_105878 world 中启动火箭穿越机与顶部吊仓/导引头组合模型。
 默认启动 1 架、不开启 GUI，启动后等待 MAVSDK 和吊仓地面站控制。
@@ -35,6 +36,7 @@ usage() {
 选项：
   -n, --count COUNT       飞机数量，1～10（默认：1）
       --gui               启动 Gazebo GUI
+      --offline           使用已有本地资产，跳过远程版本检查
       --enable-collision  启用飞机之间的刚体碰撞和互相致损（默认关闭）
       --advertise-host IP 打印给远程客户端使用的本机地址
       --encoder TYPE      吊仓视频编码器：nvenc（默认：nvenc）
@@ -73,6 +75,10 @@ while (($# > 0)); do
 			;;
 		--gui)
 			GUI=1
+			shift
+			;;
+		--offline)
+			OFFLINE=1
 			shift
 			;;
 		--enable-collision)
@@ -186,6 +192,10 @@ fi
 
 ASSETS_ROOT=$(realpath -m -- "$ASSETS_ROOT")
 if [[ ! -e $ASSETS_ROOT ]]; then
+	if ((OFFLINE)); then
+		echo "ERROR: 离线模式需要已有本地资产仓：${ASSETS_ROOT}" >&2
+		exit 1
+	fi
 	echo "未找到资产仓，开始下载最新 main：${ASSETS_URL}"
 	mkdir -p -- "$(dirname -- "$ASSETS_ROOT")"
 	git clone --branch main --single-branch "$ASSETS_URL" "$ASSETS_ROOT" || {
@@ -201,17 +211,22 @@ if [[ $(git -C "$ASSETS_ROOT" branch --show-current) != main ]]; then
 	echo "ERROR: 资产仓当前不是 main 分支：${ASSETS_ROOT}" >&2
 	exit 1
 fi
-echo "检查资产仓远程 main：${ASSETS_ROOT}"
-git -C "$ASSETS_ROOT" fetch --quiet origin main || {
-	echo "ERROR: 无法获取资产仓 origin/main，不能确认本地版本是否过期。" >&2
-	exit 1
-}
-if ! git -C "$ASSETS_ROOT" merge-base --is-ancestor origin/main HEAD; then
-	echo "ERROR: 资产仓本地 main 未包含最新 origin/main，请先更新本地提交。" >&2
-	exit 1
+if ((OFFLINE)); then
+	echo "离线模式：使用本地资产仓，跳过 origin/main 远程版本检查：${ASSETS_ROOT}"
+else
+	echo "检查资产仓远程 main：${ASSETS_ROOT}"
+	git -C "$ASSETS_ROOT" fetch --quiet origin main || {
+		echo "ERROR: 无法获取资产仓 origin/main，不能确认本地版本是否过期。" >&2
+		echo "如需使用现有本地资产，请显式添加 --offline。" >&2
+		exit 1
+	}
+	if ! git -C "$ASSETS_ROOT" merge-base --is-ancestor origin/main HEAD; then
+		echo "ERROR: 资产仓本地 main 未包含最新 origin/main，请先更新本地提交。" >&2
+		exit 1
+	fi
 fi
 if [[ -n $(git -C "$ASSETS_ROOT" status --porcelain) ]]; then
-	echo "资产仓存在未提交修改；本地提交未落后 origin/main，继续使用当前工作区。"
+	echo "资产仓存在未提交修改；继续使用当前工作区。"
 fi
 ASSETS_REV=$(git -C "$ASSETS_ROOT" rev-parse --short=12 HEAD)
 echo "资产仓版本：${ASSETS_REV}"

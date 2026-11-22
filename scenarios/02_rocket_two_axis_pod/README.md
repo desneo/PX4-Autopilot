@@ -27,6 +27,9 @@ bash scenarios/02_rocket_two_axis_pod/start.sh --tracking-backend csrt
 # 四架，打开 Gazebo GUI
 bash scenarios/02_rocket_two_axis_pod/start.sh -n 4 --gui
 
+# 使用已有本地资产，跳过远程版本检查
+bash scenarios/02_rocket_two_axis_pod/start.sh --offline --gui -n 2
+
 # 启用 A_fly5 悬停抖动配置；省略该选项或指定 off 使用原生行为
 bash scenarios/02_rocket_two_axis_pod/start.sh --flight-vibration afly5 --gui
 
@@ -89,20 +92,28 @@ sudo usermod -aG render,video "$USER"
 
 ## 资产仓
 
-资产仓默认位于 PX4 仓库同级的 `../px4-gazebo-assets`。首次启动时自动下载：
+资产仓默认位于 PX4 仓库同级的 `../px4-gazebo-assets`。默认在线模式下，资产仓不存在时自动下载：
 
 ```text
 https://github.com/desneo/px4-gazebo-assets.git
 ```
 
-四个机型每次启动都会先获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动，也允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。远程检查失败、分支不是 `main`，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
+`start.sh` 默认在每次启动时获取远程 `origin/main`，并确认本地 `main` 已包含远程最新提交。本地提交与远程相同或领先时均可启动；远程检查失败，或本地提交落后/分叉于 `origin/main` 时，脚本会报告原因并停止。
 
-可用环境变量覆盖位置和下载地址：
+显式添加 `--offline` 时，只使用已有本地资产仓，不下载资产、不获取远程提交，也不比较本地提交与 `origin/main`，因此无法确认资产是否为远程最新版本。两种模式均要求资产仓处于 `main` 分支，均允许工作区存在未提交修改；脚本直接使用当前工作区生成运行模型，不会执行 `reset`、`checkout` 或覆盖本地修改。离线模式仍会检查所需文件和运行依赖，并按需增量构建。
+
+可用环境变量覆盖位置和首次下载地址；已有资产仓的远程检查使用其 `origin`，不受 `PX4_GAZEBO_ASSETS_URL` 影响：
 
 ```bash
 PX4_GAZEBO_ASSETS_ROOT=/path/to/px4-gazebo-assets \
 PX4_GAZEBO_ASSETS_URL=https://example/model-repo.git \
   bash scenarios/02_rocket_two_axis_pod/start.sh
+```
+
+已有资产仓使用代理地址且拉取失败时，可将 `origin` 的拉取地址设为 GitHub 官方地址：
+
+```bash
+git -C ../px4-gazebo-assets remote set-url origin https://github.com/desneo/px4-gazebo-assets.git
 ```
 
 脚本会增量构建 PX4 SITL、所选机型的吊仓/导引头插件及本场景的碰撞监控和靶机航迹插件，默认启动靶机 command 服务；使用 `--gui` 时也会增量构建 world 的地图中心 GUI 插件，并启动雷达管理服务。
