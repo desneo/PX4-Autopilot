@@ -167,8 +167,8 @@ if [[ $TARGET_QGC_ADDRESS == *[[:space:]]* || $TARGET_QGC_ADDRESS != *:* ]]; the
 	exit 2
 fi
 if [[ ! $TARGET_MAVLINK_SYSID =~ ^[0-9]+$ ]] \
-	|| ((TARGET_MAVLINK_SYSID < 1 || TARGET_MAVLINK_SYSID > 254)); then
-	echo "ERROR: --target-sysid 必须是 1～254 的整数" >&2
+	|| ((TARGET_MAVLINK_SYSID < 1 || TARGET_MAVLINK_SYSID > 251)); then
+	echo "ERROR: --target-sysid 必须是 1～251 的整数，以便为4架靶机保留连续SYSID" >&2
 	exit 2
 fi
 if ((TARGET_MAVLINK_SYSID <= COUNT)); then
@@ -455,7 +455,11 @@ zhongke_targets=()
 for ((aircraft_id = 1; aircraft_id <= COUNT; aircraft_id++)); do
 	zhongke_targets+=(--target-name "${AIRCRAFT_MODEL}_${aircraft_id}")
 done
-zhongke_targets+=(--target-name xiaomotuo --target-name xiaobianfu)
+for target_name in \
+	xiaomotuo xiaomotuo_2 xiaomotuo_3 xiaomotuo_4 \
+	xiaobianfu xiaobianfu_2 xiaobianfu_3 xiaobianfu_4; do
+	zhongke_targets+=(--target-name "$target_name")
+done
 zhongke_runtime_args() {
 	local aircraft_id=$1
 	local index=$((aircraft_id - 1))

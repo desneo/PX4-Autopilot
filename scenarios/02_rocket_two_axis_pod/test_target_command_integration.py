@@ -102,7 +102,7 @@ class CommandHarness:
 
     def on_truth(self, message) -> None:
         values = message.data.split()
-        if len(values) == 7 and values[0] == "POSE":
+        if len(values) in (7, 8) and values[0] == "POSE":
             with self.lock:
                 self.truths.append((values[1], *map(float, values[2:6]), bool(int(values[6]))))
 
@@ -326,6 +326,47 @@ def verify(harness: CommandHarness, receiver: socket.socket) -> None:
     harness.stop()
     assert_no_telemetry(receiver)
 
+    # 新 GUI 协议实际生成四架模型，并保持圆形编队的横向间距和高度差。
+    group = {
+        "command": "start", "model": "xiaomotuo", "count": 4,
+        "trajectory": "circle", "speed": 35, "altitude": 250,
+        "distance": 200, "direction": "east_west",
+        "formation_enabled": True, "lateral_spacing": 20,
+        "altitude_step": 5, "radius": 100, "clockwise": True,
+    }
+    cursor = harness.cursor()
+    harness.publish(group)
+    running = harness.status("running", cursor)
+    expected_models = {
+        "xiaomotuo", "xiaomotuo_2", "xiaomotuo_3", "xiaomotuo_4",
+    }
+    assert set(running["target_models"]) == expected_models
+    harness.step(50)
+    assert harness.model_names() == expected_models, "四机编队模型未完整生成"
+    leader = harness.truth("xiaomotuo")
+    for index in range(2, 5):
+        member = harness.truth(f"xiaomotuo_{index}")
+        assert abs(member[3] - leader[3] - (index - 1) * 5) < 1e-6
+        assert abs(math.hypot(member[1] - leader[1], member[2] - leader[2])
+                   - (index - 1) * 20) < 1e-4
+
+    cursor = harness.cursor()
+    harness.publish({
+        "collision_type": "px4_target",
+        "entity_1": "rocket_two_axis_pod_1",
+        "entity_2": "xiaomotuo_3",
+        "relative_speed_m_s": 42,
+    }, collision=True)
+    harness.status("running", cursor, pump=False)
+    harness.step(2)
+    frozen = harness.poses["xiaomotuo_3"]
+    moving = harness.poses["xiaomotuo"]
+    harness.step(100)
+    assert math.dist(harness.poses["xiaomotuo_3"][:3], frozen[:3]) < 1e-6
+    assert math.dist(harness.poses["xiaomotuo"][:3], moving[:3]) > 10
+    harness.stop()
+    assert_no_telemetry(receiver)
+
     # 原 GUI 协议仍保留先停止再启动和终点等待行为。
     legacy = {"command": "start", "model": "xiaomotuo", "speed": 65,
               "altitude": 220, "distance": 100, "direction": "east_west"}
@@ -384,7 +425,7 @@ def main() -> int:
                     return False
                 harness.wait_for(ready, "靶机管理服务就绪")
                 verify(harness, receiver)
-                print("靶机 command headless 集成测试通过：连续飞行、QGC 航向、仿真时间、替换、碰撞、清理及旧航迹")
+                print("靶机 command headless 集成测试通过：单靶兼容、四机编队、轨迹、QGC、碰撞和清理")
             except Exception:
                 print(f"进程退出状态：Gazebo={server.poll() if server else None}，"
                       f"靶机管理服务={manager.poll() if manager else None}")

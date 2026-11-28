@@ -4,6 +4,7 @@
 #include <sstream>
 #include <algorithm>
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaObject>
@@ -464,6 +465,56 @@ void TargetControl::StartTarget(
       QJsonDocument(command).toJson(QJsonDocument::Compact)));
 }
 
+void TargetControl::StartTargetGroup(
+    const QString &_model,
+    int _count,
+    const QString &_trajectory,
+    double _speed,
+    double _altitude,
+    double _distance,
+    const QString &_direction,
+    double _radius,
+    bool _clockwise,
+    double _amplitude,
+    double _wavelength,
+    bool _formationEnabled,
+    double _lateralSpacing,
+    double _altitudeStep)
+{
+  if (this->busy)
+    return;
+
+  QJsonObject command{
+      {QStringLiteral("command"), QStringLiteral("start")},
+      {QStringLiteral("model"), _model},
+      {QStringLiteral("count"), _count},
+      {QStringLiteral("trajectory"), _trajectory},
+      {QStringLiteral("speed"), _speed},
+      {QStringLiteral("altitude"), _altitude},
+      {QStringLiteral("distance"), _distance},
+      {QStringLiteral("direction"), _direction},
+      {QStringLiteral("formation_enabled"), _formationEnabled},
+      {QStringLiteral("lateral_spacing"), _lateralSpacing},
+      {QStringLiteral("altitude_step"), _altitudeStep},
+  };
+  if (_trajectory == QStringLiteral("circle"))
+  {
+    command.insert(QStringLiteral("radius"), _radius);
+    command.insert(QStringLiteral("clockwise"), _clockwise);
+  }
+  else if (_trajectory == QStringLiteral("sine"))
+  {
+    command.insert(QStringLiteral("amplitude"), _amplitude);
+    command.insert(QStringLiteral("wavelength"), _wavelength);
+  }
+
+  this->busy = true;
+  this->status = QStringLiteral("正在启动 %1 架靶机…").arg(_count);
+  emit this->StateChanged();
+  this->Publish(QString::fromUtf8(
+      QJsonDocument(command).toJson(QJsonDocument::Compact)));
+}
+
 void TargetControl::StopTarget()
 {
   if (this->busy)
@@ -523,21 +574,39 @@ void TargetControl::OnStatus(const gz::msgs::StringMsg &_message)
   const QString state = object.value(QStringLiteral("state")).toString();
   const QString message = object.value(QStringLiteral("message")).toString();
   const QString model = object.value(QStringLiteral("model")).toString();
-  QMetaObject::invokeMethod(this, [this, state, message, model]
+  QStringList models;
+  const auto modelValues = object.value(QStringLiteral("target_models")).toArray();
+  for (const auto &value : modelValues)
+  {
+    const QString name = value.isString() ? value.toString() :
+        value.toObject().value(QStringLiteral("model")).toString();
+    if (!name.isEmpty() && !models.contains(name))
+      models.append(name);
+  }
+  if (models.isEmpty() && !model.isEmpty())
+    models.append(model);
+  QMetaObject::invokeMethod(this, [this, state, message, model, models]
   {
     this->busy = state == QStringLiteral("starting") ||
         state == QStringLiteral("stopping");
     this->running = state == QStringLiteral("starting") ||
         state == QStringLiteral("running") ||
+        state == QStringLiteral("partial") ||
         state == QStringLiteral("collided") ||
         state == QStringLiteral("stopping") ||
-        (state == QStringLiteral("error") && !model.isEmpty());
-    const QString previousTargetModel = this->targetModel;
-    this->targetModel = this->running ? model : QString{};
+        (state == QStringLiteral("error") && !models.isEmpty());
+    const QString previousFollowingEntity = this->followingEntity;
+    this->targetModels = this->running ? models : QStringList{};
+    this->targetModel = this->targetModels.isEmpty() ? QString{} :
+        (!model.isEmpty() ? model : this->targetModels.first());
     this->status = message.isEmpty() ? QStringLiteral("等待操作") : message;
     emit this->StateChanged();
-    if (!this->running && !previousTargetModel.isEmpty() &&
-        this->followingEntity == previousTargetModel)
+    if (!previousFollowingEntity.isEmpty() &&
+        (previousFollowingEntity == QStringLiteral("xiaomotuo") ||
+         previousFollowingEntity == QStringLiteral("xiaobianfu") ||
+         previousFollowingEntity.startsWith(QStringLiteral("xiaomotuo_")) ||
+         previousFollowingEntity.startsWith(QStringLiteral("xiaobianfu_"))) &&
+        !this->targetModels.contains(previousFollowingEntity))
       this->StopFollowing();
   }, Qt::QueuedConnection);
 }

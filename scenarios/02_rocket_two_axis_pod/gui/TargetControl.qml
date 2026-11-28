@@ -13,6 +13,7 @@ Item {
   property bool rebuildingAircraftModel: false
   property bool observedTargetRunning: TargetControl.running
   property string observedTargetModel: TargetControl.targetModel
+  property var observedTargetModels: TargetControl.targetModels
   property bool observedFollowing: TargetControl.following
   property bool observedCameraBusy: TargetControl.cameraBusy
   property int observedAircraftCount: TargetControl.aircraftCount
@@ -20,6 +21,7 @@ Item {
 
   onObservedTargetRunningChanged: root.refreshAircraftModel()
   onObservedTargetModelChanged: root.refreshAircraftModel()
+  onObservedTargetModelsChanged: root.refreshAircraftModel()
   onObservedFollowingChanged: root.syncAircraftSelection()
   onObservedCameraBusyChanged: root.syncAircraftSelection()
   onObservedAircraftCountChanged: root.refreshAircraftModel()
@@ -31,9 +33,17 @@ Item {
   }
   function speedMinimum() { return targetModel.currentIndex === 1 ? 25 : 10 }
   function speedMaximum() { return targetModel.currentIndex === 1 ? 65 : 30 }
+  function selectedTrajectory() {
+    if (trajectoryBox.currentIndex === 1) return "continuous"
+    if (trajectoryBox.currentIndex === 2) return "circle"
+    if (trajectoryBox.currentIndex === 3) return "sine"
+    return "center_pass"
+  }
   function targetDisplayName(model) {
-    if (model === "xiaomotuo") return "靶机 · 小摩托"
-    if (model === "xiaobianfu") return "靶机 · 小蝙蝠"
+    var suffix = model.match(/_([2-4])$/)
+    var number = suffix ? " " + suffix[1] : ""
+    if (model.indexOf("xiaomotuo") === 0) return "靶机" + number + " · 小摩托"
+    if (model.indexOf("xiaobianfu") === 0) return "靶机" + number + " · 小蝙蝠"
     return "靶机"
   }
   function refreshAircraftModel() {
@@ -47,11 +57,16 @@ Item {
         "entity": TargetControl.aircraftPrefix + index
       })
     }
-    if (TargetControl.running && TargetControl.targetModel.length > 0) {
-      aircraftOptions.append({
-        "label": root.targetDisplayName(TargetControl.targetModel),
-        "entity": TargetControl.targetModel
-      })
+    if (TargetControl.running) {
+      var targetModels = TargetControl.targetModels
+      if (targetModels.length === 0 && TargetControl.targetModel.length > 0)
+        targetModels = [TargetControl.targetModel]
+      for (var targetIndex = 0; targetIndex < targetModels.length; ++targetIndex) {
+        aircraftOptions.append({
+          "label": root.targetDisplayName(targetModels[targetIndex]),
+          "entity": targetModels[targetIndex]
+        })
+      }
     }
     var selectedIndex = 0
     for (var row = 1; row < aircraftOptions.count; ++row) {
@@ -97,6 +112,27 @@ Item {
     var distance = Number(distanceField.text)
     if (!isFinite(distance) || distance < 100 || distance > 10000)
       return "来源距离必须在 100～10000 米"
+    if (root.selectedTrajectory() === "circle") {
+      var radius = Number(radiusField.text)
+      if (!isFinite(radius) || radius < 10 || radius > 5000)
+        return "盘旋半径必须在 10～5000 米"
+    }
+    if (root.selectedTrajectory() === "sine") {
+      var amplitude = Number(amplitudeField.text)
+      var wavelength = Number(wavelengthField.text)
+      if (!isFinite(amplitude) || amplitude < 1 || amplitude > 2000)
+        return "正弦振幅必须在 1～2000 米"
+      if (!isFinite(wavelength) || wavelength < 20 || wavelength > 10000)
+        return "正弦波长必须在 20～10000 米"
+    }
+    if (targetCountBox.currentIndex > 0) {
+      var spacing = Number(lateralSpacingField.text)
+      var altitudeStep = Number(altitudeStepField.text)
+      if (!isFinite(spacing) || spacing < 1 || spacing > 1000)
+        return "编队横向间距必须在 1～1000 米"
+      if (!isFinite(altitudeStep) || altitudeStep < -1000 || altitudeStep > 1000)
+        return "相邻高度差必须在 -1000～1000 米"
+    }
     return ""
   }
 
@@ -368,7 +404,7 @@ Item {
       Rectangle {
         id: targetPanel
         width: parent.width
-        height: root.targetCollapsed ? 50 : (targetModel.currentIndex > 0 ? 500 : 175)
+        height: root.targetCollapsed ? 50 : (targetModel.currentIndex > 0 ? 830 : 175)
         color: "#e8ffffff"
 
         Rectangle {
@@ -436,6 +472,29 @@ Item {
             columnSpacing: 8
             rowSpacing: 5
             Layout.fillWidth: true
+            Label { text: "靶机数量"; color: "#202124" }
+            ComboBox {
+              id: targetCountBox
+              objectName: "targetCountCombo"
+              Layout.fillWidth: true
+              model: ["1 架", "2 架", "3 架", "4 架"]
+              onCurrentIndexChanged: targetError.text = ""
+            }
+            Label { text: "运动轨迹"; color: "#202124" }
+            ComboBox {
+              id: trajectoryBox
+              objectName: "trajectoryCombo"
+              Layout.fillWidth: true
+              model: ["直线穿越", "持续直飞", "圆形盘旋", "正弦摆动"]
+              onCurrentIndexChanged: targetError.text = ""
+            }
+          }
+          GridLayout {
+            visible: targetModel.currentIndex > 0
+            columns: 2
+            columnSpacing: 8
+            rowSpacing: 5
+            Layout.fillWidth: true
             Label { text: "巡航速度（m/s）"; color: "#202124" }
             TextField {
               id: speedField; objectName: "speedField"; Layout.fillWidth: true
@@ -467,6 +526,93 @@ Item {
               id: directionBox; objectName: "directionCombo"; Layout.fillWidth: true
               model: ["从东向西", "从东北45度"]
             }
+            Label {
+              text: "盘旋半径（m）"
+              color: "#202124"
+              visible: root.selectedTrajectory() === "circle"
+            }
+            TextField {
+              id: radiusField
+              objectName: "circleRadiusField"
+              Layout.fillWidth: true
+              visible: root.selectedTrajectory() === "circle"
+              text: "300"
+              selectByMouse: true
+              validator: DoubleValidator { bottom: 10; top: 5000; decimals: 2 }
+            }
+            Label {
+              text: "盘旋方向"
+              color: "#202124"
+              visible: root.selectedTrajectory() === "circle"
+            }
+            ComboBox {
+              id: circleDirectionBox
+              objectName: "circleDirectionCombo"
+              Layout.fillWidth: true
+              visible: root.selectedTrajectory() === "circle"
+              model: ["顺时针", "逆时针"]
+            }
+            Label {
+              text: "摆动振幅（m）"
+              color: "#202124"
+              visible: root.selectedTrajectory() === "sine"
+            }
+            TextField {
+              id: amplitudeField
+              objectName: "sineAmplitudeField"
+              Layout.fillWidth: true
+              visible: root.selectedTrajectory() === "sine"
+              text: "100"
+              selectByMouse: true
+              validator: DoubleValidator { bottom: 1; top: 2000; decimals: 2 }
+            }
+            Label {
+              text: "摆动波长（m）"
+              color: "#202124"
+              visible: root.selectedTrajectory() === "sine"
+            }
+            TextField {
+              id: wavelengthField
+              objectName: "sineWavelengthField"
+              Layout.fillWidth: true
+              visible: root.selectedTrajectory() === "sine"
+              text: "500"
+              selectByMouse: true
+              validator: DoubleValidator { bottom: 20; top: 10000; decimals: 2 }
+            }
+          }
+          CheckBox {
+            id: formationCheckBox
+            objectName: "formationCheckBox"
+            visible: targetModel.currentIndex > 0 && targetCountBox.currentIndex > 0
+            checked: targetCountBox.currentIndex > 0
+            enabled: false
+            text: "多靶使用固定编队"
+          }
+          GridLayout {
+            visible: targetModel.currentIndex > 0 && targetCountBox.currentIndex > 0
+            columns: 2
+            columnSpacing: 8
+            rowSpacing: 5
+            Layout.fillWidth: true
+            Label { text: "相邻横向间距（m）"; color: "#202124" }
+            TextField {
+              id: lateralSpacingField
+              objectName: "lateralSpacingField"
+              Layout.fillWidth: true
+              text: "30"
+              selectByMouse: true
+              validator: DoubleValidator { bottom: 1; top: 1000; decimals: 2 }
+            }
+            Label { text: "相邻高度差（m）"; color: "#202124" }
+            TextField {
+              id: altitudeStepField
+              objectName: "altitudeStepField"
+              Layout.fillWidth: true
+              text: "0"
+              selectByMouse: true
+              validator: DoubleValidator { bottom: -1000; top: 1000; decimals: 2 }
+            }
           }
           RowLayout {
             visible: targetModel.currentIndex > 0
@@ -475,23 +621,28 @@ Item {
             Button {
               objectName: "startTargetButton"
               Layout.fillWidth: true
-              text: "启动靶机"
+              text: targetCountBox.currentIndex === 0 ? "启动靶机" : "启动全部靶机"
               enabled: !TargetControl.busy
               onClicked: {
                 var error = root.validateTarget()
                 targetError.text = error
                 if (error.length === 0) {
-                  TargetControl.StartTarget(
-                    root.selectedModel(), Number(speedField.text), Number(altitudeField.text),
-                    Number(distanceField.text),
-                    directionBox.currentIndex === 0 ? "east_west" : "northeast_45")
+                  TargetControl.StartTargetGroup(
+                    root.selectedModel(), targetCountBox.currentIndex + 1,
+                    root.selectedTrajectory(), Number(speedField.text),
+                    Number(altitudeField.text), Number(distanceField.text),
+                    directionBox.currentIndex === 0 ? "east_west" : "northeast_45",
+                    Number(radiusField.text), circleDirectionBox.currentIndex === 0,
+                    Number(amplitudeField.text), Number(wavelengthField.text),
+                    targetCountBox.currentIndex > 0,
+                    Number(lateralSpacingField.text), Number(altitudeStepField.text))
                 }
               }
             }
             Button {
               objectName: "stopTargetButton"
               Layout.fillWidth: true
-              text: "终止靶机"
+              text: targetCountBox.currentIndex === 0 ? "终止靶机" : "终止全部靶机"
               enabled: TargetControl.running && !TargetControl.busy
               onClicked: TargetControl.StopTarget()
             }

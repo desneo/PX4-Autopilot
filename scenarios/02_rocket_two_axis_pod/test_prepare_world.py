@@ -128,7 +128,7 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(plugin.findtext("tracking_backend"), "sim_truth")
         self.assertEqual(
             [item.text for item in plugin.findall("sim_truth_target_name")],
-            ["rocket_aisheng_seeker_1", "xiaomotuo", "xiaobianfu"])
+            ["rocket_aisheng_seeker_1", *MODULE.SIM_TRUTH_DYNAMIC_TARGETS])
 
     def test_jielian_strapdown_targets_and_gui_prefix_follow_selected_model(self):
         output = self.root / "run" / "world.sdf"
@@ -144,8 +144,7 @@ class PrepareWorldTest(unittest.TestCase):
         target_names = [
             "rocket_jielian_a2416a_1",
             "rocket_jielian_a2416a_2",
-            "xiaomotuo",
-            "xiaobianfu",
+            *MODULE.SIM_TRUTH_DYNAMIC_TARGETS,
         ]
         for aircraft_id in (1, 2):
             plugin = world.find(
@@ -287,8 +286,7 @@ class PrepareWorldTest(unittest.TestCase):
         expected_targets = [
             "rocket_two_axis_pod_1",
             "rocket_two_axis_pod_2",
-            "xiaomotuo",
-            "xiaobianfu",
+            *MODULE.SIM_TRUTH_DYNAMIC_TARGETS,
         ]
         for model in (first, second):
             controller = model.find("./plugin[@name='two_axis::GimbalController']")
@@ -402,7 +400,7 @@ class PrepareWorldTest(unittest.TestCase):
         self.assertEqual(controller.findtext("tracking_backend"), "csrt")
         self.assertEqual(
             [item.text for item in controller.findall("sim_truth_target_name")],
-            ["rocket_two_axis_pod_1", "xiaomotuo", "xiaobianfu"],
+            ["rocket_two_axis_pod_1", *MODULE.SIM_TRUTH_DYNAMIC_TARGETS],
         )
         with self.assertRaisesRegex(ValueError, "sim_truth 或 csrt"):
             MODULE.prepare(

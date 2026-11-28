@@ -35,10 +35,12 @@ class RadarManagerTest(unittest.TestCase):
         manager.terrain = FakeTerrain()
         manager.random = random.Random(20261017)
         manager.observations = {}
+        manager.lock = threading.Lock()
         manager.tracks = {}
         manager.next_track_id = 1
         manager.sequence = 0
         manager.rate_hz = 1.0
+        manager.active_targets = set()
         return manager
 
     def test_profiles_use_three_and_five_kilometre_nominal_ranges(self):
@@ -47,6 +49,9 @@ class RadarManagerTest(unittest.TestCase):
         self.assertEqual(MODULE.profile_for_model("rocket_jielian_a2416a_2"), ("small_uav", 3000.0))
         self.assertEqual(MODULE.profile_for_model("xiaomotuo"), ("small_target", 5000.0))
         self.assertEqual(MODULE.profile_for_model("xiaobianfu"), ("small_target", 5000.0))
+        self.assertEqual(MODULE.profile_for_model("xiaomotuo_4"), ("small_target", 5000.0))
+        self.assertEqual(MODULE.profile_for_model("xiaobianfu_2"), ("small_target", 5000.0))
+        self.assertIsNone(MODULE.profile_for_model("xiaomotuo_5"))
         self.assertIsNone(MODULE.profile_for_model("terrain"))
 
     def test_confirmed_scan_is_anonymous_and_contains_measured_fields(self):
@@ -109,6 +114,67 @@ class RadarManagerTest(unittest.TestCase):
         manager.on_target_pose(message)
         observation = manager.observations["xiaobianfu"]
         self.assertEqual((observation.x, observation.y, observation.z), (2000.0, 0.0, 100.0))
+
+        message = type(
+            "Message", (),
+            {"data": "POSE xiaobianfu_2 1900 20 110 18 0 -3.14159265359"},
+        )()
+        manager.on_target_pose(message)
+        second = manager.observations["xiaobianfu_2"]
+        self.assertEqual((second.x, second.y, second.z), (1900.0, 20.0, 110.0))
+
+    def test_group_status_keeps_active_members_and_removes_old_group(self):
+        from types import SimpleNamespace
+
+        manager = self.make_manager()
+        manager.observations.update({
+            "xiaobianfu": MODULE.Observation(1000, 0, 100),
+            "xiaomotuo": MODULE.Observation(900, 0, 100),
+            "xiaomotuo_2": MODULE.Observation(900, 20, 110),
+            "xiaomotuo_3": MODULE.Observation(900, 40, 120),
+        })
+        manager.on_target_status(SimpleNamespace(data=json.dumps({
+            "state": "running",
+            "target_models": ["xiaomotuo", "xiaomotuo_2", "xiaomotuo_3"],
+        })))
+        self.assertEqual(
+            set(manager.observations),
+            {"xiaomotuo", "xiaomotuo_2", "xiaomotuo_3"},
+        )
+        manager.on_target_pose(SimpleNamespace(
+            data="POSE xiaomotuo_2 910 20 110 35 0"
+        ))
+        self.assertEqual(manager.observations["xiaomotuo_2"].x, 910)
+        manager.on_target_pose(SimpleNamespace(
+            data="POSE xiaobianfu 800 0 100 18 0"
+        ))
+        self.assertNotIn("xiaobianfu", manager.observations)
+
+    def test_group_status_preserves_collided_member_until_group_stops(self):
+        from types import SimpleNamespace
+
+        manager = self.make_manager()
+        manager.on_target_status(SimpleNamespace(data=json.dumps({
+            "state": "partial",
+            "targets": [
+                {"entity_name": "xiaobianfu", "state": "running"},
+                {"entity_name": "xiaobianfu_2", "state": "collided"},
+                {"entity_name": "xiaobianfu_3", "state": "stopping"},
+            ],
+        })))
+        self.assertEqual(manager.active_targets, {"xiaobianfu", "xiaobianfu_2"})
+
+        manager.observations.update({
+            "xiaobianfu": MODULE.Observation(1000, 0, 100),
+            "xiaobianfu_2": MODULE.Observation(1000, 20, 100),
+        })
+        manager.on_target_status(SimpleNamespace(data=json.dumps({
+            "state": "stopping",
+            "target_models": ["xiaobianfu", "xiaobianfu_2"],
+        })))
+        self.assertEqual(manager.active_targets, set())
+        self.assertNotIn("xiaobianfu", manager.observations)
+        self.assertNotIn("xiaobianfu_2", manager.observations)
 
     def test_udp_route_failure_stops_scan_but_keeps_manager_available(self):
         manager = self.make_manager()

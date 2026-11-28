@@ -380,7 +380,11 @@ class UnifiedLauncherTests(unittest.TestCase):
                 self.assertEqual(self.option(generator,'--rtsp-port'), str(8565+number))
                 self.assertEqual(self.option(generator,'--rtsp-mount'), f'/zhongke_d80_{number}')
                 targets = lambda argv: [argv[i+1] for i, item in enumerate(argv) if item == '--target-name']
-                expected = ['rocket_zhongke_d80_1','rocket_zhongke_d80_2','xiaomotuo','xiaobianfu']
+                expected = [
+                    'rocket_zhongke_d80_1', 'rocket_zhongke_d80_2',
+                    'xiaomotuo', 'xiaomotuo_2', 'xiaomotuo_3', 'xiaomotuo_4',
+                    'xiaobianfu', 'xiaobianfu_2', 'xiaobianfu_3', 'xiaobianfu_4',
+                ]
                 self.assertEqual(targets(generator), expected)
                 self.assertEqual(targets(gateway), expected)
         for script in ('target_manager.py','radar_manager.py','collision_manager.py'):
@@ -541,7 +545,11 @@ class PreparedWorldTests(unittest.TestCase):
     def test_real_generator_cli_preserves_identity_and_hash_through_world_preparation(self):
         source_ini = ASSETS/'models/gimbals/zhongke-d80/parameters.ini'
         original_ini = source_ini.read_bytes()
-        targets = ['rocket_zhongke_d80_1','rocket_zhongke_d80_2','xiaomotuo','xiaobianfu']
+        targets = [
+            'rocket_zhongke_d80_1', 'rocket_zhongke_d80_2',
+            'xiaomotuo', 'xiaomotuo_2', 'xiaomotuo_3', 'xiaomotuo_4',
+            'xiaobianfu', 'xiaobianfu_2', 'xiaobianfu_3', 'xiaobianfu_4',
+        ]
         generator = ASSETS/'assembledmodels/rocket_zhongke_d80/tools/generate_dynamic_model.py'
         with tempfile.TemporaryDirectory(prefix='scenario02-world-') as directory:
             root = Path(directory)

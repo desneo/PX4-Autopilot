@@ -40,7 +40,10 @@ class FlightVibrationSceneTests(unittest.TestCase):
             root = Path(directory)
             for basename in MODELS:
                 with self.subTest(model=basename):
-                    targets = [f'{basename}_1',f'{basename}_2','xiaomotuo','xiaobianfu']
+                    targets = [
+                        f'{basename}_1', f'{basename}_2',
+                        *PREPARE.SIM_TRUTH_DYNAMIC_TARGETS,
+                    ]
                     models = []
                     originals = []
                     for number in (1,2):

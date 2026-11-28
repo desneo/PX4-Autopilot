@@ -17,7 +17,10 @@ WORLD_NAME = "geo_32_217857_119_105878"
 MODEL_BASENAME = "rocket_two_axis_pod"
 TRACKING_BACKENDS = {"sim_truth", "csrt"}
 FLIGHT_VIBRATION_PROFILES = {"off", "afly5"}
-SIM_TRUTH_DYNAMIC_TARGETS = ("xiaomotuo", "xiaobianfu")
+SIM_TRUTH_DYNAMIC_TARGETS = (
+    "xiaomotuo", "xiaomotuo_2", "xiaomotuo_3", "xiaomotuo_4",
+    "xiaobianfu", "xiaobianfu_2", "xiaobianfu_3", "xiaobianfu_4",
+)
 TARGET_COMMAND_TOPIC = "/scenario/02/target/command"
 TARGET_STATUS_TOPIC = "/scenario/02/target/status"
 TRAJECTORY_COMMAND_TOPIC = "/scenario/02/target/trajectory/command"

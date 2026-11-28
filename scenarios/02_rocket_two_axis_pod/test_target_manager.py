@@ -54,6 +54,116 @@ class TargetManagerTest(unittest.TestCase):
         value.update(changes)
         return value
 
+    def group_payload(self, **changes):
+        value = {
+            **self.payload(),
+            "count": 4,
+            "trajectory": "circle",
+            "formation_enabled": True,
+            "lateral_spacing": 30,
+            "altitude_step": 5,
+            "radius": 300,
+            "clockwise": True,
+        }
+        value.update(changes)
+        return value
+
+    def test_group_config_assigns_unique_names_sysids_and_offsets(self):
+        config = MODULE.validate_group_config(self.group_payload(), FakeTerrain(), 200)
+        self.assertEqual(config.count, 4)
+        self.assertEqual(
+            [member.model_name for member in config.members],
+            ["xiaomotuo", "xiaomotuo_2", "xiaomotuo_3", "xiaomotuo_4"],
+        )
+        self.assertEqual([member.system_id for member in config.members], [200, 201, 202, 203])
+        self.assertEqual([member.altitude for member in config.members], [104.019969, 109.019969, 114.019969, 119.019969])
+        self.assertAlmostEqual(config.members[0].source_xy[1], 0)
+        self.assertAlmostEqual(config.members[1].source_xy[1], -30)
+        self.assertAlmostEqual(config.members[3].source_xy[1], -90)
+
+    def test_group_config_rejects_invalid_count_formation_and_shape(self):
+        invalid_payloads = (
+            self.group_payload(count=0),
+            self.group_payload(count=5),
+            self.group_payload(count=2.5),
+            self.group_payload(formation_enabled=False),
+            self.group_payload(lateral_spacing=0),
+            self.group_payload(radius=90, lateral_spacing=30),
+            self.group_payload(trajectory="sine", amplitude=0, wavelength=200),
+            self.group_payload(trajectory="sine", amplitude=30, wavelength=10),
+            self.group_payload(trajectory="unknown"),
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValueError):
+                    MODULE.validate_group_config(payload, FakeTerrain(), 200)
+        with self.assertRaisesRegex(ValueError, "超过 254"):
+            MODULE.validate_group_config(self.group_payload(), FakeTerrain(), 252)
+
+    def test_sine_formation_offset_follows_actual_curve_normal(self):
+        config = MODULE.validate_group_config(self.group_payload(
+            count=2,
+            trajectory="sine",
+            amplitude=100,
+            wavelength=200,
+        ), FakeTerrain(), 200)
+        follower_start = config.members[1].source_xy
+        self.assertAlmostEqual(
+            follower_start[0], MODULE._group_path_points(config, 30)[0][0]
+        )
+        self.assertAlmostEqual(
+            follower_start[1], MODULE._group_path_points(config, 30)[0][1]
+        )
+        self.assertGreater(follower_start[0], config.source_xy[0])
+        self.assertGreater(follower_start[1], -30)
+
+    def test_group_trajectory_command_and_collision_are_per_entity(self):
+        config = MODULE.validate_group_config(self.group_payload(count=3), FakeTerrain(), 200)
+
+        class Manager:
+            def __init__(self):
+                self.lock = threading.RLock()
+                self.qgc_address = ("127.0.0.1", 14550)
+                self.mavlink_system_id = 200
+                self.terrain = FakeTerrain()
+                self.trajectory = []
+                self.status = []
+
+            def publish_trajectory(self, value):
+                self.trajectory.append(value)
+
+            def publish_status(self, state, message, model=None, **details):
+                self.status.append((state, message, model, details))
+
+        manager = Manager()
+        with mock.patch.object(MODULE.socket, "socket"):
+            session = MODULE.TargetGroupSession(manager, config)
+        command = session.trajectory_command().split()
+        self.assertEqual(command[:3], ["START_GROUP", "circle", "3"])
+        self.assertEqual(command[-3:], ["xiaomotuo", "xiaomotuo_2", "xiaomotuo_3"])
+        self.assertEqual(float(command[11]), -1)
+        session.on_collision("xiaomotuo_2", 17.5)
+        self.assertEqual(manager.trajectory, ["FREEZE xiaomotuo_2"])
+        self.assertEqual(session.sessions[1].state, "collided")
+        self.assertEqual(manager.status[-1][0], "running")
+        self.assertEqual(manager.status[-1][3]["targets"][1]["state"], "collided")
+        session.sessions[0]._status("running", "QGC 状态发送失败，将继续重试")
+        self.assertEqual(
+            manager.status[-1][3]["target_models"],
+            ["xiaomotuo", "xiaomotuo_2", "xiaomotuo_3"],
+        )
+
+    def test_trajectory_status_accepts_dynamic_yaw(self):
+        manager = MODULE.TargetManager.__new__(MODULE.TargetManager)
+        manager.lock = threading.RLock()
+        manager.session = mock.Mock()
+        manager.on_trajectory_status(SimpleNamespace(
+            data="POSE xiaomotuo_2 10 20 100 35 0 1.25",
+        ))
+        manager.session.on_truth.assert_called_once_with(
+            "xiaomotuo_2", 10.0, 20.0, 100.0, 35.0, False, 1.25,
+        )
+
     def test_continuous_coordinates_round_trip_without_terrain_restrictions(self):
         latitude, longitude = MODULE.coordinate_offset(
             FakeTerrain.center_latitude, FakeTerrain.center_longitude, 16000, -12000,

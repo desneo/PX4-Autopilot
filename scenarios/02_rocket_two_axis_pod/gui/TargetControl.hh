@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <gz/gui/Plugin.hh>
 #include <gz/math/Pose3.hh>
@@ -33,6 +34,7 @@ class TargetControl final : public gz::gui::Plugin
   Q_PROPERTY(QString aircraftPrefix READ AircraftPrefix NOTIFY CameraStateChanged)
   Q_PROPERTY(int aircraftCount READ AircraftCount NOTIFY CameraStateChanged)
   Q_PROPERTY(QString targetModel READ TargetModel NOTIFY StateChanged)
+  Q_PROPERTY(QStringList targetModels READ TargetModels NOTIFY StateChanged)
   Q_PROPERTY(bool cameraBusy READ CameraBusy NOTIFY CameraStateChanged)
   Q_PROPERTY(bool following READ Following NOTIFY CameraStateChanged)
   Q_PROPERTY(QString followingEntity READ FollowingEntity NOTIFY CameraStateChanged)
@@ -48,6 +50,21 @@ class TargetControl final : public gz::gui::Plugin
       double _altitude,
       double _distance,
       const QString &_direction);
+  public: Q_INVOKABLE void StartTargetGroup(
+      const QString &_model,
+      int _count,
+      const QString &_trajectory,
+      double _speed,
+      double _altitude,
+      double _distance,
+      const QString &_direction,
+      double _radius,
+      bool _clockwise,
+      double _amplitude,
+      double _wavelength,
+      bool _formationEnabled,
+      double _lateralSpacing,
+      double _altitudeStep);
   public: Q_INVOKABLE void StopTarget();
   public: Q_INVOKABLE void StartRadar(
       double _rateHz, const QString &_stationAddress);
@@ -70,6 +87,7 @@ class TargetControl final : public gz::gui::Plugin
   public: QString AircraftPrefix() const { return this->aircraftPrefix; }
   public: int AircraftCount() const { return this->aircraftCount; }
   public: QString TargetModel() const { return this->targetModel; }
+  public: QStringList TargetModels() const { return this->targetModels; }
   public: bool CameraBusy() const { return this->cameraBusy; }
   public: bool Following() const { return this->following; }
   public: QString FollowingEntity() const { return this->followingEntity; }
@@ -124,6 +142,7 @@ class TargetControl final : public gz::gui::Plugin
   private: QString aircraftPrefix{QStringLiteral("rocket_two_axis_pod_")};
   private: int aircraftCount{1};
   private: QString targetModel;
+  private: QStringList targetModels;
   private: bool cameraBusy{false};
   private: bool following{false};
   private: QString followingEntity;

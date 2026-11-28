@@ -48,6 +48,10 @@ public:
         gz::sim::components::Name("target"), gz::sim::components::Model());
     if (entity != gz::sim::kNullEntity)
       this->pose = gz::sim::worldPose(entity, ecm);
+    const auto secondEntity = ecm.EntityByComponents(
+        gz::sim::components::Name("target_2"), gz::sim::components::Model());
+    if (secondEntity != gz::sim::kNullEntity)
+      this->secondPose = gz::sim::worldPose(secondEntity, ecm);
     const auto nose = ecm.EntityByComponents(
         gz::sim::components::Name("nose_reference"), gz::sim::components::Visual());
     const auto tail = ecm.EntityByComponents(
@@ -62,6 +66,7 @@ public:
   }
 
   gz::math::Pose3d pose;
+  gz::math::Pose3d secondPose;
   gz::math::Vector3d nose;
   gz::math::Vector3d tail;
   bool visualsPresent{false};
@@ -99,6 +104,7 @@ struct Status
   double z{0.0};
   double speed{0.0};
   int done{-1};
+  double yaw{0.0};
 };
 
 class StatusObservation
@@ -108,10 +114,10 @@ public:
   {
     std::istringstream stream(message.data());
     std::string tag;
-    std::string extra;
     Status value;
     stream >> tag >> value.model >> value.x >> value.y >> value.z
-           >> value.speed >> value.done;
+           >> value.speed >> value.done >> value.yaw;
+    std::string extra;
     if (!stream || tag != "POSE" || stream >> extra)
       return;
     std::lock_guard<std::mutex> guard(this->mutex);
@@ -162,6 +168,14 @@ void Run()
             </visual>
             <visual name='tail_reference'>
               <pose>-1 0 0 0 0 0</pose>
+              <geometry><sphere><radius>0.1</radius></sphere></geometry>
+            </visual>
+          </link>
+        </model>
+        <model name='target_2'>
+          <static>true</static>
+          <link name='body_2'>
+            <visual name='target_2_visual'>
               <geometry><sphere><radius>0.1</radius></sphere></geometry>
             </visual>
           </link>
@@ -324,6 +338,86 @@ void Run()
   Require(observation->pose.X() >= 15000.0 &&
       observation->pose.X() < 15010.0,
       "STOP 后不能重新开始相同连续航迹");
+
+  // 圆形编队共享同一相位，成员偏移随实时切向旋转。
+  send("START_GROUP circle 2 100 200 300 0 0 10 0 50 1 20 5 target target_2");
+  step(20);
+  const auto circleLeader = observation->pose;
+  const auto circleMember = observation->secondPose;
+  Near(std::hypot(circleLeader.X() - 100.0, circleLeader.Y() - 250.0),
+      50.0, "圆形航迹半径错误");
+  Near(circleMember.Z() - circleLeader.Z(), 5.0, "圆形编队高度差错误");
+  const gz::math::Vector3d circleOffset =
+      circleMember.Pos() - circleLeader.Pos();
+  Near(std::hypot(circleOffset.X(), circleOffset.Y()), 20.0,
+      "圆形编队横向间距错误");
+  const gz::math::Vector3d circleLeft(
+      -std::sin(circleLeader.Rot().Yaw()),
+      std::cos(circleLeader.Rot().Yaw()), 0.0);
+  Near(circleOffset.Dot(circleLeft), 20.0,
+      "圆形编队偏移未随实时航向旋转");
+
+  // 单独冻结一架靶机时，其余成员继续沿圆周运行。
+  send("FREEZE target_2");
+  step(1);
+  const auto frozenMember = observation->secondPose;
+  const auto movingLeader = observation->pose;
+  step(20);
+  Near((observation->secondPose.Pos() - frozenMember.Pos()).Length(), 0.0,
+      "FREEZE 后成员仍在移动");
+  Require((observation->pose.Pos() - movingLeader.Pos()).Length() > 1.0,
+      "冻结一个成员导致基准机停止");
+
+  // 正弦轨迹按主航向推进，并对编队应用轨迹法向偏移。
+  send("START_GROUP sine 2 0 0 80 200 0 10 0 20 100 15 -3 target target_2");
+  step(25);
+  const auto sineLeader = observation->pose;
+  const auto sineMember = observation->secondPose;
+  Require(sineLeader.X() > 14.0 && sineLeader.X() < 25.0,
+      "正弦航迹未沿主方向推进");
+  Require(sineLeader.Y() > 15.0,
+      "正弦航迹未达到配置振幅附近");
+  Near(sineMember.Z() - sineLeader.Z(), -3.0, "正弦编队高度差错误");
+  const auto sineOffset = sineMember.Pos() - sineLeader.Pos();
+  Near(std::hypot(sineOffset.X(), sineOffset.Y()), 15.0,
+      "正弦编队横向间距错误");
+
+  // 非法分组命令不能把运行中的正弦航迹跳到新起点。
+  send("START_GROUP circle 2 999 999 999 0 0 10 0 0 1 10 5 target target_2");
+  step(5);
+  Require(observation->pose.X() < 100.0 && observation->pose.Y() < 100.0,
+      "非法分组命令改变了当前航迹");
+
+  // 分组直线使用同一进度并保持固定横向与高度偏移。
+  send("START_GROUP line 2 -10 0 60 30 0 10 0 0 0 -12 4 target target_2");
+  step(10);
+  Near(observation->pose.Y(), 0.0, "分组直线基准机横向位置错误");
+  Near(observation->secondPose.Y(), -12.0, "分组直线横向间距错误");
+  Near(observation->secondPose.Z() - observation->pose.Z(), 4.0,
+      "分组直线高度差错误");
+
+  // 分组持续直飞可以单独停止成员，基准机继续运行。
+  send("START_GROUP continuous 2 5 6 70 0 0 12 0.4 0 0 9 2 target target_2");
+  step(1);
+  const auto continuousMember = observation->secondPose;
+  send("STOP target_2");
+  step(1);
+  const auto stoppedMember = observation->secondPose;
+  const auto continuousLeader = observation->pose;
+  step(20);
+  Near((observation->secondPose.Pos() - stoppedMember.Pos()).Length(), 0.0,
+      "STOP 单个成员后仍在移动");
+  Require((observation->pose.Pos() - continuousLeader.Pos()).Length() > 1.0,
+      "STOP 单个成员导致基准机停止");
+  Require((continuousMember.Pos() - stoppedMember.Pos()).Length() < 2.0,
+      "STOP 单个成员时发生异常跳变");
+
+  send("STOP_ALL");
+  step(1);
+  const auto stoppedGroup = observation->pose;
+  step(10);
+  Near((observation->pose.Pos() - stoppedGroup.Pos()).Length(), 0.0,
+      "STOP_ALL 后基准机仍在移动");
 }
 }  // namespace
 

@@ -18,6 +18,7 @@ import time
 COMMAND_TOPIC = "/scenario/02/radar/command"
 STATUS_TOPIC = "/scenario/02/radar/status"
 TARGET_TRAJECTORY_STATUS_TOPIC = "/scenario/02/target/trajectory/status"
+TARGET_STATUS_TOPIC = "/scenario/02/target/status"
 EARTH_RADIUS_M = 6_371_000.0
 MIN_RANGE_M = 50.0
 MIN_ELEVATION_DEG = -5.0
@@ -30,6 +31,18 @@ PROFILE_RANGES_M = {
     "xiaomotuo": 5000.0,
     "xiaobianfu": 5000.0,
 }
+DYNAMIC_TARGET_BASES = ("xiaomotuo", "xiaobianfu")
+
+
+def dynamic_target_base(name: str) -> str | None:
+    """返回场景靶机实体对应的基础型号，编号只接受第2～4架。"""
+    for base in DYNAMIC_TARGET_BASES:
+        if name == base:
+            return base
+        prefix = f"{base}_"
+        if name.startswith(prefix) and name[len(prefix):] in {"2", "3", "4"}:
+            return base
+    return None
 
 
 def parse_station(value: str) -> tuple[str, int]:
@@ -68,8 +81,9 @@ def profile_for_model(name: str) -> tuple[str, float] | None:
         return "small_uav", PROFILE_RANGES_M["rocket_aisheng_seeker"]
     if name.startswith("rocket_jielian_a2416a_"):
         return "small_uav", PROFILE_RANGES_M["rocket_jielian_a2416a"]
-    if name in ("xiaomotuo", "xiaobianfu"):
-        return "small_target", PROFILE_RANGES_M[name]
+    target_base = dynamic_target_base(name)
+    if target_base is not None:
+        return "small_target", PROFILE_RANGES_M[target_base]
     return None
 
 
@@ -140,6 +154,10 @@ class RadarManager:
         self.StringMsg = StringMsg
         self.world = args.world
         self.terrain = TerrainMap(args.metadata)
+        self.lock = threading.Lock()
+        self.observations: dict[str, Observation] = {}
+        self.target_status_known = False
+        self.active_targets: set[str] = set()
         self.node = Node()
         self.status_publisher = self.node.advertise(STATUS_TOPIC, StringMsg)
         if not self.node.subscribe(StringMsg, COMMAND_TOPIC, self.on_command):
@@ -155,14 +173,14 @@ class RadarManager:
             raise RuntimeError(
                 f"无法订阅靶机航迹状态话题：{TARGET_TRAJECTORY_STATUS_TOPIC}"
             )
+        if not self.node.subscribe(StringMsg, TARGET_STATUS_TOPIC, self.on_target_status):
+            raise RuntimeError(f"无法订阅靶机生命周期话题：{TARGET_STATUS_TOPIC}")
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.random = random.Random(args.seed)
-        self.lock = threading.Lock()
         self.shutdown_event = threading.Event()
         self.running = False
         self.rate_hz = 1.0
         self.station: tuple[str, int] | None = None
-        self.observations: dict[str, Observation] = {}
         self.tracks: dict[str, Track] = {}
         self.next_track_id = 1
         self.sequence = 0
@@ -231,7 +249,7 @@ class RadarManager:
         with self.lock:
             for pose in message.pose:
                 name = str(pose.name)
-                if profile_for_model(name) is None:
+                if profile_for_model(name) is None or not self._accept_target(name):
                     continue
                 previous = self.observations.get(name)
                 current = Observation(
@@ -247,7 +265,7 @@ class RadarManager:
 
     def on_target_pose(self, message) -> None:
         fields = message.data.split()
-        if len(fields) != 7 or fields[0] != "POSE":
+        if len(fields) not in (7, 8) or fields[0] != "POSE":
             return
         try:
             name = fields[1]
@@ -258,6 +276,8 @@ class RadarManager:
             return
         sample_time = time.monotonic()
         with self.lock:
+            if not self._accept_target(name):
+                return
             previous = self.observations.get(name)
             current = Observation(x, y, z, sample_time=sample_time)
             if previous is not None and sample_time > previous.sample_time:
@@ -266,6 +286,63 @@ class RadarManager:
                 current.vy = (y - previous.y) / dt
                 current.vz = (z - previous.z) / dt
             self.observations[name] = current
+
+    def _accept_target(self, name: str) -> bool:
+        if dynamic_target_base(name) is not None and getattr(self, "target_status_known", False):
+            return name in getattr(self, "active_targets", set())
+        return True
+
+    def on_target_status(self, message) -> None:
+        try:
+            payload = json.loads(message.data)
+            if not isinstance(payload, dict):
+                return
+            state = payload.get("state")
+            if state not in (
+                "idle", "starting", "running", "stopping", "collided", "partial", "error"
+            ):
+                return
+            active_states = {"starting", "running", "collided", "partial", "error"}
+            active: set[str] = set()
+            targets = payload.get("targets")
+            if state in {"idle", "stopping"}:
+                targets = None
+            if isinstance(targets, list):
+                for target in targets:
+                    if not isinstance(target, dict):
+                        continue
+                    name = target.get("entity_name", target.get("model"))
+                    target_state = target.get("state", state)
+                    if (
+                        isinstance(name, str)
+                        and dynamic_target_base(name) is not None
+                        and target_state in active_states
+                    ):
+                        active.add(name)
+            models = payload.get("target_models")
+            if not active and isinstance(models, list) and state in active_states:
+                active.update(
+                    name for name in models
+                    if isinstance(name, str) and dynamic_target_base(name) is not None
+                )
+            model = payload.get("model")
+            if (
+                not active
+                and state in active_states
+                and isinstance(model, str)
+                and dynamic_target_base(model) is not None
+            ):
+                active.add(model)
+        except (TypeError, ValueError):
+            return
+        with self.lock:
+            self.target_status_known = True
+            self.active_targets = active
+            # 生命周期结束后不能把最后一帧真值永久当作仍可检出的目标。
+            # 仅移除观测，已确认航迹仍按原有规则保持三个扫描周期。
+            for name in list(self.observations):
+                if dynamic_target_base(name) is not None and name not in active:
+                    self.observations.pop(name, None)
 
     def _measure(self, observation: Observation) -> dict:
         dx, dy, dz = observation.x, observation.y, observation.z - 3.0

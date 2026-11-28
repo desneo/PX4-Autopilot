@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import math
 from pathlib import Path
@@ -89,9 +89,14 @@ class TargetConfig:
     mode: str = "center_pass"
     initial_xy: tuple[float, float] = (0.0, 0.0)
     initial_heading: float = 0.0
+    entity_name: str = ""
+    system_id: int = 0
+    source_xy_override: tuple[float, float] | None = None
 
     @property
     def source_xy(self) -> tuple[float, float]:
+        if self.source_xy_override is not None:
+            return self.source_xy_override
         if self.mode == "continuous":
             return self.initial_xy
         unit = DIRECTIONS[self.direction]["unit"]
@@ -111,6 +116,42 @@ class TargetConfig:
     def velocity_unit(self) -> tuple[float, float]:
         heading = math.radians(self.heading)
         return math.sin(heading), math.cos(heading)
+
+    @property
+    def endpoint_xy(self) -> tuple[float, float]:
+        unit = DIRECTIONS[self.direction]["unit"]
+        return -500.0 * unit[0], -500.0 * unit[1]
+
+    @property
+    def model_name(self) -> str:
+        return self.entity_name or self.model
+
+
+@dataclass(frozen=True)
+class TargetGroupConfig:
+    model: str
+    trajectory: str
+    count: int
+    speed: float
+    altitude: float
+    distance: float
+    direction: str
+    radius: float = 0.0
+    clockwise: bool = True
+    amplitude: float = 0.0
+    wavelength: float = 0.0
+    lateral_spacing: float = 0.0
+    altitude_step: float = 0.0
+    members: tuple[TargetConfig, ...] = ()
+
+    @property
+    def heading(self) -> float:
+        return DIRECTIONS[self.direction]["heading"]
+
+    @property
+    def source_xy(self) -> tuple[float, float]:
+        unit = DIRECTIONS[self.direction]["unit"]
+        return self.distance * unit[0], self.distance * unit[1]
 
     @property
     def endpoint_xy(self) -> tuple[float, float]:
@@ -208,6 +249,172 @@ def validate_config(payload: dict, terrain: TerrainMap) -> TargetConfig:
             "以高出整段航线最高地形30米"
         )
     return TargetConfig(model, speed, altitude, distance, direction)
+
+
+def _finite_number(payload: dict, field: str, display: str) -> float:
+    value = payload.get(field)
+    if isinstance(value, bool):
+        raise ValueError(f"{display}必须是有效数值")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError(f"{display}必须是有效数值") from error
+    if not math.isfinite(result):
+        raise ValueError(f"{display}必须是有限数值")
+    return result
+
+
+def _group_path_points(config: TargetGroupConfig, lateral_offset: float) -> list[tuple[float, float]]:
+    """生成地形净空检查点，横向偏移始终相对当前航迹切线。"""
+    start_x, start_y = config.source_xy
+    yaw = math.radians(90.0 - config.heading)
+    if config.trajectory == "circle":
+        turn = -1.0 if config.clockwise else 1.0
+        center_x = start_x - turn * math.sin(yaw) * config.radius
+        center_y = start_y + turn * math.cos(yaw) * config.radius
+        start_angle = math.atan2(start_y - center_y, start_x - center_x)
+        effective_radius = config.radius - turn * lateral_offset
+        return [
+            (
+                center_x + effective_radius * math.cos(start_angle + turn * 2 * math.pi * index / 72),
+                center_y + effective_radius * math.sin(start_angle + turn * 2 * math.pi * index / 72),
+            )
+            for index in range(73)
+        ]
+
+    end_x, end_y = config.endpoint_xy
+    dx, dy = end_x - start_x, end_y - start_y
+    length = math.hypot(dx, dy)
+    tangent_x, tangent_y = dx / length, dy / length
+    normal_x, normal_y = -tangent_y, tangent_x
+    sample_count = max(2, math.ceil(length / 50.0))
+    points = []
+    for index in range(sample_count + 1):
+        progress = length * index / sample_count
+        wave = 0.0
+        offset_normal_x, offset_normal_y = normal_x, normal_y
+        if config.trajectory == "sine":
+            wave = config.amplitude * math.sin(2.0 * math.pi * progress / config.wavelength)
+            wave_slope = (
+                config.amplitude
+                * 2.0
+                * math.pi
+                / config.wavelength
+                * math.cos(2.0 * math.pi * progress / config.wavelength)
+            )
+            derivative_x = tangent_x + normal_x * wave_slope
+            derivative_y = tangent_y + normal_y * wave_slope
+            derivative_length = math.hypot(derivative_x, derivative_y)
+            offset_normal_x = -derivative_y / derivative_length
+            offset_normal_y = derivative_x / derivative_length
+        points.append((
+            start_x + tangent_x * progress + normal_x * wave
+            + offset_normal_x * lateral_offset,
+            start_y + tangent_y * progress + normal_y * wave
+            + offset_normal_y * lateral_offset,
+        ))
+    return points
+
+
+def validate_group_config(
+    payload: dict, terrain: TerrainMap, mavlink_system_id: int = 200,
+) -> TargetGroupConfig:
+    """校验 Gazebo GUI 的多靶机请求，并生成每架靶机的唯一运行配置。"""
+    count_value = payload.get("count", 1)
+    if isinstance(count_value, bool):
+        raise ValueError("靶机数量必须是 1～4 的整数")
+    try:
+        count = int(count_value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ValueError("靶机数量必须是 1～4 的整数") from error
+    if count_value != count or not 1 <= count <= 4:
+        raise ValueError("靶机数量必须是 1～4 的整数")
+    if mavlink_system_id + count - 1 > 254:
+        raise ValueError("靶机 MAVLink SYSID 范围超过 254")
+
+    trajectory = str(payload.get("trajectory", "line"))
+    trajectory = {"center_pass": "line", "straight": "line"}.get(
+        trajectory, trajectory,
+    )
+    if trajectory not in {"line", "continuous", "circle", "sine"}:
+        raise ValueError("轨迹类型必须选择直线、持续直飞、圆形或正弦")
+    formation_enabled = payload.get("formation_enabled", count > 1)
+    if not isinstance(formation_enabled, bool):
+        raise ValueError("编队开关必须是布尔值")
+    if count > 1 and not formation_enabled:
+        raise ValueError("多架靶机必须启用编队，避免靶机在同一位置重叠")
+
+    base = validate_config(payload, terrain)
+    lateral_spacing = _finite_number(
+        payload, "lateral_spacing", "横向间距",
+    ) if count > 1 else 0.0
+    altitude_step = _finite_number(
+        payload, "altitude_step", "相邻高度差",
+    ) if count > 1 else 0.0
+    if count > 1 and not 1.0 <= abs(lateral_spacing) <= 1000.0:
+        raise ValueError("横向间距绝对值必须在 1～1000 米")
+    if abs(altitude_step) > 1000.0:
+        raise ValueError("相邻高度差绝对值不能超过 1000 米")
+
+    radius = amplitude = wavelength = 0.0
+    clockwise = payload.get("clockwise", True)
+    if trajectory == "circle":
+        radius = _finite_number(payload, "radius", "盘旋半径")
+        if not 10.0 <= radius <= 5000.0:
+            raise ValueError("盘旋半径必须在 10～5000 米")
+        if not isinstance(clockwise, bool):
+            raise ValueError("盘旋方向必须是布尔值")
+        widest_offset = abs(lateral_spacing) * (count - 1)
+        if widest_offset >= radius:
+            raise ValueError("编队总横向偏移必须小于盘旋半径")
+    elif trajectory == "sine":
+        amplitude = _finite_number(payload, "amplitude", "正弦振幅")
+        wavelength = _finite_number(payload, "wavelength", "正弦波长")
+        if not 1.0 <= amplitude <= 2000.0:
+            raise ValueError("正弦振幅必须在 1～2000 米")
+        if not 20.0 <= wavelength <= 10000.0:
+            raise ValueError("正弦波长必须在 20～10000 米")
+
+    group = TargetGroupConfig(
+        model=base.model,
+        trajectory=trajectory,
+        count=count,
+        speed=base.speed,
+        altitude=base.altitude,
+        distance=base.distance,
+        direction=base.direction,
+        radius=radius,
+        clockwise=bool(clockwise),
+        amplitude=amplitude,
+        wavelength=wavelength,
+        lateral_spacing=lateral_spacing,
+        altitude_step=altitude_step,
+    )
+    members = []
+    for index in range(count):
+        lateral_offset = index * lateral_spacing
+        altitude = base.altitude + index * altitude_step
+        points = _group_path_points(group, lateral_offset)
+        maximum_height = max(
+            terrain.maximum_route_height(first, second)
+            for first, second in zip(points, points[1:])
+        )
+        minimum_altitude = terrain.origin_elevation + maximum_height + 30.0
+        if altitude < minimum_altitude:
+            raise ValueError(
+                f"第 {index + 1} 架靶机海拔至少应为 {minimum_altitude:.1f} m，"
+                "以高出整段航线最高地形30米"
+            )
+        source = points[0]
+        entity_name = base.model if index == 0 else f"{base.model}_{index + 1}"
+        members.append(replace(
+            base,
+            altitude=altitude,
+            entity_name=entity_name,
+            system_id=mavlink_system_id + index,
+            source_xy_override=source,
+        ))
+    return replace(group, members=tuple(members))
 
 
 def make_visual_model(source: Path, output: Path, model_name: str) -> Path:
@@ -312,6 +519,7 @@ class MavlinkTargetProxy:
         latitude: float,
         longitude: float,
         origin_elevation: float,
+        heading_deg: float | None = None,
     ) -> None:
         now = time.monotonic()
         _x, _y, _z, speed, done = truth
@@ -322,8 +530,10 @@ class MavlinkTargetProxy:
             self._send(0, heartbeat, 50)
             self.last_heartbeat = now
 
-        heading = int(round(config.heading * 100)) % 36000
-        unit_east, unit_north = config.velocity_unit
+        actual_heading = config.heading if heading_deg is None else heading_deg % 360.0
+        heading = int(round(actual_heading * 100)) % 36000
+        heading_rad = math.radians(actual_heading)
+        unit_east, unit_north = math.sin(heading_rad), math.cos(heading_rad)
         velocity = 0.0 if done else speed
         velocity_east = unit_east * velocity
         velocity_north = unit_north * velocity
@@ -334,7 +544,7 @@ class MavlinkTargetProxy:
         if now - self.last_position >= 0.2:
             # QGC 地图机头读取姿态 yaw，不读取 GLOBAL_POSITION_INT.hdg。
             # MAVLink 使用北为零、顺时针为正的 NED yaw，与 Gazebo ENU yaw 不同。
-            yaw_ned = math.radians((config.heading + 180.0) % 360.0 - 180.0)
+            yaw_ned = math.radians((actual_heading + 180.0) % 360.0 - 180.0)
             attitude = struct.pack(
                 "<Iffffff", boot_ms, 0.0, 0.0, yaw_ned, 0.0, 0.0, 0.0,
             )
@@ -394,13 +604,15 @@ class TargetSession:
         self.truth_event = threading.Event()
         self.truth_lock = threading.Lock()
         self.truth: tuple[float, float, float, float, bool] | None = None
+        self.dynamic_heading: float | None = None
         self.mavlink_proxy = MavlinkTargetProxy(
-            manager.qgc_address, manager.mavlink_system_id
+            manager.qgc_address, config.system_id or manager.mavlink_system_id
         )
         self.mavlink_failed = False
         self.model_created = False
         self.cleaned = False
         self.state = "starting"
+        self.status_callback = None
 
     def _status(self, state: str, message: str) -> None:
         with self.manager.lock:
@@ -409,10 +621,13 @@ class TargetSession:
             ):
                 return
             self.state = state
+            if self.status_callback is not None:
+                self.status_callback(self, state, message)
+                return
             if state == "error":
-                self.manager.publish_status(state, message, self.config.model, error=message)
+                self.manager.publish_status(state, message, self.config.model_name, error=message)
             else:
-                self.manager.publish_status(state, message, self.config.model)
+                self.manager.publish_status(state, message, self.config.model_name)
 
     def _run_gz_service(self, service: str, request_type: str, request: str) -> bool:
         command = [
@@ -431,15 +646,15 @@ class TargetSession:
             / "models" / "vehicles" / self.config.model / "model.sdf"
         )
         output = (
-            self.manager.runtime_dir / "target" / f"{self.config.model}_visual.sdf"
+            self.manager.runtime_dir / "target" / f"{self.config.model_name}_visual.sdf"
         )
-        make_visual_model(source, output, self.config.model)
+        make_visual_model(source, output, self.config.model_name)
         x, y = self.config.source_xy
         z = self.config.altitude - self.manager.terrain.origin_elevation
         yaw = self.config.yaw
         request = (
             f'sdf_filename: "{output}" '
-            f'name: "{self.config.model}" allow_renaming: false '
+            f'name: "{self.config.model_name}" allow_renaming: false '
             f'pose: {{position: {{x: {x:.9f}, y: {y:.9f}, z: {z:.9f}}}, '
             f'orientation: {{z: {math.sin(yaw / 2):.12f}, w: {math.cos(yaw / 2):.12f}}}}}'
         )
@@ -455,7 +670,7 @@ class TargetSession:
         if not self._run_gz_service(
             f"/world/{self.manager.world}/remove",
             "gz.msgs.Entity",
-            f'name: "{self.config.model}" type: MODEL',
+            f'name: "{self.config.model_name}" type: MODEL',
         ):
             raise RuntimeError("Gazebo 未能移除靶机视觉模型")
         self.model_created = False
@@ -466,30 +681,34 @@ class TargetSession:
         yaw = self.config.yaw
         if self.config.mode == "continuous":
             return (
-                f"START_CONTINUOUS {self.config.model} {start_x:.12g} {start_y:.12g} "
+                f"START_CONTINUOUS {self.config.model_name} {start_x:.12g} {start_y:.12g} "
                 f"{z:.12g} {self.config.speed:.12g} {yaw:.12g}"
             )
         end_x, end_y = self.config.endpoint_xy
         return (
-            f"START {self.config.model} {start_x:.12g} {start_y:.12g} "
+            f"START {self.config.model_name} {start_x:.12g} {start_y:.12g} "
             f"{z:.12g} {end_x:.12g} {end_y:.12g} "
             f"{self.config.speed:.12g} {yaw:.12g}"
         )
 
     def on_truth(
-        self, model: str, x: float, y: float, z: float, speed: float, done: bool
+        self, model: str, x: float, y: float, z: float, speed: float, done: bool,
+        yaw: float | None = None,
     ) -> None:
-        if model != self.config.model:
+        if model != self.config.model_name:
             return
         with self.truth_lock:
             self.truth = (x, y, z, speed, done)
+            if yaw is not None:
+                self.dynamic_heading = (90.0 - math.degrees(yaw)) % 360.0
         self.truth_event.set()
 
     def on_collision(self, relative_speed: float) -> None:
         if self.collided_event.is_set() or self.stop_event.is_set():
             return
         self.collided_event.set()
-        self.manager.publish_trajectory("STOP")
+        command = "STOP" if not self.config.entity_name else f"FREEZE {self.config.model_name}"
+        self.manager.publish_trajectory(command)
         self._status(
             "collided",
             f"靶机已与 PX4 飞机碰撞（相对速度 {relative_speed:.1f} m/s），"
@@ -515,6 +734,7 @@ class TargetSession:
                 latitude,
                 longitude,
                 self.manager.terrain.origin_elevation,
+                self.dynamic_heading,
             )
         except (OSError, ValueError, OverflowError, struct.error) as error:
             if not self.mavlink_failed:
@@ -578,10 +798,173 @@ class TargetSession:
         if self.cleaned:
             return
         self.stop_event.set()
-        self.manager.publish_trajectory("STOP")
+        command = "STOP" if not self.config.entity_name else f"STOP {self.config.model_name}"
+        self.manager.publish_trajectory(command)
         self.mavlink_proxy.close()
         self.remove_model()
         self.cleaned = True
+
+
+class TargetGroupSession:
+    """以同一仿真时钟启动和维护一组编队靶机。"""
+
+    def __init__(self, manager: "TargetManager", config: TargetGroupConfig):
+        self.manager = manager
+        self.config = config
+        self.stop_event = threading.Event()
+        self.state = "starting"
+        self.sessions: list[TargetSession] = []
+        try:
+            self.sessions = [TargetSession(manager, member) for member in config.members]
+            for session in self.sessions:
+                session.status_callback = self._member_status
+        except Exception:
+            for session in self.sessions:
+                session.mavlink_proxy.close()
+            raise
+
+    def _target_status(self) -> list[dict]:
+        return [
+            {
+                "target_id": index + 1,
+                "entity_name": session.config.model_name,
+                "state": session.state,
+            }
+            for index, session in enumerate(self.sessions)
+        ]
+
+    def _status(self, state: str, message: str, *, error: str | None = None) -> None:
+        self.state = state
+        if state == "error" and error is None:
+            error = message
+        self.manager.publish_status(
+            state,
+            message,
+            self.config.model,
+            error=error,
+            target_models=[session.config.model_name for session in self.sessions],
+            targets=self._target_status(),
+        )
+
+    def _member_status(
+        self, session: TargetSession, state: str, message: str,
+    ) -> None:
+        group_state = self.state if self.state in {"starting", "stopping"} else "running"
+        self._status(group_state, f"{session.config.model_name}：{message}")
+
+    def trajectory_command(self) -> str:
+        start_x, start_y = self.config.source_xy
+        end_x, end_y = self.config.endpoint_xy
+        z = self.config.altitude - self.manager.terrain.origin_elevation
+        yaw = math.radians(90.0 - self.config.heading)
+        shape1 = shape2 = 0.0
+        if self.config.trajectory == "circle":
+            shape1 = self.config.radius
+            shape2 = -1.0 if self.config.clockwise else 1.0
+        elif self.config.trajectory == "sine":
+            shape1 = self.config.amplitude
+            shape2 = self.config.wavelength
+        models = " ".join(session.config.model_name for session in self.sessions)
+        return (
+            f"START_GROUP {self.config.trajectory} {self.config.count} "
+            f"{start_x:.12g} {start_y:.12g} {z:.12g} "
+            f"{end_x:.12g} {end_y:.12g} {self.config.speed:.12g} {yaw:.12g} "
+            f"{shape1:.12g} {shape2:.12g} {self.config.lateral_spacing:.12g} "
+            f"{self.config.altitude_step:.12g} {models}"
+        )
+
+    def on_truth(
+        self, model: str, x: float, y: float, z: float, speed: float, done: bool,
+        yaw: float | None = None,
+    ) -> None:
+        for session in self.sessions:
+            if session.config.model_name == model:
+                session.on_truth(model, x, y, z, speed, done, yaw)
+                return
+
+    def on_collision(self, model: str, relative_speed: float) -> None:
+        for session in self.sessions:
+            if session.config.model_name != model:
+                continue
+            if session.collided_event.is_set() or self.stop_event.is_set():
+                return
+            session.collided_event.set()
+            session.state = "collided"
+            self.manager.publish_trajectory(f"FREEZE {model}")
+            active = [item for item in self.sessions if not item.collided_event.is_set()]
+            state = "running" if active else "collided"
+            self._status(
+                state,
+                f"{model} 已与 PX4 飞机碰撞（相对速度 {relative_speed:.1f} m/s），"
+                "该靶机航迹和 QGC 状态已停止",
+            )
+            return
+
+    def run(self) -> None:
+        if self.stop_event.is_set():
+            return
+        self._status("starting", f"正在生成 {self.config.count} 架靶机视觉模型…")
+        for session in self.sessions:
+            if self.stop_event.is_set():
+                return
+            session.create_model()
+        command = self.trajectory_command()
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline and not self.stop_event.is_set():
+            self.manager.publish_trajectory(command)
+            if all(session.truth_event.wait(0.02) for session in self.sessions):
+                break
+            self.stop_event.wait(0.1)
+        else:
+            if not self.stop_event.is_set():
+                missing = [
+                    session.config.model_name for session in self.sessions
+                    if not session.truth_event.is_set()
+                ]
+                raise RuntimeError(
+                    "场景航迹插件未返回靶机位置：" + "、".join(missing)
+                )
+            return
+
+        for session in self.sessions:
+            if not session.collided_event.is_set():
+                session.state = "running"
+        self._status(
+            "running",
+            f"{self.config.count} 架{MODEL_RULES[self.config.model]['display']}"
+            f"正在按{self.config.trajectory}轨迹飞行",
+        )
+        endpoint_reported = False
+        while not self.stop_event.wait(0.05):
+            for session in self.sessions:
+                if not session.collided_event.is_set():
+                    session._send_mavlink()
+            if self.config.trajectory in {"line", "sine"} and not endpoint_reported:
+                active_sessions = [
+                    session for session in self.sessions
+                    if not session.collided_event.is_set()
+                ]
+                with_truth = bool(active_sessions) and all(
+                    session.truth is not None for session in active_sessions
+                )
+                if with_truth and all(session.truth[4] for session in active_sessions):
+                    self._status("running", "编队已到达航迹终点，正在原位等待")
+                    endpoint_reported = True
+
+    def cleanup(self) -> None:
+        self.stop_event.set()
+        self.manager.publish_trajectory("STOP_ALL")
+        errors = []
+        for session in self.sessions:
+            if not session.cleaned:
+                try:
+                    session.mavlink_proxy.close()
+                    session.remove_model()
+                    session.cleaned = True
+                except Exception as error:
+                    errors.append(f"{session.config.model_name}：{error}")
+        if errors:
+            raise RuntimeError("；".join(errors))
 
 
 class TargetManager:
@@ -595,14 +978,14 @@ class TargetManager:
         self.assets_root = args.assets_root.resolve()
         self.qgc_address = parse_station(args.qgc_address)
         self.mavlink_system_id = args.mavlink_system_id
-        if not 1 <= self.mavlink_system_id <= 254:
-            raise ValueError("靶机 MAVLink SYSID 必须在 1～254 范围内")
+        if not 1 <= self.mavlink_system_id <= 251:
+            raise ValueError("靶机 MAVLink 起始 SYSID 必须在 1～251 范围内")
         world_dir = self.assets_root / "worlds" / self.world
         self.terrain = TerrainMap(world_dir / "metadata.json", world_dir / "assets")
         # transport 回调可能在订阅成功后立即到达，先准备所有共享状态。
         self.lock = threading.RLock()
-        self.session: TargetSession | None = None
-        self.pending_config: TargetConfig | None = None
+        self.session: TargetSession | TargetGroupSession | None = None
+        self.pending_config: TargetConfig | TargetGroupConfig | None = None
         self.worker: threading.Thread | None = None
         self.shutdown_event = threading.Event()
         self.node = Node()
@@ -632,12 +1015,18 @@ class TargetManager:
     def publish_status(
         self, state: str, message: str, model: str | None = None,
         *, error: str | None = None,
+        target_models: list[str] | None = None,
+        targets: list[dict] | None = None,
     ) -> None:
         payload = {"state": state, "message": message}
         if model:
             payload["model"] = model
         if error:
             payload["error"] = error
+        if target_models is not None:
+            payload["target_models"] = target_models
+        if targets is not None:
+            payload["targets"] = targets
         value = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         self.status_publisher.publish(self._message(value))
         print(value, flush=True)
@@ -648,22 +1037,33 @@ class TargetManager:
             session = self.session
             state = session.state if session is not None else "error"
             model = session.config.model if session is not None else None
-            self.publish_status(state, message, model, error=message)
+            if isinstance(session, TargetGroupSession):
+                self.publish_status(
+                    state,
+                    message,
+                    model,
+                    error=message,
+                    target_models=[item.config.model_name for item in session.sessions],
+                    targets=session._target_status(),
+                )
+            else:
+                self.publish_status(state, message, model, error=message)
 
     def on_trajectory_status(self, message) -> None:
         fields = message.data.split()
-        if len(fields) != 7 or fields[0] != "POSE":
+        if len(fields) not in (7, 8) or fields[0] != "POSE":
             return
         try:
             model = fields[1]
             x, y, z, speed = map(float, fields[2:6])
             done = bool(int(fields[6]))
+            yaw = float(fields[7]) if len(fields) == 8 else None
         except (ValueError, TypeError):
             return
         with self.lock:
             session = self.session
             if session is not None:
-                session.on_truth(model, x, y, z, speed, done)
+                session.on_truth(model, x, y, z, speed, done, yaw)
 
     def on_command(self, message) -> None:
         try:
@@ -695,7 +1095,9 @@ class TargetManager:
             return
         with self.lock:
             session = self.session
-            if session is not None and target_model == session.config.model:
+            if isinstance(session, TargetGroupSession):
+                session.on_collision(target_model, relative_speed)
+            elif session is not None and target_model == session.config.model_name:
                 session.on_collision(relative_speed)
 
     def _ensure_worker(self) -> None:
@@ -709,13 +1111,23 @@ class TargetManager:
             if self.shutdown_event.is_set():
                 self.reject_command("靶机管理服务正在退出")
                 return
-            if payload.get("mode", "center_pass") == "center_pass" and (
+            group_request = any(
+                field in payload
+                for field in ("count", "trajectory", "formation_enabled")
+            )
+            if (group_request or payload.get("mode", "center_pass") == "center_pass") and (
                 self.session is not None or self.pending_config is not None
             ):
                 self.reject_command("靶机正在运行，请先终止靶机")
                 return
             try:
-                config = validate_config(payload, self.terrain)
+                config = (
+                    validate_group_config(
+                        payload, self.terrain, self.mavlink_system_id,
+                    )
+                    if group_request
+                    else validate_config(payload, self.terrain)
+                )
             except ValueError as error:
                 self.reject_command(str(error))
                 return
@@ -738,7 +1150,11 @@ class TargetManager:
                         self.worker = None
                         return
                     try:
-                        self.session = TargetSession(self, config)
+                        self.session = (
+                            TargetGroupSession(self, config)
+                            if isinstance(config, TargetGroupConfig)
+                            else TargetSession(self, config)
+                        )
                     except Exception as error:
                         self.worker = None
                         self.publish_status("error", f"无法创建靶机会话：{error}")

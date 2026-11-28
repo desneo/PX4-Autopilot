@@ -258,9 +258,18 @@ private:
   std::optional<gz::math::Vector3d> TargetHalfExtents(
       const std::string &_name) const
   {
-    if (_name == "xiaomotuo")
+    const auto matches = [&_name](const std::string &_base)
+    {
+      if (_name == _base)
+        return true;
+      const std::string prefix = _base + "_";
+      return _name.size() == prefix.size() + 1 &&
+          _name.rfind(prefix, 0) == 0 &&
+          _name.back() >= '2' && _name.back() <= '4';
+    };
+    if (matches("xiaomotuo"))
       return gz::math::Vector3d(1.75, 1.25, 0.40);
-    if (_name == "xiaobianfu")
+    if (matches("xiaobianfu"))
       return gz::math::Vector3d(0.35, 0.55, 0.12);
     return std::nullopt;
   }

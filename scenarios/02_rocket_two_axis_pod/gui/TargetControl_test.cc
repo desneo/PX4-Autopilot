@@ -179,6 +179,15 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QVERIFY(targetModel);
   QVERIFY(speedRange);
   QVERIFY(distanceRange);
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("targetCountCombo"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("trajectoryCombo"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("circleRadiusField"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("circleDirectionCombo"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("sineAmplitudeField"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("sineWavelengthField"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("formationCheckBox"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("lateralSpacingField"));
+  QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("altitudeStepField"));
   QCOMPARE(distanceRange->property("text").toString(),
       QStringLiteral("100～10000 m"));
   QVERIFY(plugin.PluginItem()->findChild<QQuickItem *>("startTargetButton"));
@@ -295,6 +304,24 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QCOMPARE(object.value("speed").toDouble(), 35.0);
   QVERIFY(!object.contains(QStringLiteral("station_address")));
 
+  plugin.busy = false;
+  command.clear();
+  plugin.StartTargetGroup(
+      "xiaomotuo", 4, "circle", 35, 120, 2000, "east_west",
+      300, true, 100, 500, true, 30, 10);
+  QTRY_VERIFY_WITH_TIMEOUT(!command.isEmpty(), 2000);
+  const auto groupObject = QJsonDocument::fromJson(command.toUtf8()).object();
+  QCOMPARE(groupObject.value("command").toString(), QString("start"));
+  QCOMPARE(groupObject.value("model").toString(), QString("xiaomotuo"));
+  QCOMPARE(groupObject.value("count").toInt(), 4);
+  QCOMPARE(groupObject.value("trajectory").toString(), QString("circle"));
+  QCOMPARE(groupObject.value("radius").toDouble(), 300.0);
+  QCOMPARE(groupObject.value("clockwise").toBool(), true);
+  QCOMPARE(groupObject.value("formation_enabled").toBool(), true);
+  QCOMPARE(groupObject.value("lateral_spacing").toDouble(), 30.0);
+  QCOMPARE(groupObject.value("altitude_step").toDouble(), 10.0);
+  QVERIFY(!groupObject.contains(QStringLiteral("amplitude")));
+
   plugin.StartRadar(1.5, "192.168.1.41:7790");
   QTRY_VERIFY_WITH_TIMEOUT(!radarCommand.isEmpty(), 2000);
   const auto radarObject = QJsonDocument::fromJson(
@@ -319,6 +346,13 @@ void TargetControlTest::PublishesStartAndReceivesStatus()
   QCOMPARE(plugin.Status(), QStringLiteral("靶机飞行中"));
   QCOMPARE(plugin.TargetModel(), QStringLiteral("xiaomotuo"));
   QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 4, 1000);
+
+  status.set_data(
+      R"({"state":"running","message":"4架靶机编队飞行中","model":"xiaomotuo","target_models":["xiaomotuo","xiaomotuo_2","xiaomotuo_3","xiaomotuo_4"]})");
+  statusPublisher.Publish(status);
+  QTRY_COMPARE_WITH_TIMEOUT(plugin.TargetModels().size(), 4, 2000);
+  QCOMPARE(plugin.TargetModels().at(2), QStringLiteral("xiaomotuo_3"));
+  QTRY_COMPARE_WITH_TIMEOUT(aircraftCombo->property("count").toInt(), 7, 1000);
 
   status.set_data(
       R"({"state":"error","message":"靶机清理失败，请重试终止","model":"xiaomotuo","error":"移除模型失败"})");
